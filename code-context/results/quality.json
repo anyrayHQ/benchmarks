@@ -1,0 +1,92 @@
+[
+  {
+    "id": "5-code-search",
+    "strategy": "relevance_filter",
+    "savedPct": 71,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 67,
+      "verdict": "FAIL",
+      "missing": [
+        "src/lib/http/retryPolicy.ts"
+      ]
+    },
+    "judge": {
+      "coverage": 67,
+      "verdict": "FAIL",
+      "note": "RETRY_MAX = 5 and its doc survive (the value is answerable); the defining file path src/lib/http/retryPolicy.ts is elided, so the precise location is not.",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "6-git-diff",
+    "strategy": "relevance_filter",
+    "savedPct": 71,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 50,
+      "verdict": "FAIL",
+      "missing": [
+        "requireAdmin",
+        "if (user && user.isAuthenticated) { // TODO: tighten before release"
+      ]
+    },
+    "judge": {
+      "coverage": 80,
+      "verdict": "MARGINAL",
+      "note": "The weakened check is derivable — src/auth/middleware.ts and the removed `- user.role === \"admin\"` line survive; the requireAdmin name and replacement condition are elided.",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "7-codebase-explore",
+    "strategy": "code_skeleton",
+    "savedPct": 30,
+    "keyFacts": 5,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "15-multifile-graph",
+    "strategy": "code_graph",
+    "savedPct": 33,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "17-python-multifile",
+    "strategy": "code_graph",
+    "savedPct": 36,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  }
+]

@@ -76,19 +76,21 @@ provider keys.
 
 ## Does it preserve the answer?
 
-Anyray's strategies are **reversible and deterministic**: they re-rank and elide,
-they don't paraphrase, and every elided span is stashed behind a content-free
-retrieval handle (`POST /v1/retrieve`) the model can pull back. So the relevant
-question is "does the kept context still answer the live turn" — and on the demo
-stack every workload above was validated end-to-end against a real model (the
-"Answer preserved?" column). The optimizer also **fails open**: if it's slow or
-down, the gateway forwards the request unoptimized.
+Measured in **[QUALITY.md](QUALITY.md)**: for each workload we define the
+answer-bearing key facts and check how many survive the trim (strict substring +
+an LLM judge). **16 of 19 preserve the answer in full**; the three exceptions are
+all the lexical `relevance_filter` meeting its known limit, reported openly. The
+"Answer preserved?" column above is the demo stack's end-to-end live validation;
+the quality benchmark turns it into a reproducible per-workload score. Anyray's
+strategies are also **reversible** (every elided span is retrievable via
+`POST /v1/retrieve`) and **fail open** (a slow/down optimizer forwards the request
+unoptimized).
 
 ## Roadmap
 
-- **Accuracy harness.** An LLM-as-judge pass over the kept context (the way a
-  compression benchmark scores answers), committed per workload, to turn the
-  "answer preserved?" column into a reproducible score.
+- **Semantic relevance filter.** An embedding-based filter for the vocabulary-
+  mismatch workloads where lexical BM25 ranks the answer lines out (see
+  [QUALITY.md](QUALITY.md#why-three-arent-green)).
 - **`--live-bill` mode in this repo.** Wire the gateway round-trip so the live tier
   is reproducible here, not just on the demo stack.
 - **Latency.** Record the hook's added latency per workload (it fails open past

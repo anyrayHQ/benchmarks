@@ -1,0 +1,53 @@
+[
+  {
+    "id": "11-mcp-tools",
+    "strategy": "tool_pruning",
+    "savedPct": 65,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "12-rag-overfetch",
+    "strategy": "relevance_filter",
+    "savedPct": 69,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  },
+  {
+    "id": "13-prompt-boilerplate",
+    "strategy": "prompt_compression",
+    "savedPct": 84,
+    "keyFacts": 5,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all key facts present verbatim in the kept context",
+      "by": "Claude Opus 4.8"
+    }
+  }
+]

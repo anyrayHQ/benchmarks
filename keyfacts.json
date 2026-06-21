@@ -1,0 +1,81 @@
+{
+  "_comment": "Answer-bearing key facts per workload — the quality benchmark checks how many survive the optimizer's trim (deterministic substring + optional LLM judge). Every string is a verbatim substring of that workload's payload. See run_quality.mjs / lib/quality.mjs.",
+
+  "1-access-log": {
+    "question": "Find the failing requests: which endpoint and method are returning 5xx errors (HTTP 500), how many, the time window, and the client IPs.",
+    "keyFacts": ["POST /api/checkout HTTP/1.1\" 500", "/api/checkout", "10:24:30", "10:29:10", "203.0.113.21"]
+  },
+  "2-sre-incident": {
+    "question": "Checkout p99 latency spiked around 10:05 and we got paged. Find what caused the spike.",
+    "keyFacts": ["failed to acquire db connection", "pool=primary", "max_conns=20 in_use=20", "10:05:00.100Z", "wait_ms=3500"]
+  },
+  "4-json-array": {
+    "question": "How many orders failed, and what failure_code does each failed order show? Ignore the paid ones.",
+    "keyFacts": ["\"status\": \"failed\"", "ord_1N0000rt", "\"failure_code\": \"card_declined\"", "\"failure_code\": \"expired_card\"", "\"failure_code\": \"insufficient_funds\"", "\"failure_code\": \"do_not_honor\""]
+  },
+  "5-code-search": {
+    "question": "Where is the retry policy / max-attempts actually defined (not just used)? Point me to the file and line.",
+    "keyFacts": ["src/lib/http/retryPolicy.ts", "RETRY_MAX = 5", "max retry attempts for idempotent HTTP requests"]
+  },
+  "6-git-diff": {
+    "question": "Is there any change in this PR diff that weakens an auth or permission check (a role or admin check that got loosened)? Point to the exact file.",
+    "keyFacts": ["src/auth/middleware.ts", "requireAdmin", "user.role === \"admin\"", "if (user && user.isAuthenticated) { // TODO: tighten before release"]
+  },
+  "7-codebase-explore": {
+    "question": "Give me a high-level map of the architecture and tell me where retry logic is handled.",
+    "keyFacts": ["src/lib/http/retryPolicy.ts", "export async function withRetry", "RETRY_MAX = 5", "src/lib/http/httpClient.ts", "class HttpClient"]
+  },
+  "15-multifile-graph": {
+    "question": "Walk me through what happens when Checkout.submitOrder runs — specifically how it captures the payment via capturePayment.",
+    "keyFacts": ["async submitOrder(cart: Cart)", "this.payments.capturePayment", "async capturePayment(amount: number, token: string)", "this.gateway.sendCharge", "async sendCharge(req: ChargeRequest)", "this.inventory.reserveStock"]
+  },
+  "17-python-multifile": {
+    "question": "Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment.",
+    "keyFacts": ["def submit_order(self, cart):", "self.payments.capture_payment(cart.total, cart.token)", "def capture_payment(self, amount, token):", "self.gateway.send_charge(amount=amount, token=token", "def send_charge(self, charge):", "self.inventory.reserve_stock(cart.lines)"]
+  },
+  "11-mcp-tools": {
+    "question": "Use jira_search_issues to find the open P0 bugs in the PAY project, then use jira_add_comment to comment on each.",
+    "keyFacts": ["jira_search_issues", "jira_add_comment", "P0 bugs in the PAY project"]
+  },
+  "12-rag-overfetch": {
+    "question": "What is the refund window for annual plans, and is it different for monthly plans?",
+    "keyFacts": ["billing/refund-policy.md", "full refund within 30 days", "14 days from the charge date", "Monthly subscriptions have a shorter refund window"]
+  },
+  "13-prompt-boilerplate": {
+    "question": "Process the nightly ticket batch and output one line per ticket as \"TCK-<id>: <category>\".",
+    "keyFacts": ["TCK-4100: I was charged twice", "TCK-4102: Please add a dark mode", "TCK-4105: App crashes when I open", "TCK-4106: How do I change the email", "TCK-4103: Cannot log in after resetting"]
+  },
+  "3-github-triage": {
+    "question": "Which of these open issues are P0 authentication bugs that should be fixed this week? List the issue numbers.",
+    "keyFacts": ["#1300", "#1281", "#1243", "Login fails with 401 after token refresh", "SSO (SAML) users can bypass MFA enrollment", "priority/P0"]
+  },
+  "8-long-session": {
+    "question": "Given everything across all subsystems, where should the shared retry logic live, and which subsystems should be migrated first?",
+    "keyFacts": ["You are a senior coding assistant working in a large TypeScript monorepo", "where should the shared retry logic live", "which subsystems should be migrated to it first"]
+  },
+  "16-test-run": {
+    "question": "Which tests failed, and what is the root cause of each? Ignore the ones that passed.",
+    "_note": "Markers are in command_digest's reformatted output shape (it rewrites, so raw-log strings don't survive verbatim even though the facts do).",
+    "keyFacts": ["FAIL: test_capture_declined_card_releases_hold", "assert 'held' == 'released'", "test_annual_refund_window_proration", "assert 1666 == 0", "only 2 of SKU-1001 left in stock"]
+  },
+  "18-session-recall": {
+    "question": "Catch me up on the payments-retry branch: where does it stand, what changed and why, and what was the next step I had planned?",
+    "keyFacts": ["branch=payments-retry", "reworked capturePayment to be idempotent", "built the dead-letter path", "park them in payments_dlq", "alert when DLQ depth crosses 10"]
+  },
+  "19-decision-recall": {
+    "question": "What did we decide for our background job/task queue, and why — and which alternatives did we rule out?",
+    "keyFacts": ["ADR-031", "Postgres LISTEN/NOTIFY backed by a jobs table", "transactional with the business write", "rejected: Redis Streams", "SQS (vendor lock-in"]
+  },
+  "20-research-brief": {
+    "question": "Pull together everything I found on vector-database options for our RAG — the findings and the sources I had already vetted (and why).",
+    "keyFacts": ["topic=vector-db (RAG)", "pgvector HNSW hit ~0.93 recall@10", "staying on pgvector keeps one datastore", "Qdrant matched pgvector recall", "Pinecone p1 pods", "[S12]"]
+  },
+  "21-content-memory": {
+    "question": "What have I already published on developer onboarding, so the next piece builds on it instead of repeating it?",
+    "keyFacts": ["theme: developer onboarding", "\"Onboarding in an afternoon\"", "\"The onboarding checklist that actually sticks\"", "\"We deleted our 40-page onboarding doc\"", "ship a real PR on day one"]
+  },
+  "22-ops-open-loops": {
+    "question": "Across all my projects, what is still open — blocked or waiting on my decision or input?",
+    "keyFacts": ["status=BLOCKED, waiting on your decision", "blocked on you: approve the 60s headers-timeout default", "publish the connect CLI so the E2E can finish", "blocked on your call: drop the air-gapped wording", "blocked on you to pick the maintenance window"]
+  }
+}

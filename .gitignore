@@ -16,3 +16,6 @@ optimizer-settings-audit.log
 
 # macOS
 .DS_Store
+
+# Intermediate judge dumps (regenerate with --dump)
+**/results/judge-inputs.json

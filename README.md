@@ -35,6 +35,23 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 Per-workload numbers, the strategy and knob behind each, and the live-provider
 cross-check are in [RESULTS.md](RESULTS.md).
 
+## Quality — does the answer survive?
+
+Savings are only worth it if the model can still answer. For each workload we
+define the **answer-bearing key facts** and measure how many survive the trim,
+both by strict substring and by an LLM judge (Claude Opus 4.8):
+
+| | Workloads | PASS | MARGINAL | FAIL |
+|---|--:|--:|--:|--:|
+| Key-fact survival (strict) | 19 | 16 | 0 | 3 |
+| LLM judge (semantic) | 19 | 16 | 1 | 2 |
+
+**16 of 19 preserve the answer in full.** We report the three that don't rather
+than hide them — all are the lexical `relevance_filter` meeting its known limit
+(when the answer lines don't share vocabulary with the question, BM25 ranks them
+out; raising the budget doesn't fix it). Full table, judge rationale, and the
+tradeoff analysis are in **[QUALITY.md](QUALITY.md)**.
+
 ## Why these workloads
 
 These aren't synthetic stress tests picked to make an optimizer look good. Every
@@ -172,26 +189,22 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 
 ## Does it preserve the answer?
 
-Anyray's strategies are reversible and deterministic, so the question is not "how
-much accuracy did lossy compression cost" but "does the kept context still answer
-the live turn" — and, if not, the model retrieves the rest. On the Anyray demo
-stack each of these workloads was validated end-to-end against a real model: the
-MCP case still calls the right tool with correct arguments, the 40-ticket batch
-still classifies every ticket, the multi-file trace still returns the on-path
-functions. Those live validations are noted per workload in [RESULTS.md](RESULTS.md).
+Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
+answer-bearing key facts for each workload and checks how many survive the trim
+(strict substring + an LLM judge): **16 of 19 preserve the answer in full**, and
+the three exceptions are reported openly with the reason. Anyray's strategies are
+also reversible — every elided span is retrievable on demand (`POST /v1/retrieve`)
+— so even a partial trim is recoverable.
 
-A standalone accuracy harness (LLM-as-judge over the kept context, the way a
-compression benchmark scores answers) is on the roadmap — see
-[RESULTS.md](RESULTS.md#roadmap).
+Run it with `node run_quality.mjs --all` (add `--judge` for the LLM pass).
 
 ## What this does and doesn't measure
 
 - **Does:** input-token reduction per workload, per strategy, reproducibly, on a
-  content-free basis.
-- **Doesn't (yet):** answer-quality scoring in committed numbers (see above);
-  latency added by the hook (the optimizer fails open past
+  content-free basis — **and** answer-quality (key-fact survival) per workload.
+- **Doesn't (yet):** latency added by the hook (the optimizer fails open past
   `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
-  guardrail, which clamps the output ceiling).
+  guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
 
 ---
 
