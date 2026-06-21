@@ -1,0 +1,56 @@
+[
+  {
+    "id": "1-access-log",
+    "title": "Access log (500 requests) — \"find the failing requests\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=6000, roles=user",
+    "tier": "accounting",
+    "beforeChars": 104612,
+    "afterChars": 7836,
+    "beforeTok": 26153,
+    "afterTok": 1959,
+    "savedPct": 93,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (104612->7836 chars, -93%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "2-sre-incident",
+    "title": "SRE incident — \"why did checkout p99 spike at 10:05?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1000, roles=user",
+    "tier": "accounting",
+    "beforeChars": 105541,
+    "afterChars": 1655,
+    "beforeTok": 26385,
+    "afterTok": 414,
+    "savedPct": 98,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (105541->1655 chars, -98%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "4-json-array",
+    "title": "JSON array (500 items) — \"which orders failed and why?\"",
+    "strategy": "context_compression",
+    "knob": "roles=user",
+    "tier": "accounting",
+    "beforeChars": 297840,
+    "afterChars": 64040,
+    "beforeTok": 74460,
+    "afterTok": 16010,
+    "savedPct": 78,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 text) 297840->64040 chars (-78%); 1 stashed for retrieval"
+    ]
+  }
+]

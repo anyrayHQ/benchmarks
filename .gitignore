@@ -1,0 +1,18 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Environment
+.env
+
+# Live-bill outputs need provider keys and are not reproducible in CI, so they
+# are not committed. The accounting results (control.json / optimized.json) ARE
+# committed — they are the real, reproducible scores.
+**/results/live-bill.json
+
+# Local optimizer scratch
+optimizer.config.json
+optimizer-settings-audit.log
+
+# macOS
+.DS_Store

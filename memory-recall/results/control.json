@@ -1,0 +1,37 @@
+[
+  {
+    "id": "18-session-recall",
+    "title": "Cross-session catch-up — \"catch me up on this branch\"",
+    "chars": 23578,
+    "tokens": 5895,
+    "max_tokens": 1024
+  },
+  {
+    "id": "19-decision-recall",
+    "title": "Decision recall — \"what did we decide, and why?\"",
+    "chars": 4344,
+    "tokens": 1086,
+    "max_tokens": 1024
+  },
+  {
+    "id": "20-research-brief",
+    "title": "Research brief — \"everything I have found on this, in one brief\"",
+    "chars": 22403,
+    "tokens": 5601,
+    "max_tokens": 1024
+  },
+  {
+    "id": "21-content-memory",
+    "title": "Content memory — \"what have I already published on this?\"",
+    "chars": 16874,
+    "tokens": 4219,
+    "max_tokens": 1024
+  },
+  {
+    "id": "22-ops-open-loops",
+    "title": "Open loops — \"what is still open and waiting on me?\"",
+    "chars": 8032,
+    "tokens": 2008,
+    "max_tokens": 1024
+  }
+]

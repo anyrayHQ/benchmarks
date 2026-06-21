@@ -1,0 +1,23 @@
+[
+  {
+    "id": "9-repeat-request",
+    "title": "Repeated identical request — 2nd call served from cache",
+    "chars": 142,
+    "tokens": 36,
+    "max_tokens": 1024
+  },
+  {
+    "id": "10-screenshot-ocr",
+    "title": "Pasted screenshot — \"what is this error and how do I fix it?\"",
+    "chars": 54354,
+    "tokens": 13589,
+    "max_tokens": 1024
+  },
+  {
+    "id": "14-runaway-max-tokens",
+    "title": "Runaway max_tokens — 100k output ceiling on a one-line task",
+    "chars": 153,
+    "tokens": 38,
+    "max_tokens": 100000
+  }
+]

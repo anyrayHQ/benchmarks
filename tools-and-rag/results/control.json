@@ -1,0 +1,23 @@
+[
+  {
+    "id": "11-mcp-tools",
+    "title": "MCP tool bloat — 41 tool schemas ride along, 2 are needed",
+    "chars": 22455,
+    "tokens": 5614,
+    "max_tokens": 1024
+  },
+  {
+    "id": "12-rag-overfetch",
+    "title": "RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer",
+    "chars": 5990,
+    "tokens": 1498,
+    "max_tokens": 1024
+  },
+  {
+    "id": "13-prompt-boilerplate",
+    "title": "Templated boilerplate — the same instructions re-pasted 40x",
+    "chars": 23365,
+    "tokens": 5841,
+    "max_tokens": 1024
+  }
+]

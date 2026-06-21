@@ -1,0 +1,56 @@
+[
+  {
+    "id": "3-github-triage",
+    "title": "GitHub triage — \"which open issues are P0 auth bugs?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=2000, roles=user",
+    "tier": "accounting",
+    "beforeChars": 22333,
+    "afterChars": 3417,
+    "beforeTok": 5583,
+    "afterTok": 854,
+    "savedPct": 85,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (22333->3417 chars, -85%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "8-long-session",
+    "title": "Long agent session — keep a 60-message session inside the window",
+    "strategy": "window_budget",
+    "knob": "maxTokens=24000",
+    "tier": "accounting",
+    "beforeChars": 327659,
+    "afterChars": 91325,
+    "beforeTok": 81915,
+    "afterTok": 22831,
+    "savedPct": 72,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "cropped 22 message(s) to fit ~24000-token budget (est 82172->23088 tokens, -72%); 22 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "16-test-run",
+    "title": "Test-suite output — \"which tests failed and why?\"",
+    "strategy": "command_digest",
+    "knob": "maxFailures=10, contextLines=12, roles=user",
+    "tier": "accounting",
+    "beforeChars": 6060,
+    "afterChars": 1393,
+    "beforeTok": 1515,
+    "afterTok": 348,
+    "savedPct": 77,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "digested test-run tool output — test run (3 failed, 77 passed): kept 3 failure block(s); 6060->1393 chars (-77%); stashed for retrieval"
+    ]
+  }
+]

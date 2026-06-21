@@ -1,0 +1,54 @@
+[
+  {
+    "id": "9-repeat-request",
+    "title": "Repeated identical request — 2nd call served from cache",
+    "strategy": "semantic_cache",
+    "knob": "(defaults)",
+    "tier": "cache",
+    "beforeChars": 142,
+    "afterChars": 142,
+    "beforeTok": 36,
+    "afterTok": 36,
+    "savedPct": 0,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": false,
+    "decisions": []
+  },
+  {
+    "id": "10-screenshot-ocr",
+    "title": "Pasted screenshot — \"what is this error and how do I fix it?\"",
+    "strategy": "vision_ocr",
+    "knob": "imageTokenEstimate=1000",
+    "tier": "vision",
+    "beforeChars": 54354,
+    "afterChars": 780,
+    "beforeTok": 13589,
+    "afterTok": 195,
+    "savedPct": 99,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "replaced 1 text-image(s) with extracted text (of 1 image(s) scanned); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "14-runaway-max-tokens",
+    "title": "Runaway max_tokens — 100k output ceiling on a one-line task",
+    "strategy": "param_tuning",
+    "knob": "maxTokensCap=4096",
+    "tier": "guardrail",
+    "beforeChars": 153,
+    "afterChars": 153,
+    "beforeTok": 38,
+    "afterTok": 38,
+    "savedPct": 0,
+    "max_tokens_before": 100000,
+    "max_tokens_after": 4096,
+    "fired": true,
+    "decisions": [
+      "clamped max_tokens 100000 -> 4096"
+    ]
+  }
+]

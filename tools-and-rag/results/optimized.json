@@ -1,0 +1,56 @@
+[
+  {
+    "id": "11-mcp-tools",
+    "title": "MCP tool bloat — 41 tool schemas ride along, 2 are needed",
+    "strategy": "tool_pruning",
+    "knob": "keepUnnamed=true",
+    "tier": "accounting",
+    "beforeChars": 22455,
+    "afterChars": 7889,
+    "beforeTok": 5614,
+    "afterTok": 1972,
+    "savedPct": 65,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "pruned 28/41 unused tools"
+    ]
+  },
+  {
+    "id": "12-rag-overfetch",
+    "title": "RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1200, roles=user",
+    "tier": "accounting",
+    "beforeChars": 5990,
+    "afterChars": 1871,
+    "beforeTok": 1498,
+    "afterTok": 468,
+    "savedPct": 69,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (5990->1871 chars, -69%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "13-prompt-boilerplate",
+    "title": "Templated boilerplate — the same instructions re-pasted 40x",
+    "strategy": "prompt_compression",
+    "knob": "minChars=400",
+    "tier": "accounting",
+    "beforeChars": 23365,
+    "afterChars": 3657,
+    "beforeTok": 5841,
+    "afterTok": 914,
+    "savedPct": 84,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed prompt 23365->3657 chars (-84%)"
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1-access-log",
+    "title": "Access log (500 requests) — \"find the failing requests\"",
+    "chars": 104612,
+    "tokens": 26153,
+    "max_tokens": 1024
+  },
+  {
+    "id": "2-sre-incident",
+    "title": "SRE incident — \"why did checkout p99 spike at 10:05?\"",
+    "chars": 105541,
+    "tokens": 26385,
+    "max_tokens": 1024
+  },
+  {
+    "id": "4-json-array",
+    "title": "JSON array (500 items) — \"which orders failed and why?\"",
+    "chars": 297840,
+    "tokens": 74460,
+    "max_tokens": 1024
+  }
+]

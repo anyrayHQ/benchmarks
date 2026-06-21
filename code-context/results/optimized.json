@@ -1,0 +1,92 @@
+[
+  {
+    "id": "5-code-search",
+    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1500, roles=user",
+    "tier": "accounting",
+    "beforeChars": 12528,
+    "afterChars": 3643,
+    "beforeTok": 3132,
+    "afterTok": 911,
+    "savedPct": 71,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (12528->3643 chars, -71%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=2000, roles=user",
+    "tier": "accounting",
+    "beforeChars": 13890,
+    "afterChars": 4077,
+    "beforeTok": 3473,
+    "afterTok": 1019,
+    "savedPct": 71,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (13890->4077 chars, -71%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "7-codebase-explore",
+    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
+    "strategy": "code_skeleton",
+    "knob": "minBodyLines=3, roles=user",
+    "tier": "accounting",
+    "beforeChars": 18714,
+    "afterChars": 13123,
+    "beforeTok": 4679,
+    "afterTok": 3281,
+    "savedPct": 30,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "outlined 1 source file(s), elided 171 body line(s) 18714->13123 chars (-30%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "15-multifile-graph",
+    "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2",
+    "tier": "accounting",
+    "beforeChars": 8364,
+    "afterChars": 5574,
+    "beforeTok": 2091,
+    "afterTok": 1394,
+    "savedPct": 33,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 71 body line(s) 6424->3634 chars (-43%); 8 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "17-python-multifile",
+    "title": "Multi-file trace (Python) — \"how does Checkout.submit_order capture payment?\"",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2",
+    "tier": "accounting",
+    "beforeChars": 7144,
+    "afterChars": 4560,
+    "beforeTok": 1786,
+    "afterTok": 1140,
+    "savedPct": 36,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->3910 chars (-40%); 10 stashed for retrieval"
+    ]
+  }
+]

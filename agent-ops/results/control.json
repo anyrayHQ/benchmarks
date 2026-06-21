@@ -1,0 +1,23 @@
+[
+  {
+    "id": "3-github-triage",
+    "title": "GitHub triage — \"which open issues are P0 auth bugs?\"",
+    "chars": 22333,
+    "tokens": 5583,
+    "max_tokens": 1024
+  },
+  {
+    "id": "8-long-session",
+    "title": "Long agent session — keep a 60-message session inside the window",
+    "chars": 327659,
+    "tokens": 81915,
+    "max_tokens": 1024
+  },
+  {
+    "id": "16-test-run",
+    "title": "Test-suite output — \"which tests failed and why?\"",
+    "chars": 6060,
+    "tokens": 1515,
+    "max_tokens": 1024
+  }
+]

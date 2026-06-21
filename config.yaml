@@ -1,0 +1,173 @@
+# Anyray Optimizer Benchmarks — configuration
+#
+# Mirrors the layout of a dataset benchmark suite: a `shared` block that applies
+# to every suite, then a `benchmarks` map (one entry per suite directory). Each
+# suite lists its workloads; each workload names the optimizer strategy and the
+# single knob it runs at.
+#
+# The harness turns each workload into two configs:
+#   control     — optimizer bypassed (the raw request; establishes the baseline)
+#   optimized   — the strategy below, at its knob (what Anyray actually sends)
+# This is the Anyray analog of a compression benchmark's `control` vs
+# `model--aggressiveness` configs.
+
+shared:
+  # A running Anyray optimizer (the before-request hook). `docker compose up` in
+  # the Anyray stack exposes it in-network on :8088; point the harness at it.
+  optimizer_url: "http://localhost:8088"
+  # Admin token for the optimizer's /admin/optimizer/settings API. The harness
+  # PUTs a single-strategy config per workload to isolate the hero strategy
+  # (the same key gates the console). Read from $ANYRAY_ADMIN_TOKEN if unset.
+  admin_token_env: "ANYRAY_ADMIN_TOKEN"
+  endpoint: "/v1/chat/completions"
+  # Token accounting basis for the default (accounting) mode: whole-request
+  # characters / chars_per_token. 4 matches the optimizer's own estimate and the
+  # demo scorer. `--live-bill` mode ignores this and reads real provider usage.
+  chars_per_token: 4
+  # Per-request safety: never let the harness wait forever on the hook.
+  request_timeout_ms: 30000
+
+# One entry per suite directory. `strategy` + `params` are passed verbatim to
+# /admin/optimizer/settings so only that strategy runs at that knob.
+benchmarks:
+
+  logs-and-data:
+    title: "Logs & structured data"
+    blurb: >-
+      A big log or data blob pasted into one turn, with a narrow question. The
+      lexical relevance filter keeps the lines that answer it; the JSON crusher
+      minifies and array-caps oversized tool data.
+    workloads:
+      - id: "1-access-log"
+        title: 'Access log (500 requests) — "find the failing requests"'
+        strategy: "relevance_filter"
+        params: { keepChars: 6000, roles: ["user"] }
+      - id: "2-sre-incident"
+        title: 'SRE incident — "why did checkout p99 spike at 10:05?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 1000, roles: ["user"] }
+      - id: "4-json-array"
+        title: 'JSON array (500 items) — "which orders failed and why?"'
+        strategy: "context_compression"
+        params: { roles: ["user"] }
+
+  code-context:
+    title: "Code context"
+    blurb: >-
+      An agent reads source, search hits, or a diff back into the window. The
+      code-aware strategies keep the navigable skeleton (or the on-path
+      reference graph) and elide the bodies that don't matter to the question.
+    workloads:
+      - id: "5-code-search"
+        title: 'Code search (100 hits) — "where is the retry policy configured?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 1500, roles: ["user"] }
+      - id: "6-git-diff"
+        title: 'Git diff — "any risky change in this PR?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2000, roles: ["user"] }
+      - id: "7-codebase-explore"
+        title: 'Codebase exploration — "explain the architecture & where retries live"'
+        strategy: "code_skeleton"
+        params: { minBodyLines: 3, roles: ["user"] }
+      - id: "15-multifile-graph"
+        title: 'Multi-file trace — "how does Checkout.submitOrder capture payment?"'
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
+      - id: "17-python-multifile"
+        title: 'Multi-file trace (Python) — "how does Checkout.submit_order capture payment?"'
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
+
+  tools-and-rag:
+    title: "Tools & retrieval"
+    blurb: >-
+      Bloat that rides alongside the prompt: dozens of tool schemas, over-fetched
+      RAG chunks, the same instruction block re-pasted per item. Prune the unused
+      tools, drop the off-topic chunks, dedup the boilerplate.
+    workloads:
+      - id: "11-mcp-tools"
+        title: "MCP tool bloat — 41 tool schemas ride along, 2 are needed"
+        strategy: "tool_pruning"
+        params: { keepUnnamed: true }
+      - id: "12-rag-overfetch"
+        title: "RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer"
+        strategy: "relevance_filter"
+        params: { keepChars: 1200, roles: ["user"] }
+      - id: "13-prompt-boilerplate"
+        title: "Templated boilerplate — the same instructions re-pasted 40x"
+        strategy: "prompt_compression"
+        params: { minChars: 400 }
+
+  agent-ops:
+    title: "Agent operations"
+    blurb: >-
+      The long-running agent's everyday waste: a triage dump, a session that
+      overflows the window, a test run read back verbatim. Filter, fit-to-budget,
+      and digest the command output to its failures.
+    workloads:
+      - id: "3-github-triage"
+        title: 'GitHub triage — "which open issues are P0 auth bugs?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2000, roles: ["user"] }
+      - id: "8-long-session"
+        title: "Long agent session — keep a 60-message session inside the window"
+        strategy: "window_budget"
+        params: { maxTokens: 24000 }
+      - id: "16-test-run"
+        title: 'Test-suite output — "which tests failed and why?"'
+        strategy: "command_digest"
+        params: { maxFailures: 10, contextLines: 12, roles: ["user"] }
+
+  memory-recall:
+    title: "Cross-session memory recall"
+    blurb: >-
+      The "remember this for me" workloads: a large recalled store (past
+      sessions, decisions, notes, a back catalogue, a week of activity) rides
+      back as a tool message, and a narrow question selects the few records that
+      answer it. BM25, lexical, no LLM.
+    workloads:
+      - id: "18-session-recall"
+        title: 'Cross-session catch-up — "catch me up on this branch"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2500 }
+      - id: "19-decision-recall"
+        title: 'Decision recall — "what did we decide, and why?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 700, headLines: 2 }
+      - id: "20-research-brief"
+        title: 'Research brief — "everything I have found on this, in one brief"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2500 }
+      - id: "21-content-memory"
+        title: 'Content memory — "what have I already published on this?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2200 }
+      - id: "22-ops-open-loops"
+        title: 'Open loops — "what is still open and waiting on me?"'
+        strategy: "relevance_filter"
+        params: { keepChars: 2200 }
+
+  guardrails:
+    title: "Guardrails (special accounting)"
+    blurb: >-
+      Three workloads whose saving is not whole-request character reduction, so
+      they are reported on their own basis: a repeated call served from cache, a
+      pasted screenshot swapped for OCR text, and a runaway output ceiling
+      clamped. See the suite README for each basis.
+    workloads:
+      - id: "9-repeat-request"
+        title: "Repeated identical request — 2nd call served from cache"
+        strategy: "semantic_cache"
+        params: {}
+        tier: "cache"
+      - id: "10-screenshot-ocr"
+        title: 'Pasted screenshot — "what is this error and how do I fix it?"'
+        strategy: "vision_ocr"
+        params: { imageTokenEstimate: 1000 }
+        tier: "vision"
+      - id: "14-runaway-max-tokens"
+        title: "Runaway max_tokens — 100k output ceiling on a one-line task"
+        strategy: "param_tuning"
+        params: { maxTokensCap: 4096 }
+        tier: "guardrail"
