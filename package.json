@@ -5,10 +5,12 @@
   "type": "module",
   "description": "Reproducible token-savings benchmarks for the Anyray optimizer.",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "bench": "node run_benchmark.mjs",
     "bench:all": "node run_benchmark.mjs --all",
     "quality": "node run_quality.mjs",
-    "quality:all": "node run_quality.mjs --all"
+    "quality:all": "node run_quality.mjs --all",
+    "charts": "node tools/make-charts.mjs"
   },
   "engines": {
     "node": ">=20"

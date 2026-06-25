@@ -1,11 +1,25 @@
 # Anyray Optimizer Benchmarks
 
+[![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
+[![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
+[![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2020%2F22-1a7f5a)](QUALITY.md)
+
 [Anyray](https://anyray.ai) cuts the **input tokens** your LLM requests carry — and
 this repo proves it, reproducibly, on the workloads developers and coding agents
 actually produce day-to-day, with the answer kept intact.
 
 > **Headline: 72% fewer input tokens across 22 real-world workloads (290k → 82k),
 > answer preserved in 20 of 22 — every number reproducible against a running optimizer.**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/savings-by-strategy.dark.svg" />
+    <img alt="Token savings by Anyray optimizer strategy — 72% overall across 22 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
+  </picture>
+  <br />
+  <sub>Regenerated from <code>results/</code> with <code>npm run charts</code> — no hand-edited numbers.</sub>
+</p>
 
 Each workload is a wasteful thing real devs and agents do every day — pasting a
 whole log and asking one question, an agent re-reading entire files, MCP tool-schema
@@ -39,6 +53,15 @@ The mix is **weighted to real measured traffic** — `context_compression` and
 counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
 [Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
 real-provider cross-check, are in [RESULTS.md](RESULTS.md).
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
+    <img alt="Token savings vs answer kept — most of 22 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
+  </picture>
+  <br />
+  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Opus-4.8 judge; the few that dip are reported, not hidden.</sub>
+</p>
 
 ## Quality — does the answer survive?
 
