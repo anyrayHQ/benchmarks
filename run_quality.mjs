@@ -58,6 +58,26 @@ function loadKeyFacts(root) {
   return map;
 }
 
+/** Extract the first balanced JSON object from a model reply (ignores braces in strings). */
+function extractJsonObject(text) {
+  const start = text.indexOf('{');
+  if (start === -1) throw new Error('no JSON object in judge reply');
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return text.slice(start, i + 1);
+  }
+  throw new Error('unterminated JSON object in judge reply');
+}
+
 async function judgeOne(judgeCfg, question, context, keyFacts) {
   const res = await fetch(`${judgeCfg.url.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
@@ -74,7 +94,7 @@ async function judgeOne(judgeCfg, question, context, keyFacts) {
   if (!res.ok) throw new Error(`judge HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? '';
-  const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+  const json = JSON.parse(extractJsonObject(text));
   const covered = Array.isArray(json.covered) ? json.covered : [];
   const coverage =
     typeof json.coverage === 'number'
@@ -93,47 +113,78 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
   mkdirSync(resultsDir, { recursive: true });
   const optimized = readJson(join(resultsDir, 'optimized.json'), []);
   const savedById = new Map(optimized.map((r) => [r.id, r.savedPct]));
+  // Reuse the exact optimized requests run_benchmark stashed, so quality scores
+  // the same bytes the saving was measured on (and avoids a second optimize call).
+  const stashed = readJson(join(resultsDir, 'optimized-requests.local.json'), {});
 
-  const rows = [];
+  const qualityPath = join(resultsDir, 'quality.json');
+  const rows = readJson(qualityPath, []);
+  const indexById = new Map(rows.map((r, i) => [r.id, i]));
   const dumps = [];
   for (const w of workloads) {
-    const payload = JSON.parse(
-      readFileSync(join(cfg.root, suite, 'payloads', `${w.id}.json`), 'utf8')
-    );
-    await client.setStrategy(w.strategy, w.params ?? {});
-    const res = await client.optimize(payload, [w.strategy]);
-    const optimizedReq = res.request ?? payload;
-    const context = fullText(optimizedReq);
-
-    const det = keyFactSurvival(optimizedReq, w.keyFacts);
-    const row = {
-      id: w.id,
-      strategy: w.strategy,
-      savedPct: savedById.get(w.id) ?? savedPct(sizeOf(payload), sizeOf(optimizedReq)),
-      keyFacts: w.keyFacts.length,
-      deterministic: {
-        coverage: Math.round(det.coverage * 100),
-        verdict: det.verdict,
-        missing: det.missing,
-      },
-    };
-
-    if (opts.dump) dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
-    if (opts.judge && judgeCfg) {
-      try {
-        const j = await judgeOne(judgeCfg, w.question ?? '', context, w.keyFacts);
-        row.judge = { coverage: Math.round(j.coverage * 100), verdict: j.verdict, note: j.note };
-      } catch (e) {
-        row.judge = { error: String(e.message ?? e) };
-      }
+    const prev = indexById.has(w.id) ? rows[indexById.get(w.id)] : null;
+    const wantJudge = opts.judge && judgeCfg;
+    const haveJudge = prev?.judge && prev.judge.error == null;
+    // Resume: skip already-scored workloads, unless a --judge pass still owes a verdict.
+    if (prev && (!wantJudge || haveJudge)) {
+      console.log(`  [${suite}/${w.id}] already scored — skipping`);
+      continue;
     }
-    rows.push(row);
-    console.log(
-      `  [${suite}/${w.id}] saved ${row.savedPct}% · key-facts ${row.deterministic.coverage}% ${row.deterministic.verdict}` +
-        (row.judge?.coverage != null ? ` · judge ${row.judge.coverage}% ${row.judge.verdict}` : '')
-    );
+    try {
+      const payload = JSON.parse(
+        readFileSync(join(cfg.root, suite, 'payloads', `${w.id}.json`), 'utf8')
+      );
+      let optimizedReq = stashed[w.id];
+      if (!optimizedReq) {
+        await client.setStrategy(w.strategy, w.params ?? {});
+        const res = await client.optimize(payload, [w.strategy]);
+        optimizedReq = res.request ?? payload;
+      }
+      const context = fullText(optimizedReq);
+
+      const det = keyFactSurvival(optimizedReq, w.keyFacts);
+      const row = {
+        id: w.id,
+        strategy: w.strategy,
+        savedPct: savedById.get(w.id) ?? savedPct(sizeOf(payload), sizeOf(optimizedReq)),
+        keyFacts: w.keyFacts.length,
+        deterministic: {
+          coverage: Math.round(det.coverage * 100),
+          verdict: det.verdict,
+          missing: det.missing,
+        },
+      };
+
+      if (opts.dump)
+        dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
+      if (wantJudge) {
+        try {
+          const j = await judgeOne(judgeCfg, w.question ?? '', context, w.keyFacts);
+          row.judge = {
+            coverage: Math.round(j.coverage * 100),
+            verdict: j.verdict,
+            note: j.note,
+            by: judgeCfg.model,
+          };
+        } catch (e) {
+          row.judge = { error: String(e.message ?? e) };
+        }
+      }
+
+      if (indexById.has(w.id)) rows[indexById.get(w.id)] = row;
+      else {
+        indexById.set(w.id, rows.length);
+        rows.push(row);
+      }
+      writeFileSync(qualityPath, JSON.stringify(rows, null, 2) + '\n');
+      console.log(
+        `  [${suite}/${w.id}] saved ${row.savedPct}% · key-facts ${row.deterministic.coverage}% ${row.deterministic.verdict}` +
+          (row.judge?.coverage != null ? ` · judge ${row.judge.coverage}% ${row.judge.verdict}` : '')
+      );
+    } catch (e) {
+      console.error(`  [${suite}/${w.id}] ERROR: ${e.message ?? e} — skipping`);
+    }
   }
-  writeFileSync(join(resultsDir, 'quality.json'), JSON.stringify(rows, null, 2) + '\n');
   if (opts.dump)
     writeFileSync(join(resultsDir, 'judge-inputs.json'), JSON.stringify(dumps, null, 2) + '\n');
 }
@@ -151,6 +202,7 @@ async function main() {
   const client = new OptimizerClient({
     url: cfg.optimizerUrl,
     adminToken: cfg.adminToken,
+    optimizerToken: cfg.optimizerToken,
     endpoint: cfg.endpoint,
     timeoutMs: cfg.requestTimeoutMs,
   });
@@ -172,12 +224,25 @@ async function main() {
   }
 
   const keyFactsMap = loadKeyFacts(cfg.root);
-  const suites = args.all ? suiteNames(cfg) : [args.suite];
-  for (const suite of suites) {
-    console.log(`\n== ${suite} ==`);
-    await runSuite(cfg, client, suite, args.workload, args, judgeCfg, keyFactsMap);
+  // Quality only re-pins a strategy when no stashed request exists; snapshot and
+  // restore anyway so a fall-back optimize call can't leave the optimizer pinned.
+  const snapshot = await client.getSettings().catch(() => null);
+  try {
+    const suites = args.all ? suiteNames(cfg) : [args.suite];
+    for (const suite of suites) {
+      console.log(`\n== ${suite} ==`);
+      await runSuite(cfg, client, suite, args.workload, args, judgeCfg, keyFactsMap);
+    }
+    console.log('\nDone. Quality in <suite>/results/quality.json');
+  } finally {
+    if (snapshot) {
+      try {
+        await client.putConfig(snapshot);
+      } catch (e) {
+        console.error(`Warning: failed to restore optimizer config: ${e.message ?? e}`);
+      }
+    }
   }
-  console.log('\nDone. Quality in <suite>/results/quality.json');
 }
 
 main().catch((err) => {

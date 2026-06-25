@@ -19,5 +19,19 @@
     "chars": 153,
     "tokens": 38,
     "max_tokens": 100000
+  },
+  {
+    "id": "25-claude-cache-prefix",
+    "title": "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse",
+    "chars": 1405,
+    "tokens": 351,
+    "max_tokens": 1024
+  },
+  {
+    "id": "26-context-quality",
+    "title": "Context health score — flag a bloated, over-fetched context",
+    "chars": 10821,
+    "tokens": 2705,
+    "max_tokens": 1024
   }
 ]

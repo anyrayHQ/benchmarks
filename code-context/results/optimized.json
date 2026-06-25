@@ -6,15 +6,15 @@
     "knob": "keepChars=1500, roles=user",
     "tier": "accounting",
     "beforeChars": 12528,
-    "afterChars": 3643,
+    "afterChars": 3995,
     "beforeTok": 3132,
-    "afterTok": 911,
-    "savedPct": 71,
+    "afterTok": 999,
+    "savedPct": 68,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (12528->3643 chars, -71%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (12528->3995 chars, -68%); 1 stashed for retrieval"
     ]
   },
   {
@@ -24,15 +24,15 @@
     "knob": "keepChars=2000, roles=user",
     "tier": "accounting",
     "beforeChars": 13890,
-    "afterChars": 4077,
+    "afterChars": 4429,
     "beforeTok": 3473,
-    "afterTok": 1019,
-    "savedPct": 71,
+    "afterTok": 1107,
+    "savedPct": 68,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (13890->4077 chars, -71%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (13890->4429 chars, -68%); 1 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +42,15 @@
     "knob": "minBodyLines=3, roles=user",
     "tier": "accounting",
     "beforeChars": 18714,
-    "afterChars": 13123,
+    "afterChars": 13488,
     "beforeTok": 4679,
-    "afterTok": 3281,
-    "savedPct": 30,
+    "afterTok": 3372,
+    "savedPct": 28,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "outlined 1 source file(s), elided 171 body line(s) 18714->13123 chars (-30%); 1 stashed for retrieval"
+      "outlined 1 source file(s), elided 168 body line(s) 18714->13488 chars (-28%); 1 stashed for retrieval"
     ]
   },
   {
@@ -59,16 +59,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 8364,
-    "afterChars": 5574,
-    "beforeTok": 2091,
-    "afterTok": 1394,
-    "savedPct": 33,
+    "beforeChars": 8367,
+    "afterChars": 5678,
+    "beforeTok": 2092,
+    "afterTok": 1420,
+    "savedPct": 32,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 71 body line(s) 6424->3634 chars (-43%); 8 stashed for retrieval"
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3735 chars (-42%); 8 stashed for retrieval"
     ]
   },
   {
@@ -77,16 +77,52 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 7144,
-    "afterChars": 4560,
-    "beforeTok": 1786,
-    "afterTok": 1140,
-    "savedPct": 36,
+    "beforeChars": 7147,
+    "afterChars": 4763,
+    "beforeTok": 1787,
+    "afterTok": 1191,
+    "savedPct": 33,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->3910 chars (-40%); 10 stashed for retrieval"
+      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4110 chars (-37%); 10 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "27-read-service-ts",
+    "title": "Read a large TS service file (tool result) — keep the call structure",
+    "strategy": "code_skeleton",
+    "knob": "minBodyLines=4",
+    "tier": "accounting",
+    "beforeChars": 10597,
+    "afterChars": 2567,
+    "beforeTok": 2649,
+    "afterTok": 642,
+    "savedPct": 76,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "outlined 1 source file(s), elided 160 body line(s) 10484->2454 chars (-77%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "28-read-module-py",
+    "title": "Read a Python module (tool result) — keep the call structure",
+    "strategy": "code_skeleton",
+    "knob": "minBodyLines=4",
+    "tier": "accounting",
+    "beforeChars": 8872,
+    "afterChars": 1627,
+    "beforeTok": 2218,
+    "afterTok": 407,
+    "savedPct": 82,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "outlined 1 source file(s), elided 131 body line(s) 8780->1535 chars (-83%); 1 stashed for retrieval"
     ]
   }
 ]

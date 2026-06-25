@@ -6,33 +6,33 @@
     "knob": "keepChars=6000, roles=user",
     "tier": "accounting",
     "beforeChars": 104612,
-    "afterChars": 7836,
+    "afterChars": 8148,
     "beforeTok": 26153,
-    "afterTok": 1959,
-    "savedPct": 93,
+    "afterTok": 2037,
+    "savedPct": 92,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (104612->7836 chars, -93%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (104612->8148 chars, -92%); 1 stashed for retrieval"
     ]
   },
   {
     "id": "2-sre-incident",
     "title": "SRE incident — \"why did checkout p99 spike at 10:05?\"",
     "strategy": "relevance_filter",
-    "knob": "keepChars=1000, roles=user",
+    "knob": "keepChars=12000, roles=user",
     "tier": "accounting",
     "beforeChars": 105541,
-    "afterChars": 1655,
+    "afterChars": 17304,
     "beforeTok": 26385,
-    "afterTok": 414,
-    "savedPct": 98,
+    "afterTok": 4326,
+    "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (105541->1655 chars, -98%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (105541->17304 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +42,51 @@
     "knob": "roles=user",
     "tier": "accounting",
     "beforeChars": 297840,
-    "afterChars": 64040,
+    "afterChars": 64051,
     "beforeTok": 74460,
-    "afterTok": 16010,
+    "afterTok": 16013,
     "savedPct": 78,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 text) 297840->64040 chars (-78%); 1 stashed for retrieval"
+      "compressed 1 tool output(s) (1 text) 297840->64051 chars (-78%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "29-orders-json",
+    "title": "Orders dump (tool result) — \"which orders failed and why?\"",
+    "strategy": "context_compression",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "beforeChars": 71759,
+    "afterChars": 41743,
+    "beforeTok": 17940,
+    "afterTok": 10436,
+    "savedPct": 42,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 json) 71660->41644 chars (-42%)"
+    ]
+  },
+  {
+    "id": "30-metrics-json",
+    "title": "Metrics series (tool result) — \"find the latency spike\"",
+    "strategy": "context_compression",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "beforeChars": 48363,
+    "afterChars": 28187,
+    "beforeTok": 12091,
+    "afterTok": 7047,
+    "savedPct": 42,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 json) 48244->28068 chars (-42%)"
     ]
   }
 ]

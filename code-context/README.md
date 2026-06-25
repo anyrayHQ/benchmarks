@@ -13,11 +13,13 @@ pegs roughly **70% of a coding agent's tokens as irrelevant file reads**.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Code search (100 hits) — "where is the retry policy configured?" | `relevance_filter` | `keepChars=1500, roles=user` | 3,132 | 911 | **71%** |
-| Git diff — "any risky change in this PR?" | `relevance_filter` | `keepChars=2000, roles=user` | 3,473 | 1,019 | **71%** |
-| Codebase exploration — "explain the architecture & where retries live" | `code_skeleton` | `minBodyLines=3, roles=user` | 4,679 | 3,281 | **30%** |
-| Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,091 | 1,394 | **33%** |
-| Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,786 | 1,140 | **36%** |
+| Code search (100 hits) — "where is the retry policy configured?" | `relevance_filter` | `keepChars=1500, roles=user` | 3,132 | 999 | **68%** |
+| Git diff — "any risky change in this PR?" | `relevance_filter` | `keepChars=2000, roles=user` | 3,473 | 1,107 | **68%** |
+| Codebase exploration — "explain the architecture & where retries live" | `code_skeleton` | `minBodyLines=3, roles=user` | 4,679 | 3,372 | **28%** |
+| Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,092 | 1,420 | **32%** |
+| Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,787 | 1,191 | **33%** |
+| Read a large TS service file (tool result) — keep the call structure | `code_skeleton` | `minBodyLines=4` | 2,649 | 642 | **76%** |
+| Read a Python module (tool result) — keep the call structure | `code_skeleton` | `minBodyLines=4` | 2,218 | 407 | **82%** |
 
 ## How it works
 

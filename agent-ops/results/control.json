@@ -19,5 +19,19 @@
     "chars": 6060,
     "tokens": 1515,
     "max_tokens": 1024
+  },
+  {
+    "id": "24-agent-toolcalls",
+    "title": "Agentic tool-call session — fit a multi-step investigation in budget",
+    "chars": 3122,
+    "tokens": 781,
+    "max_tokens": 1024
+  },
+  {
+    "id": "31-long-toolsession",
+    "title": "Long tool-call session — fit a 10-file investigation in budget",
+    "chars": 12702,
+    "tokens": 3176,
+    "max_tokens": 1024
   }
 ]

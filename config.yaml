@@ -19,10 +19,13 @@ shared:
   # PUTs a single-strategy config per workload to isolate the hero strategy
   # (the same key gates the console). Read from $ANYRAY_ADMIN_TOKEN if unset.
   admin_token_env: "ANYRAY_ADMIN_TOKEN"
+  # Hook token, only used if the optimizer sets ANYRAY_OPTIMIZER_TOKEN (hardened
+  # deployments). Read from $ANYRAY_OPTIMIZER_TOKEN; leave blank for a dev optimizer.
+  optimizer_token_env: "ANYRAY_OPTIMIZER_TOKEN"
   endpoint: "/v1/chat/completions"
   # Token accounting basis for the default (accounting) mode: whole-request
   # characters / chars_per_token. 4 matches the optimizer's own estimate and the
-  # demo scorer. `--live-bill` mode ignores this and reads real provider usage.
+  # demo scorer. This is an estimate, not a provider bill (see RESULTS.md).
   chars_per_token: 4
   # Per-request safety: never let the harness wait forever on the hook.
   request_timeout_ms: 30000
@@ -45,11 +48,21 @@ benchmarks:
       - id: "2-sre-incident"
         title: 'SRE incident — "why did checkout p99 spike at 10:05?"'
         strategy: "relevance_filter"
-        params: { keepChars: 1000, roles: ["user"] }
+        # keepChars=12000 keeps the answer (root-cause lines survive); the old 1000
+        # was an unfair knob that kept <1% of a 26k-token input and dropped the answer.
+        params: { keepChars: 12000, roles: ["user"] }
       - id: "4-json-array"
         title: 'JSON array (500 items) — "which orders failed and why?"'
         strategy: "context_compression"
         params: { roles: ["user"] }
+      - id: "29-orders-json"
+        title: 'Orders dump (tool result) — "which orders failed and why?"'
+        strategy: "context_compression"
+        params: {}
+      - id: "30-metrics-json"
+        title: 'Metrics series (tool result) — "find the latency spike"'
+        strategy: "context_compression"
+        params: {}
 
   code-context:
     title: "Code context"
@@ -78,6 +91,14 @@ benchmarks:
         title: 'Multi-file trace (Python) — "how does Checkout.submit_order capture payment?"'
         strategy: "code_graph"
         params: { minChars: 200, minBodyLines: 2 }
+      - id: "27-read-service-ts"
+        title: "Read a large TS service file (tool result) — keep the call structure"
+        strategy: "code_skeleton"
+        params: { minBodyLines: 4 }
+      - id: "28-read-module-py"
+        title: "Read a Python module (tool result) — keep the call structure"
+        strategy: "code_skeleton"
+        params: { minBodyLines: 4 }
 
   tools-and-rag:
     title: "Tools & retrieval"
@@ -98,6 +119,10 @@ benchmarks:
         title: "Templated boilerplate — the same instructions re-pasted 40x"
         strategy: "prompt_compression"
         params: { minChars: 400 }
+      - id: "23-mcp-schema"
+        title: "MCP tool schemas — 41 verbose schemas, compress the prose not the set"
+        strategy: "tool_schema_compression"
+        params: { collapseWhitespace: true, stripBoilerplate: true }
 
   agent-ops:
     title: "Agent operations"
@@ -118,6 +143,14 @@ benchmarks:
         title: 'Test-suite output — "which tests failed and why?"'
         strategy: "command_digest"
         params: { maxFailures: 10, contextLines: 12, roles: ["user"] }
+      - id: "24-agent-toolcalls"
+        title: "Agentic tool-call session — fit a multi-step investigation in budget"
+        strategy: "window_budget"
+        params: { maxTokens: 700 }
+      - id: "31-long-toolsession"
+        title: "Long tool-call session — fit a 10-file investigation in budget"
+        strategy: "window_budget"
+        params: { maxTokens: 2500 }
 
   memory-recall:
     title: "Cross-session memory recall"
@@ -131,30 +164,15 @@ benchmarks:
         title: 'Cross-session catch-up — "catch me up on this branch"'
         strategy: "relevance_filter"
         params: { keepChars: 2500 }
-      - id: "19-decision-recall"
-        title: 'Decision recall — "what did we decide, and why?"'
-        strategy: "relevance_filter"
-        params: { keepChars: 700, headLines: 2 }
-      - id: "20-research-brief"
-        title: 'Research brief — "everything I have found on this, in one brief"'
-        strategy: "relevance_filter"
-        params: { keepChars: 2500 }
-      - id: "21-content-memory"
-        title: 'Content memory — "what have I already published on this?"'
-        strategy: "relevance_filter"
-        params: { keepChars: 2200 }
-      - id: "22-ops-open-loops"
-        title: 'Open loops — "what is still open and waiting on me?"'
-        strategy: "relevance_filter"
-        params: { keepChars: 2200 }
 
   guardrails:
     title: "Guardrails (special accounting)"
     blurb: >-
-      Three workloads whose saving is not whole-request character reduction, so
-      they are reported on their own basis: a repeated call served from cache, a
-      pasted screenshot swapped for OCR text, and a runaway output ceiling
-      clamped. See the suite README for each basis.
+      Workloads whose saving is not whole-request character reduction, so they are
+      reported on their own basis: a repeated call served from cache, a pasted
+      screenshot swapped for OCR text, a runaway output ceiling clamped, a Claude
+      prompt-cache prefix stabilized, and a low-signal context scored for health.
+      See the suite README for each basis.
     workloads:
       - id: "9-repeat-request"
         title: "Repeated identical request — 2nd call served from cache"
@@ -171,3 +189,15 @@ benchmarks:
         strategy: "param_tuning"
         params: { maxTokensCap: 4096 }
         tier: "guardrail"
+      - id: "25-claude-cache-prefix"
+        title: "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse"
+        strategy: "cache_optimizer"
+        # Sonnet's real cacheable floor is ~1024 tokens (~4096 chars); the default
+        # 5000 carries extra margin. Pin to the floor so the prefix here injects.
+        params: { minPrefixChars: 4096 }
+        tier: "cache-prefix"
+      - id: "26-context-quality"
+        title: "Context health score — flag a bloated, over-fetched context"
+        strategy: "context_quality"
+        params: { bloatedToolChars: 1500 }
+        tier: "diagnostic"

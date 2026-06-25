@@ -19,5 +19,19 @@
     "chars": 297840,
     "tokens": 74460,
     "max_tokens": 1024
+  },
+  {
+    "id": "29-orders-json",
+    "title": "Orders dump (tool result) — \"which orders failed and why?\"",
+    "chars": 71759,
+    "tokens": 17940,
+    "max_tokens": 1024
+  },
+  {
+    "id": "30-metrics-json",
+    "title": "Metrics series (tool result) — \"find the latency spike\"",
+    "chars": 48363,
+    "tokens": 12091,
+    "max_tokens": 1024
   }
 ]

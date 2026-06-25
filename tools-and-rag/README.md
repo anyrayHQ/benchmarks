@@ -15,8 +15,9 @@ instruction block once per item — all billed every call.
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
 | MCP tool bloat — 41 tool schemas ride along, 2 are needed | `tool_pruning` | `keepUnnamed=true` | 5,614 | 1,972 | **65%** |
-| RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer | `relevance_filter` | `keepChars=1200, roles=user` | 1,498 | 468 | **69%** |
-| Templated boilerplate — the same instructions re-pasted 40× | `prompt_compression` | `minChars=400` | 5,841 | 914 | **84%** |
+| RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer | `relevance_filter` | `keepChars=1200, roles=user` | 1,498 | 487 | **67%** |
+| Templated boilerplate — the same instructions re-pasted 40x | `prompt_compression` | `minChars=400` | 5,841 | 914 | **84%** |
+| MCP tool schemas — 41 verbose schemas, compress the prose not the set | `tool_schema_compression` | `collapseWhitespace=true, stripBoilerplate=true` | 1,612 | 1,504 | **7%** |
 
 ## How it works
 
@@ -28,6 +29,11 @@ instruction block once per item — all billed every call.
   question and elides the over-fetched remainder (reversibly).
 - **`prompt_compression`** detects a block repeated across the prompt and dedups
   it to a single copy — the 40 re-pasted instruction blocks collapse to one.
+- **`tool_schema_compression`** rewrites only the free-text `description` fields of
+  the tool schemas — collapsing whitespace and stripping boilerplate lead-ins —
+  while leaving names, types, and required fields byte-for-byte intact. Unlike
+  `tool_pruning` it keeps every tool, so it is cache-safe and keeps saving on the
+  re-sent tool block of warm / subscription traffic.
 
 ## Measurement
 

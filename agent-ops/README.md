@@ -14,9 +14,11 @@ input:output. The session only grows, so the bill compounds.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| GitHub triage — "which open issues are P0 auth bugs?" | `relevance_filter` | `keepChars=2000, roles=user` | 5,583 | 854 | **85%** |
-| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=24000` | 81,915 | 22,831 | **72%** |
-| Test-suite output — "which tests failed and why?" | `command_digest` | `maxFailures=10, contextLines=12, roles=user` | 1,515 | 348 | **77%** |
+| GitHub triage — "which open issues are P0 auth bugs?" | `relevance_filter` | `keepChars=2000, roles=user` | 5,583 | 902 | **84%** |
+| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=24000` | 81,915 | 22,886 | **72%** |
+| Test-suite output — "which tests failed and why?" | `command_digest` | `maxFailures=10, contextLines=12, roles=user` | 1,515 | 351 | **77%** |
+| Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 587 | **25%** |
+| Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,176 | 2,324 | **27%** |
 
 ## How it works
 
@@ -25,7 +27,9 @@ input:output. The session only grows, so the bill compounds.
 - **`window_budget`** caps the total conversation at `maxTokens` by cropping the
   oldest middle turns while pinning the system prompt and the most recent turns —
   a reversible fit-to-window, so the cropped turns are retrievable rather than
-  lost.
+  lost. Two shapes are covered: a 60-turn prose session, and an **agentic
+  tool-call session** (assistant `tool_calls` + linked `tool` results) where the
+  answer sits in the pinned final turn and the early investigation is cropped.
 - **`command_digest`** recognizes a test-runner's output shape (pytest/jest/…)
   from the text alone and keeps the failure blocks (signature + traceback, capped
   at `maxFailures`) plus the count summary, dropping the passing lines and the

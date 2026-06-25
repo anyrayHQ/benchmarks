@@ -2,41 +2,23 @@
   {
     "id": "1-access-log",
     "strategy": "relevance_filter",
-    "savedPct": 93,
+    "savedPct": 92,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
     }
   },
   {
     "id": "2-sre-incident",
     "strategy": "relevance_filter",
-    "savedPct": 98,
+    "savedPct": 84,
     "keyFacts": 5,
     "deterministic": {
-      "coverage": 0,
-      "verdict": "FAIL",
-      "missing": [
-        "failed to acquire db connection",
-        "pool=primary",
-        "max_conns=20 in_use=20",
-        "10:05:00.100Z",
-        "wait_ms=3500"
-      ]
-    },
-    "judge": {
-      "coverage": 20,
-      "verdict": "FAIL",
-      "note": "Root-cause lines (db-pool saturation) rank out under lexical scoring and are elided; only the surface restatement (p99 spike at 10:05) survives, so the actual cause is not answerable.",
-      "by": "Claude Opus 4.8"
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
     }
   },
   {
@@ -48,12 +30,28 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
+    }
+  },
+  {
+    "id": "29-orders-json",
+    "strategy": "context_compression",
+    "savedPct": 42,
+    "keyFacts": 4,
+    "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
+      "missing": []
+    }
+  },
+  {
+    "id": "30-metrics-json",
+    "strategy": "context_compression",
+    "savedPct": 42,
+    "keyFacts": 2,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
     }
   }
 ]

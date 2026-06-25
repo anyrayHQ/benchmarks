@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the "code-context" suite. Extra flags (e.g. --workload <id>, --limit N) pass through.
+# Run this suite (named by its directory). Extra flags (--workload <id>, --limit N) pass through.
 set -e
+suite="$(basename "$(cd "$(dirname "$0")" && pwd)")"
 cd "$(dirname "$0")/.."
-exec ./run.sh --suite code-context "$@"
+exec ./run.sh --suite "$suite" "$@"

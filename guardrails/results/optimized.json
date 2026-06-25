@@ -6,14 +6,16 @@
     "knob": "(defaults)",
     "tier": "cache",
     "beforeChars": 142,
-    "afterChars": 142,
+    "afterChars": 0,
     "beforeTok": 36,
-    "afterTok": 36,
-    "savedPct": 0,
+    "afterTok": 0,
+    "savedPct": 100,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": false,
-    "decisions": []
+    "fired": true,
+    "decisions": [
+      "semantic cache HIT on an identical repeat call — provider call avoided (~36 input tokens)"
+    ]
   },
   {
     "id": "10-screenshot-ocr",
@@ -22,9 +24,9 @@
     "knob": "imageTokenEstimate=1000",
     "tier": "vision",
     "beforeChars": 54354,
-    "afterChars": 780,
+    "afterChars": 790,
     "beforeTok": 13589,
-    "afterTok": 195,
+    "afterTok": 198,
     "savedPct": 99,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
@@ -49,6 +51,43 @@
     "fired": true,
     "decisions": [
       "clamped max_tokens 100000 -> 4096"
+    ]
+  },
+  {
+    "id": "25-claude-cache-prefix",
+    "title": "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse",
+    "strategy": "cache_optimizer",
+    "knob": "minPrefixChars=4096",
+    "tier": "cache-prefix",
+    "beforeChars": 1405,
+    "afterChars": 1442,
+    "beforeTok": 351,
+    "afterTok": 361,
+    "savedPct": -3,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "reordered 3 tools by name for cache stability",
+      "injected 2 cache_control breakpoint(s): tools, system"
+    ]
+  },
+  {
+    "id": "26-context-quality",
+    "title": "Context health score — flag a bloated, over-fetched context",
+    "strategy": "context_quality",
+    "knob": "bloatedToolChars=1500",
+    "tier": "diagnostic",
+    "beforeChars": 10821,
+    "afterChars": 10821,
+    "beforeTok": 2705,
+    "afterTok": 2705,
+    "savedPct": 0,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "context quality 69/100 (fill 2%, 8 msg, 6 bloated tool output(s), 2 duplicate)"
     ]
   }
 ]

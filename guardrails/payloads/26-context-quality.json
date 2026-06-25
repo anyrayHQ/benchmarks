@@ -1,0 +1,100 @@
+{
+  "model": "openai.gpt-oss-120b-1:0",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "I pulled the docs on our vector-database options (a few twice by accident). Which one should we pick for a Postgres-heavy stack, and why?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_00",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"pinecone-overview\"}"
+          }
+        },
+        {
+          "id": "call_01",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"weaviate-overview\"}"
+          }
+        },
+        {
+          "id": "call_02",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"qdrant-overview\"}"
+          }
+        },
+        {
+          "id": "call_03",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"pinecone-overview\"}"
+          }
+        },
+        {
+          "id": "call_04",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"weaviate-overview\"}"
+          }
+        },
+        {
+          "id": "call_05",
+          "type": "function",
+          "function": {
+            "name": "fetch_doc",
+            "arguments": "{\"doc\":\"pgvector-overview\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_00",
+      "name": "fetch_doc",
+      "content": "# Pinecone\n\nManaged vector database, serverless and pod-based tiers. Metadata filtering, hybrid search, namespaces for multi-tenancy.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_01",
+      "name": "fetch_doc",
+      "content": "# Weaviate\n\nOpen-source vector DB with a GraphQL API, built-in modules for embeddings, and a managed cloud option.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_02",
+      "name": "fetch_doc",
+      "content": "# Qdrant\n\nOpen-source vector search engine in Rust, payload filtering, on-disk storage, and a managed cloud.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_03",
+      "name": "fetch_doc",
+      "content": "# Pinecone\n\nManaged vector database, serverless and pod-based tiers. Metadata filtering, hybrid search, namespaces for multi-tenancy.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_04",
+      "name": "fetch_doc",
+      "content": "# Weaviate\n\nOpen-source vector DB with a GraphQL API, built-in modules for embeddings, and a managed cloud option.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_05",
+      "name": "fetch_doc",
+      "content": "# pgvector\n\nA Postgres extension adding a vector type and ANN indexes; reuses the database you already run.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    }
+  ]
+}

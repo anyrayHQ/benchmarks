@@ -1,0 +1,158 @@
+{
+  "model": "openai.gpt-oss-120b-1:0",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Find the open P0 bugs in the PAY project and comment on each one that it is being triaged."
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "jira_search_issues",
+        "description": "Use this tool to search for issues in a Jira project.\n\n    You can filter by project key, by priority (for example P0, P1, P2),\n    by status, and by assignee. The results come back as a list of issues,\n    each one with its issue key, its summary, its current priority, and its\n    current status, so that you can decide which ones to act on next.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "project": { "type": "string", "description": "This field is used to specify the Jira project key, for example PAY or CORE, that you would like to search within." },
+            "priority": { "type": "string", "description": "Allows you to restrict the results to a single priority level such as P0 or P1." },
+            "status": { "type": "string", "description": "Use this to filter the returned issues down to a particular workflow status, for example Open or In Progress." }
+          },
+          "required": ["project"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "jira_add_comment",
+        "description": "This function allows you to add a comment to a specific Jira issue.\n\n    You provide the issue key and the body of the comment, and the comment\n    is posted to that issue as the currently authenticated user. This is the\n    tool to reach for whenever you want to leave a note on an issue.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "issue_key": { "type": "string", "description": "The unique key of the Jira issue, for example PAY-1234, that you would like to comment on." },
+            "body": { "type": "string", "description": "This is the text of the comment that you would like to post onto the issue." }
+          },
+          "required": ["issue_key", "body"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "github_search_code",
+        "description": "Use this tool to search for code across all of the organization's GitHub\n    repositories.\n\n    It is used to locate where a symbol, a string, or a configuration value is\n    defined or referenced, and it returns the matching file paths along with the\n    line numbers where each match was found.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Allows you to specify the search expression that should be matched against the indexed source code." }
+          },
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "github_open_pull_request",
+        "description": "This endpoint is used to open a brand new pull request against one of the\n    repositories.\n\n    You supply the source branch, the target branch, a title, and a description,\n    and the pull request is created and returned so that reviewers can be added.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "The name of the repository in which you would like to open the pull request." },
+            "head": { "type": "string", "description": "This is the name of the source branch that contains the changes you want merged." },
+            "base": { "type": "string", "description": "This is the name of the target branch that you would like your changes to be merged into." }
+          },
+          "required": ["repo", "head", "base"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "slack_post_message",
+        "description": "Use this function to post a message into a Slack channel.\n\n    You provide the channel identifier and the message text, and the message is\n    delivered to that channel on behalf of the integration's bot user.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "channel": { "type": "string", "description": "The identifier of the Slack channel that you would like the message to be delivered into." },
+            "text": { "type": "string", "description": "This is the body of the message that you would like to send to the channel." }
+          },
+          "required": ["channel", "text"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "pagerduty_list_incidents",
+        "description": "This tool is used to list the incidents that are currently open in PagerDuty.\n\n    The incidents can be narrowed down by service and by urgency, and each\n    incident is returned together with its title, its urgency, and the time at\n    which it was triggered.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": { "type": "string", "description": "Allows you to scope the returned incidents to a single PagerDuty service." }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "confluence_search_pages",
+        "description": "Use this tool to search for pages within the team's Confluence space.\n\n    It is used to find documentation, runbooks, and design notes, and it returns\n    the page title and a short snippet for each page that matches the query.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "This field is used to provide the text that should be matched against the Confluence page contents." }
+          },
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "datadog_query_metric",
+        "description": "This function lets you query a time series metric from Datadog.\n\n    You provide the metric query and a time window, and the matching series of\n    timestamped data points is returned so that it can be summarized.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "The Datadog metric query expression that you would like to evaluate over the window." },
+            "from": { "type": "string", "description": "This is the start of the time window that the metric should be queried over." }
+          },
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "sentry_list_issues",
+        "description": "This method lets you list the unresolved issues that are currently being\n    reported in Sentry.\n\n    The issues can be filtered by project, and each one is returned with its\n    title, the number of events seen, and the time it was last observed.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "project": { "type": "string", "description": "Allows you to restrict the returned Sentry issues to a single project." }
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "calendar_create_event",
+        "description": "Use this tool to create a new event on the shared team calendar.\n\n    You supply a title, a start time, and a list of attendees, and the event is\n    created and an invitation is sent out to everyone on that list.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "This is the title that you would like to give to the calendar event." },
+            "start": { "type": "string", "description": "The start time of the event expressed as an ISO 8601 timestamp." }
+          },
+          "required": ["title", "start"]
+        }
+      }
+    }
+  ]
+}

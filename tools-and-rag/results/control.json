@@ -19,5 +19,12 @@
     "chars": 23365,
     "tokens": 5841,
     "max_tokens": 1024
+  },
+  {
+    "id": "23-mcp-schema",
+    "title": "MCP tool schemas — 41 verbose schemas, compress the prose not the set",
+    "chars": 6449,
+    "tokens": 1612,
+    "max_tokens": 1024
   }
 ]

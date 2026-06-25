@@ -14,6 +14,10 @@ npm-debug.log*
 optimizer.config.json
 optimizer-settings-audit.log
 
+# Optimized request bodies stashed by run_benchmark for the quality runner to
+# reuse — derived (synthetic) content, so not committed.
+**/results/optimized-requests.local.json
+
 # macOS
 .DS_Store
 

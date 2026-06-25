@@ -24,15 +24,15 @@
     "knob": "keepChars=1200, roles=user",
     "tier": "accounting",
     "beforeChars": 5990,
-    "afterChars": 1871,
+    "afterChars": 1948,
     "beforeTok": 1498,
-    "afterTok": 468,
-    "savedPct": 69,
+    "afterTok": 487,
+    "savedPct": 67,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (5990->1871 chars, -69%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (5990->1948 chars, -67%); 1 stashed for retrieval"
     ]
   },
   {
@@ -51,6 +51,24 @@
     "fired": true,
     "decisions": [
       "compressed prompt 23365->3657 chars (-84%)"
+    ]
+  },
+  {
+    "id": "23-mcp-schema",
+    "title": "MCP tool schemas — 41 verbose schemas, compress the prose not the set",
+    "strategy": "tool_schema_compression",
+    "knob": "collapseWhitespace=true, stripBoilerplate=true",
+    "tier": "accounting",
+    "beforeChars": 6449,
+    "afterChars": 6014,
+    "beforeTok": 1612,
+    "afterTok": 1504,
+    "savedPct": 7,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 10 tool schemas, −435 chars of definition text"
     ]
   }
 ]

@@ -13,9 +13,11 @@ entirely off-topic to the question being asked.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=6000, roles=user` | 26,153 | 1,959 | **93%** |
-| SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=1000, roles=user` | 26,385 | 414 | **98%** |
-| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 16,010 | **78%** |
+| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=6000, roles=user` | 26,153 | 2,037 | **92%** |
+| SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=12000, roles=user` | 26,385 | 4,326 | **84%** |
+| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 16,013 | **78%** |
+| Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,940 | 10,436 | **42%** |
+| Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,091 | 7,047 | **42%** |
 
 ## How it works
 

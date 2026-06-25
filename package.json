@@ -6,7 +6,9 @@
   "description": "Reproducible token-savings benchmarks for the Anyray optimizer.",
   "scripts": {
     "bench": "node run_benchmark.mjs",
-    "bench:all": "node run_benchmark.mjs --all"
+    "bench:all": "node run_benchmark.mjs --all",
+    "quality": "node run_quality.mjs",
+    "quality:all": "node run_quality.mjs --all"
   },
   "engines": {
     "node": ">=20"
