@@ -10,6 +10,12 @@
       "missing": [
         "src/lib/http/retryPolicy.ts"
       ]
+    },
+    "judge": {
+      "coverage": 67,
+      "verdict": "FAIL",
+      "note": "RETRY_MAX = 5 and its doc survive (the value is answerable), but the defining file path src/lib/http/retryPolicy.ts was filtered to retrieval, so \"point me to the file\" is not answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -24,6 +30,12 @@
         "requireAdmin",
         "if (user && user.isAuthenticated) { // TODO: tighten before release"
       ]
+    },
+    "judge": {
+      "coverage": 80,
+      "verdict": "MARGINAL",
+      "note": "src/auth/middleware.ts and the removed `user.role === \"admin\"` line survive so the loosened admin check is locatable; the requireAdmin name and exact replacement line were filtered to retrieval",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -35,6 +47,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the architecture outline survives — retryPolicy.ts (withRetry, RETRY_MAX=5) and httpClient.ts (HttpClient); bodies elided to retrieval",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -46,6 +64,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the full submitOrder->capturePayment->sendCharge chain (plus reserveStock) survives; off-path files elided — trace answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -57,6 +81,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the same chain in Python (submit_order->capture_payment->send_charge, reserve_stock) survives — trace answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -68,6 +98,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "PaymentService class and capture/refund signatures survive; method bodies (incl. the idempotency-key impl) elided to retrieval — structure answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -79,6 +115,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "PaymentService and capture/refund defs survive; bodies elided to retrieval — structure answerable",
+      "by": "Claude Opus 4.8"
     }
   }
 ]

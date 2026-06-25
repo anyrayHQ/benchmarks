@@ -8,6 +8,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the payments-retry records survive (idempotent capture rework, dead-letter path, payments_dlq, alert when DLQ depth crosses 10) — full catch-up answerable",
+      "by": "Claude Opus 4.8"
     }
   }
 ]

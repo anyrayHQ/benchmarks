@@ -1,5 +1,5 @@
 {
-  "_comment": "Answer-bearing key facts per workload — the quality benchmark checks how many survive the optimizer's trim (deterministic substring + optional LLM judge). Every string is a verbatim substring of that workload's payload. See run_quality.mjs / lib/quality.mjs.",
+  "_comment": "Answer-bearing key facts per workload — the quality benchmark checks how many survive the optimizer's trim (deterministic substring + optional LLM judge). Most key facts are verbatim substrings of that workload's payload; a few (flagged in the per-entry _note, e.g. 16-test-run) are verbatim substrings of the strategy's reformatted output instead. See run_quality.mjs / lib/quality.mjs.",
   "1-access-log": {
     "question": "Find the failing requests: which endpoint and method are returning 5xx errors (HTTP 500), how many, the time window, and the client IPs.",
     "keyFacts": [

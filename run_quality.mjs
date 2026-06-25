@@ -125,8 +125,11 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
     const prev = indexById.has(w.id) ? rows[indexById.get(w.id)] : null;
     const wantJudge = opts.judge && judgeCfg;
     const haveJudge = prev?.judge && prev.judge.error == null;
-    // Resume: skip already-scored workloads, unless a --judge pass still owes a verdict.
-    if (prev && (!wantJudge || haveJudge)) {
+    const alreadyScored = prev && (!wantJudge || haveJudge);
+    // Resume: skip already-scored workloads, unless a --judge pass still owes a
+    // verdict. A --dump pass still needs their optimized context, so fall through
+    // (we compute the context below, then short-circuit before re-scoring).
+    if (alreadyScored && !opts.dump) {
       console.log(`  [${suite}/${w.id}] already scored — skipping`);
       continue;
     }
@@ -142,6 +145,14 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
       }
       const context = fullText(optimizedReq);
 
+      if (opts.dump)
+        dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
+      // Resume + --dump: we only fell through to capture the context — don't re-score.
+      if (alreadyScored) {
+        console.log(`  [${suite}/${w.id}] already scored — context dumped`);
+        continue;
+      }
+
       const det = keyFactSurvival(optimizedReq, w.keyFacts);
       const row = {
         id: w.id,
@@ -155,8 +166,6 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
         },
       };
 
-      if (opts.dump)
-        dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
       if (wantJudge) {
         try {
           const j = await judgeOne(judgeCfg, w.question ?? '', context, w.keyFacts);

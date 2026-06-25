@@ -35,7 +35,7 @@ input:output. The session only grows, so the bill compounds.
   at `maxFailures`) plus the count summary, dropping the passing lines and the
   session banner. It fires the same for an autonomous agent that just ran the
   suite — no question needed. Here it keeps 3 failing blocks out of an 80-test run
-  (6,060 → 1,393 chars).
+  (6,060 → 1,402 chars).
 
 ## Measurement
 

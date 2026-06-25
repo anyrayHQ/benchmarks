@@ -24,7 +24,7 @@ billed unless it's filtered to what the question actually touches.
 
 ## How it works
 
-All five are the same mechanic — a big store + a narrow question →
+It's the same mechanic — a big store + a narrow question →
 **`relevance_filter`** (BM25, lexical, no model call) keeps the on-topic records
 and elides the rest (each stashed for retrieval). Two things make it reliable
 here:
@@ -35,9 +35,6 @@ here:
 - **BM25's IDF ignores the boilerplate** every record shares (`branch=`, `status=`,
   `shipped`/`merged`) and locks onto the rare discriminator — a branch name, a
   decision topic, the words `blocked`/`waiting`/`open`.
-
-`headLines` (decision recall) pins the first lines of each kept record so a
-decision's header survives alongside its rationale.
 
 ## Measurement
 

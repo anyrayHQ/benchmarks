@@ -8,6 +8,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all 5xx lines (POST /api/checkout, the 10:24:30–10:29:10 window, client IPs) survive the filter; off-intent log lines dropped to retrieval — fully answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -19,6 +25,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the db-pool-exhaustion error (pool=primary, max_conns=20 in_use=20, wait_ms=3500 at 10:05:00.100Z) survives — root cause answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -30,6 +42,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "every failed order and its failure_code survives the compaction; only paid orders were compacted — count and codes answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -41,6 +59,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "both failed orders (ord_100003 card_declined, ord_100037 insufficient_funds) survive minification — count and codes answerable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -52,6 +76,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "the spike row (p99 4200, errors 512) survives minification — the over-threshold timestamp and error count answerable",
+      "by": "Claude Opus 4.8"
     }
   }
 ]

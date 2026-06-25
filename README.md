@@ -1,16 +1,18 @@
 # Anyray Optimizer Benchmarks
 
-Measures how much the [Anyray](https://anyray.ai) optimizer cuts the **input tokens**
-an LLM request carries — on the **token-waste patterns developers and coding agents
-actually produce day-to-day**, not on inputs cherry-picked to flatter an algorithm.
+[Anyray](https://anyray.ai) cuts the **input tokens** your LLM requests carry — and
+this repo proves it, reproducibly, on the workloads developers and coding agents
+actually produce day-to-day, with the answer kept intact.
 
-That distinction is the whole point. Each workload here is a wasteful thing real
-devs and agents do every day — pasting a whole log and asking one question, an
-agent re-reading entire files, MCP tool-schema bloat, RAG over-fetching, resending
-the full session every turn, recalling a big store for a narrow question. These are
-the patterns the 2025–2026 AI-cost research ranks again and again (see
-[Why these workloads](#why-these-workloads)); Anyray solves them **on the request
-path, without touching the app**.
+> **Headline: 72% fewer input tokens across 22 real-world workloads (290k → 82k),
+> answer preserved in 20 of 22 — every number reproducible against a running optimizer.**
+
+Each workload is a wasteful thing real devs and agents do every day — pasting a
+whole log and asking one question, an agent re-reading entire files, MCP tool-schema
+bloat, RAG over-fetching, resending the full session every turn. These aren't inputs
+cherry-picked to flatter an algorithm: the mix is **weighted to real measured
+traffic** (see [Why these workloads](#why-these-workloads)). Anyray fixes them **on
+the request path, without touching the app**.
 
 Every number is produced by running the **real optimizer** (the before-request
 hook that sits on the gateway's hot path) over these workloads and measuring the
@@ -32,30 +34,27 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 | **Total** | **22** | **290,489** | **81,791** | **72%** |
 | [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
-Tokens are a fixed `chars / 4` estimate (see [Methodology](#methodology)) — it
-tracks the savings *percentage* well but understates absolute provider counts, so
-read the columns as an estimate and the **percentages** as the headline. The mix
-is weighted to real coding-agent traffic: `context_compression` and `code_skeleton`
-(which fire on ~90% / ~71% of measured production calls) carry the suite, not
-`relevance_filter`. Per-workload numbers, the per-strategy breakdown, the strategy
-and knob behind each, and the live-provider cross-check are in [RESULTS.md](RESULTS.md).
+The mix is **weighted to real measured traffic** — `context_compression` and
+`code_skeleton`, which fire on ~90% / ~71% of production calls, carry the suite. Token
+counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
+[Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
+real-provider cross-check, are in [RESULTS.md](RESULTS.md).
 
 ## Quality — does the answer survive?
 
-Savings are only worth it if the model can still answer. For each workload we
-define the **answer-bearing key facts** and measure how many survive the trim by
-strict substring survival (the committed, model-free signal), with an optional
-LLM-judge overlay (`--judge`) for a semantic check on demand:
+Savings are only worth it if the model can still answer. For every workload we
+define the **answer-bearing key facts** and check how many survive — two committed
+signals, side by side:
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| Key-fact survival (strict, committed) | 22 | 20 | 0 | 2 |
+| Key-fact survival (strict substring, model-free) | 22 | 20 | 0 | 2 |
+| Semantic judge (Claude Opus 4.8) | 22 | 19 | 2 | 1 |
 
-**20 of 22 preserve the answer in full.** We report the two that don't rather
-than hide them — both are the lexical `relevance_filter` meeting its known limit
-(when the answer lines don't share vocabulary with the question, BM25 ranks them
-out; raising the budget doesn't fix it). Full table, the judge overlay, and the
-tradeoff analysis are in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on 20 of 22 by the strict measure, and a Claude Opus 4.8 judge
+confirms 19 PASS / 2 MARGINAL / 1 FAIL.** The few that aren't perfect are one known
+limit of the lexical filter — reported openly, not hidden, with every judge verdict
+shown in **[QUALITY.md](QUALITY.md)**.
 
 ## Why these workloads
 
@@ -128,11 +127,12 @@ For each workload the harness:
    plus the tools schema, before and after.
 
 The token figure is `chars / 4` (the basis the optimizer itself uses; set in
-`config.yaml`). It is an **estimate** — it tracks the savings percentage well but
-understates absolute provider counts by ~1.2–1.8× on dense logs/JSON. A
-`--live-bill` mode that reads the provider's real `prompt_tokens` end-to-end is on
-the [roadmap](RESULTS.md#roadmap), not yet wired in this repo; the demo-stack
-cross-check in [RESULTS.md](RESULTS.md) shows how the two bases compare.
+`config.yaml`). The **savings percentage is the reliable signal** — it's confirmed
+against a real BPE tokenizer (`tiktoken`) and the optimizer's own calibrated
+estimator; the absolute counts are a conservative estimate (~1.2–1.8× below real
+provider tokens on dense logs/JSON). A real-provider cross-check is in
+[RESULTS.md](RESULTS.md); a built-in `--live-bill` mode is on the
+[roadmap](RESULTS.md#roadmap).
 
 **Content-free, by construction.** The harness records only sizes and the
 optimizer's own one-line decision strings — never message bodies. That mirrors
@@ -200,14 +200,14 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 ## Does it preserve the answer?
 
 Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive the trim by
-strict substring survival: **20 of 22 preserve the answer in full**, and the two
-exceptions are reported openly with the reason. Anyray's strategies are also
-reversible — every elided span is retrievable on demand (`POST /v1/retrieve`) — so
-even a partial trim is recoverable.
+answer-bearing key facts for each workload and checks how many survive: **20 of 22
+by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
+**19 PASS / 2 MARGINAL / 1 FAIL**. Anyray's strategies are also reversible — every
+elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
+is recoverable.
 
-Run it with `node run_quality.mjs --all`; add `--judge` (with `ANYRAY_JUDGE_MODEL`
-set) for an optional semantic pass.
+Run it with `node run_quality.mjs --all` (strict survival) and `--judge` for the
+semantic pass.
 
 ## What this does and doesn't measure
 

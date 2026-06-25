@@ -8,6 +8,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "both task tools (jira_search_issues, jira_add_comment) survive; 28/41 unused tools pruned — task fully executable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -19,6 +25,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "both on-topic refund chunks (annual 30 days, monthly 14 days) survive; 18 off-topic chunks dropped — answerable with citation",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -30,6 +42,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "all ticket lines survive; only the repeated instruction boilerplate was de-duplicated — every ticket still classifiable",
+      "by": "Claude Opus 4.8"
     }
   },
   {
@@ -41,6 +59,12 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "tool names and identifying descriptions survive the prose compaction (search vs comment still distinguishable); the task is intact in the user turn",
+      "by": "Claude Opus 4.8"
     }
   }
 ]
