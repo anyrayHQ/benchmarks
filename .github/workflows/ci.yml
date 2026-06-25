@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -13,7 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: npm
+      - run: npm ci
 
       # Docs ↔ data consistency + lib unit tests. Reads the committed results,
       # so it needs no running optimizer — green here means the published numbers
@@ -22,9 +31,13 @@ jobs:
         run: npm test
 
       # The README figures are generated, not hand-typed. Regenerate and fail if
-      # the committed SVGs drifted from the committed results.
+      # the committed SVGs drifted from the committed results — catches both edited
+      # and newly-untracked charts.
       - name: Charts are regenerated from results (no hand-edited numbers)
         run: |
           node tools/make-charts.mjs
-          git diff --exit-code -- assets/ \
-            || { echo "::error::assets/ is stale — run 'npm run charts' and commit the result"; exit 1; }
+          if [ -n "$(git status --porcelain -- assets/)" ]; then
+            echo "::error::assets/ drifted from results/ — run 'npm run charts' and commit the result"
+            git status --porcelain -- assets/
+            exit 1
+          fi
