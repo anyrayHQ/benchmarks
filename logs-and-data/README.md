@@ -27,8 +27,10 @@ entirely off-topic to the question being asked.
   rank to the top while the boilerplate every line shares is ignored by IDF. The
   elided lines are stashed for retrieval (`/v1/retrieve`).
 - **`context_compression`** routes a tool/data message to a structure-aware
-  compressor: it minifies the JSON and caps oversized arrays to `maxArrayItems`
-  (default 50), summarizing the rest behind a retrieval handle.
+  compressor. On a large embedded array (row 4) it caps to `maxArrayItems`
+  (default 50) and stashes the remainder for retrieval; on already-structured JSON
+  tool results (rows 29–30) it minifies in place. The committed `decisions` field
+  shows which path each row took.
 
 ## Measurement
 

@@ -24,7 +24,7 @@ actually produce day-to-day, with the answer kept intact.
 Each workload is a wasteful thing real devs and agents do every day — pasting a
 whole log and asking one question, an agent re-reading entire files, MCP tool-schema
 bloat, RAG over-fetching, resending the full session every turn. These aren't inputs
-cherry-picked to flatter an algorithm: the mix is **weighted to real measured
+cherry-picked to flatter an algorithm: the mix is **weighted to real coding-agent
 traffic** (see [Why these workloads](#why-these-workloads)). Anyray fixes them **on
 the request path, without touching the app**.
 
@@ -48,11 +48,38 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 | **Total** | **22** | **290,489** | **81,791** | **72%** |
 | [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
-The mix is **weighted to real measured traffic** — `context_compression` and
-`code_skeleton`, which fire on ~90% / ~71% of production calls, carry the suite. Token
+The mix is **weighted to real coding-agent traffic** — the three largest strategies
+by token share, `context_compression`, `window_budget`, and `relevance_filter`
+(~36% / ~30% / ~25% of this benchmark's input, ~91% together), carry the suite. Token
 counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
 [Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
 real-provider cross-check, are in [RESULTS.md](RESULTS.md).
+
+### What it actually does
+
+One real workload — [`logs-and-data/1-access-log`](logs-and-data/): paste a 500-line
+nginx log and ask *"which requests are failing with 500s?"* (lines below are verbatim
+from the payload, trimmed to width).
+
+**Before — 26,153 tok** · every line billed:
+
+```text
+203.0.113.1  - - [10/Jun/2026:10:00:00] "GET  /api/orders/90000 HTTP/1.1" 404 …
+198.51.100.7 - - [10/Jun/2026:10:00:03] "GET  /api/products      HTTP/1.1" 200 …
+203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout      HTTP/1.1" 500 …
+… 497 more lines, almost all 200/404 noise …
+```
+
+**After — 2,037 tok · 92% saved** · `relevance_filter` keeps the lines that answer it:
+
+```text
+203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout HTTP/1.1" 500 …
+192.0.2.95   - - [10/Jun/2026:10:24:44] "POST /api/checkout HTTP/1.1" 500 …
+… the failing 500 lines kept; the 200/404 noise elided (retrievable via /v1/retrieve) …
+```
+
+The model still names the failing endpoint, the `10:24:30`–`10:29:10` window, and the
+client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 
 <p align="center">
   <picture>

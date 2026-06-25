@@ -25,16 +25,18 @@ the `param_tuning` case.
 
 - **`semantic_cache` — the saving is a *call*, not a trim.** The benefit is that
   the *second* identical request is served from cache, avoiding the provider call
-  entirely (its whole input and output). A single cold run through the optimizer
-  is a cache miss with no character change, so `optimized.json` honestly shows 0%
-  for this one-shot measurement. The win shows up across repeated traffic, not in
-  one request.
+  entirely (its whole input and output). The harness seeds the cache, then probes
+  an identical repeat call, so the committed `optimized.json` row records that warm
+  **HIT** — `savedPct: 100`, `tier: cache`: the whole request avoided, not a
+  character trim. (The seed is written directly; the optimizer's own provider→cache
+  write-back path is not exercised here.) The win is realized across repeated
+  traffic, not on a cold first call.
 
 - **`vision_ocr` — the saving is in vision tokens, not characters.** The strategy
   runs a local OCR pass on a text-bearing screenshot and swaps the image for the
   extracted text, so a text-only model can answer and the expensive image tokens
-  go away. The harness measures the request payload by characters: the base64
-  image (54,354 chars) is replaced by ~780 chars of text. The *meaningful* basis
+  go away. The harness measures the request payload by characters: the 54,354-char
+  request (almost entirely the base64 image) shrinks to ~790 chars of text. The *meaningful* basis
   is the provider's **vision-token** cost — roughly `imageTokenEstimate` (~1,000)
   → ~146 text tokens, about **85%** — which is what the live trace on the Anyray
   demo stack recorded.

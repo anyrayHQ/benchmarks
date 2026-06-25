@@ -94,6 +94,18 @@ test('RESULTS per-workload rows match each committed score', () => {
   }
 });
 
+test('each per-suite README token table matches that suite\'s committed scores', () => {
+  const cache = new Map();
+  for (const r of accounting()) {
+    if (!cache.has(r.suite)) cache.set(r.suite, doc(join(r.suite, 'README.md')));
+    const tail = `${fmt(r.beforeTok)} | ${fmt(r.afterTok)} | **${r.savedPct}%**`;
+    assert.ok(
+      cache.get(r.suite).includes(tail),
+      `${r.suite}/README.md row for ${r.id} drifted: expected "${tail}"`
+    );
+  }
+});
+
 test('every quality verdict is the one its coverage implies', () => {
   for (const r of quality()) {
     assert.equal(

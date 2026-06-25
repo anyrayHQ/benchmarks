@@ -18,9 +18,8 @@ billed unless it's filtered to what the question actually touches.
 | Cross-session catch-up — "catch me up on this branch" | `relevance_filter` | `keepChars=2500` | 5,895 | 867 | **85%** |
 
 > Kept as a **single representative**. This "recall a big store" shape is handled by
-> `relevance_filter`, which fires on ~0% of measured real coding-agent traffic, so the
-> suite was slimmed from five near-identical workloads to one (see the README's
-> traffic-weighting note).
+> `relevance_filter` and is rare in coding-agent traffic, so the suite was slimmed
+> from five near-identical workloads to one (see the README's traffic-weighting note).
 
 ## How it works
 
