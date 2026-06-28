@@ -41,11 +41,11 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
 | [`logs-and-data/`](logs-and-data/) | 5 | 157,029 | 39,859 | **75%** |
-| [`code-context/`](code-context/) | 7 | 20,030 | 9,138 | **54%** |
+| [`code-context/`](code-context/) | 7 | 20,030 | 9,633 | **52%** |
 | [`tools-and-rag/`](tools-and-rag/) | 4 | 14,565 | 4,877 | **67%** |
-| [`agent-ops/`](agent-ops/) | 5 | 92,970 | 27,050 | **71%** |
+| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 27,128 | **71%** |
 | [`memory-recall/`](memory-recall/) | 1 | 5,895 | 867 | **85%** |
-| **Total** | **22** | **290,489** | **81,791** | **72%** |
+| **Total** | **22** | **291,017** | **82,364** | **72%** |
 | [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
 The mix is **weighted to real coding-agent traffic** — the three largest strategies
@@ -102,7 +102,7 @@ signals, side by side:
 | Semantic judge (Claude Opus 4.8) | 22 | 19 | 2 | 1 |
 
 **The answer survives on 20 of 22 by the strict measure, and a Claude Opus 4.8 judge
-confirms 19 PASS / 2 MARGINAL / 1 FAIL.** The few that aren't perfect are one known
+confirms 20 PASS / 0 MARGINAL / 2 FAIL.** The few that aren't perfect are one known
 limit of the lexical filter — reported openly, not hidden, with every judge verdict
 shown in **[QUALITY.md](QUALITY.md)**.
 
@@ -252,7 +252,7 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
 answer-bearing key facts for each workload and checks how many survive: **20 of 22
 by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
-**19 PASS / 2 MARGINAL / 1 FAIL**. Anyray's strategies are also reversible — every
+**20 PASS / 0 MARGINAL / 2 FAIL**. Anyray's strategies are also reversible — every
 elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
 is recoverable.
 

@@ -137,10 +137,10 @@
   },
   "8-long-session": {
     "question": "Given everything across all subsystems, where should the shared retry logic live, and which subsystems should be migrated first?",
+    "_note": "The agent consolidates its findings into a short recommendation in the final turns; window_budget pins those recent turns, so the answer (canonical location + migration order) survives the crop. Key facts are that recommendation's content.",
     "keyFacts": [
-      "You are a senior coding assistant working in a large TypeScript monorepo",
-      "where should the shared retry logic live",
-      "which subsystems should be migrated to it first"
+      "lib/http/retryPolicy",
+      "orders first, then billing, then inventory"
     ]
   },
   "16-test-run": {

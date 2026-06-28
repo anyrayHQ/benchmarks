@@ -28,6 +28,10 @@ import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { OptimizerClient } from './lib/optimizerClient.mjs';
 import { sizeOf, savedPct } from './lib/tokens.mjs';
 import { keyFactSurvival, fullText, judgePrompt, verdictFor } from './lib/quality.mjs';
+import { extractJsonObject } from './lib/judge.mjs';
+import { resolveLiveConfig } from './lib/env.mjs';
+import { authHeaders, withClaudeIdentity } from './lib/auth.mjs';
+import { fetchRetry } from './lib/http.mjs';
 
 function parseArgs(argv) {
   const a = { all: false, suite: null, workload: null, judge: false, dump: false };
@@ -58,39 +62,25 @@ function loadKeyFacts(root) {
   return map;
 }
 
-/** Extract the first balanced JSON object from a model reply (ignores braces in strings). */
-function extractJsonObject(text) {
-  const start = text.indexOf('{');
-  if (start === -1) throw new Error('no JSON object in judge reply');
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === '\\') esc = true;
-      else if (ch === '"') inStr = false;
-    } else if (ch === '"') inStr = true;
-    else if (ch === '{') depth++;
-    else if (ch === '}' && --depth === 0) return text.slice(start, i + 1);
-  }
-  throw new Error('unterminated JSON object in judge reply');
-}
-
 async function judgeOne(judgeCfg, question, context, keyFacts) {
-  const res = await fetch(`${judgeCfg.url.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(judgeCfg.key ? { authorization: `Bearer ${judgeCfg.key}` } : {}),
-    },
-    body: JSON.stringify({
-      model: judgeCfg.model,
-      messages: judgePrompt(question, context, keyFacts),
-      temperature: 0,
+  // judgeCfg = live.judge { url (full endpoint), model, auth } from resolveLiveConfig.
+  // Reuse the live-harness auth: passthrough subscription OAuth + Claude-Code identity
+  // (else the gateway/Anthropic rejects). temperature omitted (opus-4-8 deprecates it).
+  const messages = withClaudeIdentity(judgePrompt(question, context, keyFacts), judgeCfg.auth);
+  const res = await fetchRetry(
+    fetch,
+    judgeCfg.url,
+    () => ({
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...authHeaders(judgeCfg.auth),
+        'x-anyray-optimize': 'off',
+      },
+      body: JSON.stringify({ model: judgeCfg.model, max_tokens: 600, messages }),
     }),
-  });
+    { timeoutMs: 60000 }
+  );
   if (!res.ok) throw new Error(`judge HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? '';
@@ -220,15 +210,11 @@ async function main() {
     process.exit(2);
   }
 
-  const judgeCfg = args.judge
-    ? {
-        url: process.env.ANYRAY_JUDGE_URL,
-        key: process.env.ANYRAY_JUDGE_KEY,
-        model: process.env.ANYRAY_JUDGE_MODEL || 'gpt-4o-mini',
-      }
-    : null;
+  // Judge reuses the live-validation path: gateway endpoint + passthrough subscription
+  // auth (resolveLiveConfig → keychain OAuth + ark key). Override via ANYRAY_JUDGE_* env.
+  const judgeCfg = args.judge ? resolveLiveConfig(cfg).judge : null;
   if (args.judge && !judgeCfg.url) {
-    console.error('--judge needs ANYRAY_JUDGE_URL (OpenAI-compatible /chat/completions).');
+    console.error('--judge needs a judge endpoint (ANYRAY_JUDGE_URL or a reachable gateway).');
     process.exit(2);
   }
 

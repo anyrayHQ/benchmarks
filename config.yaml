@@ -30,6 +30,32 @@ shared:
   # Per-request safety: never let the harness wait forever on the hook.
   request_timeout_ms: 30000
 
+# Live validation (run_live.mjs): executes baseline vs optimized requests against the
+# gateway and judges answer-vs-answer quality. `model` must be one the gateway serves;
+# overridden by $ANYRAY_LIVE_MODEL. Judge defaults to the same gateway (subscription).
+live:
+  gateway_url: "http://localhost:8787"
+  model: "claude-sonnet-4-6"
+  judge_model: "claude-opus-4-8"
+  temperature: 0
+
+# Verdict thresholds (lib/verdict.mjs): a strategy is WORKING if median real saved >=
+# minSavedPct with no quality FAIL (MARGINAL within allowMarginal); TUNE if a sweep knob
+# recovers PASS; REWORK otherwise or if savings are negligible.
+verdict:
+  minSavedPct: 20         # WORKING needs at least this real median saving
+  allowMarginal: 0        # MARGINAL workloads tolerated before a strategy drops out of WORKING
+  negligibleSavedPct: 5   # below this, a no-fail strategy earns ~nothing -> REWORK/replace
+
+# Knob sweeps (run_live.mjs --mode sweep): for each value, re-run the workload at that
+# knob and record the savings<->quality point. Used to recommend a tuned knob.
+sweep:
+  relevance_filter: { param: keepChars, values: [1500, 3000, 6000, 12000, 32000] }
+  context_compression: { param: maxArrayItems, values: [50, 200, 500] }
+  code_skeleton: { param: minBodyLines, values: [2, 4, 8] }
+  window_budget: { param: maxTokens, values: [700, 2500, 24000, 100000] }
+  prompt_compression: { param: minChars, values: [200, 400, 800] }
+
 # One entry per suite directory. `strategy` + `params` are passed verbatim to
 # /admin/optimizer/settings so only that strategy runs at that knob.
 benchmarks:
@@ -74,11 +100,11 @@ benchmarks:
       - id: "5-code-search"
         title: 'Code search (100 hits) — "where is the retry policy configured?"'
         strategy: "relevance_filter"
-        params: { keepChars: 1500, roles: ["user"] }
+        params: { keepChars: 1500, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
       - id: "6-git-diff"
         title: 'Git diff — "any risky change in this PR?"'
         strategy: "relevance_filter"
-        params: { keepChars: 2000, roles: ["user"] }
+        params: { keepChars: 2000, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
       - id: "7-codebase-explore"
         title: 'Codebase exploration — "explain the architecture & where retries live"'
         strategy: "code_skeleton"
@@ -92,13 +118,13 @@ benchmarks:
         strategy: "code_graph"
         params: { minChars: 200, minBodyLines: 2 }
       - id: "27-read-service-ts"
-        title: "Read a large TS service file (tool result) — keep the call structure"
-        strategy: "code_skeleton"
-        params: { minBodyLines: 4 }
+        title: "Read a large TS service file (tool result) — keep the on-path bodies"
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
       - id: "28-read-module-py"
-        title: "Read a Python module (tool result) — keep the call structure"
-        strategy: "code_skeleton"
-        params: { minBodyLines: 4 }
+        title: "Read a Python module (tool result) — keep the on-path bodies"
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
 
   tools-and-rag:
     title: "Tools & retrieval"
@@ -111,6 +137,7 @@ benchmarks:
         title: "MCP tool bloat — 41 tool schemas ride along, 2 are needed"
         strategy: "tool_pruning"
         params: { keepUnnamed: true }
+        qualityCheck: tool_safety
       - id: "12-rag-overfetch"
         title: "RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer"
         strategy: "relevance_filter"
@@ -123,6 +150,7 @@ benchmarks:
         title: "MCP tool schemas — 41 verbose schemas, compress the prose not the set"
         strategy: "tool_schema_compression"
         params: { collapseWhitespace: true, stripBoilerplate: true }
+        qualityCheck: tool_calls
 
   agent-ops:
     title: "Agent operations"
@@ -179,16 +207,19 @@ benchmarks:
         strategy: "semantic_cache"
         params: {}
         tier: "cache"
+        qualityCheck: cache_hit
       - id: "10-screenshot-ocr"
         title: 'Pasted screenshot — "what is this error and how do I fix it?"'
         strategy: "vision_ocr"
         params: { imageTokenEstimate: 1000 }
         tier: "vision"
+        qualityCheck: answer_judge
       - id: "14-runaway-max-tokens"
         title: "Runaway max_tokens — 100k output ceiling on a one-line task"
         strategy: "param_tuning"
         params: { maxTokensCap: 4096 }
         tier: "guardrail"
+        qualityCheck: truncation
       - id: "25-claude-cache-prefix"
         title: "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse"
         strategy: "cache_optimizer"
@@ -196,8 +227,10 @@ benchmarks:
         # 5000 carries extra margin. Pin to the floor so the prefix here injects.
         params: { minPrefixChars: 4096 }
         tier: "cache-prefix"
+        qualityCheck: identical
       - id: "26-context-quality"
         title: "Context health score — flag a bloated, over-fetched context"
         strategy: "context_quality"
         params: { bloatedToolChars: 1500 }
         tier: "diagnostic"
+        qualityCheck: readonly

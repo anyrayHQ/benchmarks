@@ -12,25 +12,25 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "the three P0 auth issues (#1300, #1281, #1243) with their priority/P0 labels survive; non-auth noise filtered",
-      "by": "Claude Opus 4.8"
+      "note": "All three issues with P0 auth labels and descriptions present",
+      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "8-long-session",
     "strategy": "window_budget",
     "savedPct": 72,
-    "keyFacts": 3,
+    "keyFacts": 2,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
     },
     "judge": {
-      "coverage": 80,
-      "verdict": "MARGINAL",
-      "note": "the canonical path (lib/http/retryPolicy.withRetry) and bad-pattern files are derivable, but the keyfacts are the pinned system prompt + question and the per-subsystem investigation steps were cropped to retrieval, so the \"migrate first\" ranking is only partially reconstructable",
-      "by": "Claude Opus 4.8"
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Final consolidation explicitly states both facts.",
+      "by": "claude-opus-4-8"
     }
   },
   {
@@ -46,8 +46,8 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "command_digest reformats but keeps all 3 failure blocks (test, assertion, root cause); passed-test noise dropped — every failure answerable",
-      "by": "Claude Opus 4.8"
+      "note": "All three failing tests and their error details preserved.",
+      "by": "claude-opus-4-8"
     }
   },
   {
@@ -63,14 +63,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "the root cause (capture() re-invoked without forwarding the idempotency key -> second authorized capture) and src/payments/payments.ts survive in the pinned final turn; early investigation turns cropped to retrieval",
-      "by": "Claude Opus 4.8"
+      "note": "All facts explicitly present in context",
+      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "31-long-toolsession",
     "strategy": "window_budget",
-    "savedPct": 27,
+    "savedPct": 37,
     "keyFacts": 2,
     "deterministic": {
       "coverage": 100,
@@ -80,8 +80,8 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "the root cause (recon/cursor.ts advances the page cursor before the batch is acknowledged) and the one-line fix (advance the cursor only after ack) survive in the pinned final turn; early file-read turns cropped",
-      "by": "Claude Opus 4.8"
+      "note": "Both root cause and fix explicit in cursor.ts comments and summary",
+      "by": "claude-opus-4-8"
     }
   }
 ]
