@@ -18,8 +18,8 @@ pegs roughly **70% of a coding agent's tokens as irrelevant file reads**.
 | Codebase exploration — "explain the architecture & where retries live" | `code_skeleton` | `minBodyLines=3, roles=user` | 4,679 | 3,372 | **28%** |
 | Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,092 | 1,420 | **32%** |
 | Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,787 | 1,191 | **33%** |
-| Read a large TS service file (tool result) — keep the call structure | `code_skeleton` | `minBodyLines=4` | 2,649 | 642 | **76%** |
-| Read a Python module (tool result) — keep the call structure | `code_skeleton` | `minBodyLines=4` | 2,218 | 407 | **82%** |
+| Read a large TS service file (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,649 | 890 | **66%** |
+| Read a Python module (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,218 | 654 | **71%** |
 
 ## How it works
 

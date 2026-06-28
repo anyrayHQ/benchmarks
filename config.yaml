@@ -100,11 +100,11 @@ benchmarks:
       - id: "5-code-search"
         title: 'Code search (100 hits) — "where is the retry policy configured?"'
         strategy: "relevance_filter"
-        params: { keepChars: 1500, roles: ["user"] }
+        params: { keepChars: 1500, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
       - id: "6-git-diff"
         title: 'Git diff — "any risky change in this PR?"'
         strategy: "relevance_filter"
-        params: { keepChars: 2000, roles: ["user"] }
+        params: { keepChars: 2000, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
       - id: "7-codebase-explore"
         title: 'Codebase exploration — "explain the architecture & where retries live"'
         strategy: "code_skeleton"
@@ -118,13 +118,13 @@ benchmarks:
         strategy: "code_graph"
         params: { minChars: 200, minBodyLines: 2 }
       - id: "27-read-service-ts"
-        title: "Read a large TS service file (tool result) — keep the call structure"
-        strategy: "code_skeleton"
-        params: { minBodyLines: 4 }
+        title: "Read a large TS service file (tool result) — keep the on-path bodies"
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
       - id: "28-read-module-py"
-        title: "Read a Python module (tool result) — keep the call structure"
-        strategy: "code_skeleton"
-        params: { minBodyLines: 4 }
+        title: "Read a Python module (tool result) — keep the on-path bodies"
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2 }
 
   tools-and-rag:
     title: "Tools & retrieval"
@@ -150,6 +150,7 @@ benchmarks:
         title: "MCP tool schemas — 41 verbose schemas, compress the prose not the set"
         strategy: "tool_schema_compression"
         params: { collapseWhitespace: true, stripBoilerplate: true }
+        qualityCheck: tool_calls
 
   agent-ops:
     title: "Agent operations"

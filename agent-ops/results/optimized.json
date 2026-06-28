@@ -23,16 +23,16 @@
     "strategy": "window_budget",
     "knob": "maxTokens=24000",
     "tier": "accounting",
-    "beforeChars": 327659,
-    "afterChars": 91543,
-    "beforeTok": 81915,
-    "afterTok": 22886,
+    "beforeChars": 328438,
+    "afterChars": 92322,
+    "beforeTok": 82110,
+    "afterTok": 23081,
     "savedPct": 72,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 22 message(s) to fit ~24000-token budget (est 82172->23141 tokens, -72%); 22 stashed for retrieval"
+      "cropped 22 message(s) to fit ~24000-token budget (est 82375->23344 tokens, -72%); 22 stashed for retrieval"
     ]
   },
   {
@@ -77,16 +77,16 @@
     "strategy": "window_budget",
     "knob": "maxTokens=2500",
     "tier": "accounting",
-    "beforeChars": 12702,
-    "afterChars": 9297,
-    "beforeTok": 3176,
-    "afterTok": 2324,
-    "savedPct": 27,
+    "beforeChars": 14036,
+    "afterChars": 8829,
+    "beforeTok": 3509,
+    "afterTok": 2207,
+    "savedPct": 37,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 3 message(s) to fit ~2500-token budget (est 3266->2415 tokens, -26%); 3 stashed for retrieval"
+      "cropped 4 message(s) to fit ~2500-token budget (est 3602->2299 tokens, -36%); 4 stashed for retrieval"
     ]
   }
 ]

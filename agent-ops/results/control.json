@@ -9,8 +9,8 @@
   {
     "id": "8-long-session",
     "title": "Long agent session — keep a 60-message session inside the window",
-    "chars": 327659,
-    "tokens": 81915,
+    "chars": 328438,
+    "tokens": 82110,
     "max_tokens": 1024
   },
   {
@@ -30,8 +30,8 @@
   {
     "id": "31-long-toolsession",
     "title": "Long tool-call session — fit a 10-file investigation in budget",
-    "chars": 12702,
-    "tokens": 3176,
+    "chars": 14036,
+    "tokens": 3509,
     "max_tokens": 1024
   }
 ]

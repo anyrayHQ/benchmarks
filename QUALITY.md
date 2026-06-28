@@ -23,16 +23,15 @@ the answer.
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
 | **Key-fact survival** (substring, strict — committed) | 22 | 20 | 0 | 2 |
-| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 22 | 19 | 2 | 1 |
+| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 22 | 20 | 0 | 2 |
 
 On the strict floor **20 of 22 preserve the answer in full**; the two that don't
 (`5-code-search`, `6-git-diff`) are both the lexical `relevance_filter` meeting its
-known limit. The Opus-4.8 judge then moves two rows — it clears `6-git-diff` to
-MARGINAL (the weakened check is still locatable) and drops `8-long-session` to
-MARGINAL (its key facts are the pinned prompt, so substring survival overstated the
-answer) — netting **19 PASS · 2 MARGINAL · 1 FAIL**. The benchmark surfaces these
-rather than hiding them (see [Why two aren't green](#why-two-arent-green)). Verdict
-bands: **PASS** ≥ 90% of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
+known limit on code. The Claude Opus 4.8 judge **agrees** — the same **20 PASS · 0
+MARGINAL · 2 FAIL**, the same two workloads — confirming those are genuine misses and
+the other twenty carry the answer. The benchmark surfaces these rather than hiding
+them (see [Why two aren't green](#why-two-arent-green)). Verdict bands: **PASS** ≥ 90%
+of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
 
 ## Per workload
 
@@ -47,22 +46,22 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 | `4-json-array` | `context_compression` | 78% | 100% ✅ | 100% ✅ |
 | `29-orders-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
 | `30-metrics-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
-| `5-code-search` | `relevance_filter` | 68% | 67% ❌ | 67% ❌ |
-| `6-git-diff` | `relevance_filter` | 68% | 50% ❌ | 80% ⚠️ |
+| `5-code-search` | `relevance_filter` | 68% | 67% ❌ | 60% ❌ |
+| `6-git-diff` | `relevance_filter` | 68% | 50% ❌ | 50% ❌ |
 | `7-codebase-explore` | `code_skeleton` | 28% | 100% ✅ | 100% ✅ |
 | `15-multifile-graph` | `code_graph` | 32% | 100% ✅ | 100% ✅ |
 | `17-python-multifile` | `code_graph` | 33% | 100% ✅ | 100% ✅ |
-| `27-read-service-ts` | `code_skeleton` | 76% | 100% ✅ | 100% ✅ |
-| `28-read-module-py` | `code_skeleton` | 82% | 100% ✅ | 100% ✅ |
+| `27-read-service-ts` | `code_graph` | 66% | 100% ✅ | 100% ✅ |
+| `28-read-module-py` | `code_graph` | 71% | 100% ✅ | 100% ✅ |
 | `11-mcp-tools` | `tool_pruning` | 65% | 100% ✅ | 100% ✅ |
 | `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
 | `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
 | `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
 | `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
-| `8-long-session` | `window_budget` | 72% | 100% ✅ | 80% ⚠️ |
+| `8-long-session` | `window_budget` | 72% | 100% ✅ | 100% ✅ |
 | `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
 | `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
-| `31-long-toolsession` | `window_budget` | 27% | 100% ✅ | 100% ✅ |
+| `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
 | `18-session-recall` | `relevance_filter` | 85% | 100% ✅ | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
@@ -102,28 +101,36 @@ question, lexical ranking scores them low and elides them.
   lower than the many *usage* lines and is elided — you get the value, not the
   location. The Opus-4.8 judge agrees (67% FAIL): the precise location is genuinely
   gone.
-- **`6-git-diff` (strict FAIL → judge MARGINAL).** Only half the key facts survive
-  verbatim, but the file `src/auth/middleware.ts` and the removed admin-check line do
-  survive, so the weakening *is* locatable — which is why the committed Opus-4.8
-  judge rates it MARGINAL (80%) rather than FAIL.
+- **`6-git-diff` (FAIL, both signals).** Only half the key facts survive verbatim:
+  the file `src/auth/middleware.ts` survives, but the specific weakened admin-check
+  lines are ranked out, so the precise risk isn't reliably derivable — the committed
+  Opus-4.8 judge agrees (50% FAIL).
 
 **It is not an aggressiveness problem.** Both stay below the bar **even at the
 production knob** (`keepChars=32000`, far more generous than the benchmark's): the
 answer-bearing lines are *ranked* out, not *budgeted* out. (A third case,
 `2-sre-incident`, used to FAIL here — but that was a rigged `keepChars=1000` knob;
-at a fair budget it preserves the answer, so it's no longer a failure.) The honest
-fix is a **semantic / embedding relevance filter** for vocabulary-mismatch
-workloads — on the [roadmap](RESULTS.md#roadmap). Until then, these are exactly the
-workloads to watch when a strategy is purely lexical.
+at a fair budget it preserves the answer, so it's no longer a failure.)
+
+**The semantic re-rank doesn't rescue them either.** `relevance_filter` ships an
+optional local-embedding re-rank (`semanticRerank`) and the embedder is live — but it
+is gated by `lexConfidentHits` (default 6): a message with ≥ 6 BM25 hits counts as
+"lexically confident" and skips the embedding step. Code searches and diffs clear that
+on *usage* lines alone, so the re-rank never fires on exactly the vocabulary-gap cases
+it targets. Ungating it confirms it isn't the fix anyway — `5-code-search` is unchanged
+(2/3 key facts) and `6-git-diff` only climbs to MARGINAL (3/4); the defining lines rank
+low even by embedding similarity. Recovering these needs a code-/path-aware relevance
+signal, not just embeddings — so for now they're the workloads to watch when a strategy
+is rank-based.
 
 The strategies that **keep structure rather than rank lines** — `code_skeleton`,
 `code_graph`, `tool_pruning`, `tool_schema_compression`, `window_budget`,
-`context_compression`, `command_digest` — preserve the answer at 100% on the strict
-floor across the board. The one semantic caveat the committed judge raises is
-`8-long-session` (`window_budget`): it survives substring at 100%, but its key facts
-are the pinned system prompt + question while the per-subsystem findings were cropped
-to retrieval, so Opus 4.8 rates it **MARGINAL (80%)** — the overlay catching a
-"survivor" that doesn't fully carry the answer.
+`context_compression`, `command_digest` — preserve the answer at 100% on **both
+signals** across the board. `8-long-session` (`window_budget`) shows the design working:
+the agent consolidates its per-subsystem findings into a short recommendation in the
+final turns, and `window_budget` pins those recent turns — so even after cropping the
+verbose middle to fit budget, the answer (canonical location + migration order)
+survives, and Opus 4.8 rates it **100% PASS**.
 
 ## Reproduce
 

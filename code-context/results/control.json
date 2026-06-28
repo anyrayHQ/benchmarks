@@ -1,19 +1,5 @@
 [
   {
-    "id": "5-code-search",
-    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
-    "chars": 12528,
-    "tokens": 3132,
-    "max_tokens": 1024
-  },
-  {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "chars": 13890,
-    "tokens": 3473,
-    "max_tokens": 1024
-  },
-  {
     "id": "7-codebase-explore",
     "title": "Codebase exploration — \"explain the architecture & where retries live\"",
     "chars": 18714,
@@ -36,16 +22,30 @@
   },
   {
     "id": "27-read-service-ts",
-    "title": "Read a large TS service file (tool result) — keep the call structure",
+    "title": "Read a large TS service file (tool result) — keep the on-path bodies",
     "chars": 10597,
     "tokens": 2649,
     "max_tokens": 1024
   },
   {
     "id": "28-read-module-py",
-    "title": "Read a Python module (tool result) — keep the call structure",
+    "title": "Read a Python module (tool result) — keep the on-path bodies",
     "chars": 8872,
     "tokens": 2218,
+    "max_tokens": 1024
+  },
+  {
+    "id": "5-code-search",
+    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
+    "chars": 12528,
+    "tokens": 3132,
+    "max_tokens": 1024
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "chars": 13890,
+    "tokens": 3473,
     "max_tokens": 1024
   }
 ]

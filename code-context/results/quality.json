@@ -1,5 +1,90 @@
 [
   {
+    "id": "7-codebase-explore",
+    "strategy": "code_skeleton",
+    "savedPct": 28,
+    "keyFacts": 5,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All retry and HttpClient facts present in context.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "15-multifile-graph",
+    "strategy": "code_graph",
+    "savedPct": 32,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Full call path present and intact.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "17-python-multifile",
+    "strategy": "code_graph",
+    "savedPct": 33,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All key facts present in full code along the submit_order->capture_payment->send_charge path.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "27-read-service-ts",
+    "strategy": "code_graph",
+    "savedPct": 66,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All signatures and idempotency keys present in context",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "28-read-module-py",
+    "strategy": "code_graph",
+    "savedPct": 71,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Both capture and refund methods and class fully present with key format",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
     "id": "5-code-search",
     "strategy": "relevance_filter",
     "savedPct": 68,
@@ -12,10 +97,10 @@
       ]
     },
     "judge": {
-      "coverage": 67,
+      "coverage": 60,
       "verdict": "FAIL",
-      "note": "RETRY_MAX = 5 and its doc survive (the value is answerable), but the defining file path src/lib/http/retryPolicy.ts was filtered to retrieval, so \"point me to the file\" is not answerable",
-      "by": "Claude Opus 4.8"
+      "note": "RETRY_MAX=5 definition present but filename/path not shown",
+      "by": "claude-opus-4-8"
     }
   },
   {
@@ -32,95 +117,10 @@
       ]
     },
     "judge": {
-      "coverage": 80,
-      "verdict": "MARGINAL",
-      "note": "src/auth/middleware.ts and the removed `user.role === \"admin\"` line survive so the loosened admin check is locatable; the requireAdmin name and exact replacement line were filtered to retrieval",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "7-codebase-explore",
-    "strategy": "code_skeleton",
-    "savedPct": 28,
-    "keyFacts": 5,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "the architecture outline survives — retryPolicy.ts (withRetry, RETRY_MAX=5) and httpClient.ts (HttpClient); bodies elided to retrieval",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "15-multifile-graph",
-    "strategy": "code_graph",
-    "savedPct": 32,
-    "keyFacts": 6,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "the full submitOrder->capturePayment->sendCharge chain (plus reserveStock) survives; off-path files elided — trace answerable",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "17-python-multifile",
-    "strategy": "code_graph",
-    "savedPct": 33,
-    "keyFacts": 6,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "the same chain in Python (submit_order->capture_payment->send_charge, reserve_stock) survives — trace answerable",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "27-read-service-ts",
-    "strategy": "code_skeleton",
-    "savedPct": 76,
-    "keyFacts": 3,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "PaymentService class and capture/refund signatures survive; method bodies (incl. the idempotency-key impl) elided to retrieval — structure answerable",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "28-read-module-py",
-    "strategy": "code_skeleton",
-    "savedPct": 82,
-    "keyFacts": 3,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "PaymentService and capture/refund defs survive; bodies elided to retrieval — structure answerable",
-      "by": "Claude Opus 4.8"
+      "coverage": 50,
+      "verdict": "FAIL",
+      "note": "File and old admin check shown; requireAdmin name and new loosened line elided",
+      "by": "claude-opus-4-8"
     }
   }
 ]
