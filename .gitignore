@@ -14,8 +14,23 @@ npm-debug.log*
 optimizer.config.json
 optimizer-settings-audit.log
 
+# Optimized request bodies stashed by run_benchmark for the quality runner to
+# reuse — derived (synthetic) content, so not committed.
+**/results/optimized-requests.local.json
+
 # macOS
 .DS_Store
 
 # Intermediate judge dumps (regenerate with --dump)
 **/results/judge-inputs.json
+
+# Live answer-quality validation — INTERNAL ONLY. run_live.mjs and its generators are
+# committed (the tool), but its per-workload/per-strategy outputs are private working
+# data (failures, tune/rework verdicts, knob sweeps) — not the public showcase.
+# Regenerate locally; the public SUMMARY.md is the committed overview.
+**/results/live.json
+**/results/pipeline.json
+**/results/sweep-*.json
+/results/
+VERDICTS.md
+PIPELINE.md

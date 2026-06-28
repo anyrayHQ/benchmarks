@@ -28,6 +28,10 @@ import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { OptimizerClient } from './lib/optimizerClient.mjs';
 import { sizeOf, savedPct } from './lib/tokens.mjs';
 import { keyFactSurvival, fullText, judgePrompt, verdictFor } from './lib/quality.mjs';
+import { extractJsonObject } from './lib/judge.mjs';
+import { resolveLiveConfig } from './lib/env.mjs';
+import { authHeaders, withClaudeIdentity } from './lib/auth.mjs';
+import { fetchRetry } from './lib/http.mjs';
 
 function parseArgs(argv) {
   const a = { all: false, suite: null, workload: null, judge: false, dump: false };
@@ -59,22 +63,28 @@ function loadKeyFacts(root) {
 }
 
 async function judgeOne(judgeCfg, question, context, keyFacts) {
-  const res = await fetch(`${judgeCfg.url.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(judgeCfg.key ? { authorization: `Bearer ${judgeCfg.key}` } : {}),
-    },
-    body: JSON.stringify({
-      model: judgeCfg.model,
-      messages: judgePrompt(question, context, keyFacts),
-      temperature: 0,
+  // judgeCfg = live.judge { url (full endpoint), model, auth } from resolveLiveConfig.
+  // Reuse the live-harness auth: passthrough subscription OAuth + Claude-Code identity
+  // (else the gateway/Anthropic rejects). temperature omitted (opus-4-8 deprecates it).
+  const messages = withClaudeIdentity(judgePrompt(question, context, keyFacts), judgeCfg.auth);
+  const res = await fetchRetry(
+    fetch,
+    judgeCfg.url,
+    () => ({
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...authHeaders(judgeCfg.auth),
+        'x-anyray-optimize': 'off',
+      },
+      body: JSON.stringify({ model: judgeCfg.model, max_tokens: 600, messages }),
     }),
-  });
+    { timeoutMs: 60000 }
+  );
   if (!res.ok) throw new Error(`judge HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? '';
-  const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+  const json = JSON.parse(extractJsonObject(text));
   const covered = Array.isArray(json.covered) ? json.covered : [];
   const coverage =
     typeof json.coverage === 'number'
@@ -93,47 +103,87 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
   mkdirSync(resultsDir, { recursive: true });
   const optimized = readJson(join(resultsDir, 'optimized.json'), []);
   const savedById = new Map(optimized.map((r) => [r.id, r.savedPct]));
+  // Reuse the exact optimized requests run_benchmark stashed, so quality scores
+  // the same bytes the saving was measured on (and avoids a second optimize call).
+  const stashed = readJson(join(resultsDir, 'optimized-requests.local.json'), {});
 
-  const rows = [];
+  const qualityPath = join(resultsDir, 'quality.json');
+  const rows = readJson(qualityPath, []);
+  const indexById = new Map(rows.map((r, i) => [r.id, i]));
   const dumps = [];
   for (const w of workloads) {
-    const payload = JSON.parse(
-      readFileSync(join(cfg.root, suite, 'payloads', `${w.id}.json`), 'utf8')
-    );
-    await client.setStrategy(w.strategy, w.params ?? {});
-    const res = await client.optimize(payload, [w.strategy]);
-    const optimizedReq = res.request ?? payload;
-    const context = fullText(optimizedReq);
-
-    const det = keyFactSurvival(optimizedReq, w.keyFacts);
-    const row = {
-      id: w.id,
-      strategy: w.strategy,
-      savedPct: savedById.get(w.id) ?? savedPct(sizeOf(payload), sizeOf(optimizedReq)),
-      keyFacts: w.keyFacts.length,
-      deterministic: {
-        coverage: Math.round(det.coverage * 100),
-        verdict: det.verdict,
-        missing: det.missing,
-      },
-    };
-
-    if (opts.dump) dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
-    if (opts.judge && judgeCfg) {
-      try {
-        const j = await judgeOne(judgeCfg, w.question ?? '', context, w.keyFacts);
-        row.judge = { coverage: Math.round(j.coverage * 100), verdict: j.verdict, note: j.note };
-      } catch (e) {
-        row.judge = { error: String(e.message ?? e) };
-      }
+    const prev = indexById.has(w.id) ? rows[indexById.get(w.id)] : null;
+    const wantJudge = opts.judge && judgeCfg;
+    const haveJudge = prev?.judge && prev.judge.error == null;
+    const alreadyScored = prev && (!wantJudge || haveJudge);
+    // Resume: skip already-scored workloads, unless a --judge pass still owes a
+    // verdict. A --dump pass still needs their optimized context, so fall through
+    // (we compute the context below, then short-circuit before re-scoring).
+    if (alreadyScored && !opts.dump) {
+      console.log(`  [${suite}/${w.id}] already scored — skipping`);
+      continue;
     }
-    rows.push(row);
-    console.log(
-      `  [${suite}/${w.id}] saved ${row.savedPct}% · key-facts ${row.deterministic.coverage}% ${row.deterministic.verdict}` +
-        (row.judge?.coverage != null ? ` · judge ${row.judge.coverage}% ${row.judge.verdict}` : '')
-    );
+    try {
+      const payload = JSON.parse(
+        readFileSync(join(cfg.root, suite, 'payloads', `${w.id}.json`), 'utf8')
+      );
+      let optimizedReq = stashed[w.id];
+      if (!optimizedReq) {
+        await client.setStrategy(w.strategy, w.params ?? {});
+        const res = await client.optimize(payload, [w.strategy]);
+        optimizedReq = res.request ?? payload;
+      }
+      const context = fullText(optimizedReq);
+
+      if (opts.dump)
+        dumps.push({ id: w.id, question: w.question ?? '', keyFacts: w.keyFacts, context });
+      // Resume + --dump: we only fell through to capture the context — don't re-score.
+      if (alreadyScored) {
+        console.log(`  [${suite}/${w.id}] already scored — context dumped`);
+        continue;
+      }
+
+      const det = keyFactSurvival(optimizedReq, w.keyFacts);
+      const row = {
+        id: w.id,
+        strategy: w.strategy,
+        savedPct: savedById.get(w.id) ?? savedPct(sizeOf(payload), sizeOf(optimizedReq)),
+        keyFacts: w.keyFacts.length,
+        deterministic: {
+          coverage: Math.round(det.coverage * 100),
+          verdict: det.verdict,
+          missing: det.missing,
+        },
+      };
+
+      if (wantJudge) {
+        try {
+          const j = await judgeOne(judgeCfg, w.question ?? '', context, w.keyFacts);
+          row.judge = {
+            coverage: Math.round(j.coverage * 100),
+            verdict: j.verdict,
+            note: j.note,
+            by: judgeCfg.model,
+          };
+        } catch (e) {
+          row.judge = { error: String(e.message ?? e) };
+        }
+      }
+
+      if (indexById.has(w.id)) rows[indexById.get(w.id)] = row;
+      else {
+        indexById.set(w.id, rows.length);
+        rows.push(row);
+      }
+      writeFileSync(qualityPath, JSON.stringify(rows, null, 2) + '\n');
+      console.log(
+        `  [${suite}/${w.id}] saved ${row.savedPct}% · key-facts ${row.deterministic.coverage}% ${row.deterministic.verdict}` +
+          (row.judge?.coverage != null ? ` · judge ${row.judge.coverage}% ${row.judge.verdict}` : '')
+      );
+    } catch (e) {
+      console.error(`  [${suite}/${w.id}] ERROR: ${e.message ?? e} — skipping`);
+    }
   }
-  writeFileSync(join(resultsDir, 'quality.json'), JSON.stringify(rows, null, 2) + '\n');
   if (opts.dump)
     writeFileSync(join(resultsDir, 'judge-inputs.json'), JSON.stringify(dumps, null, 2) + '\n');
 }
@@ -151,6 +201,7 @@ async function main() {
   const client = new OptimizerClient({
     url: cfg.optimizerUrl,
     adminToken: cfg.adminToken,
+    optimizerToken: cfg.optimizerToken,
     endpoint: cfg.endpoint,
     timeoutMs: cfg.requestTimeoutMs,
   });
@@ -159,25 +210,34 @@ async function main() {
     process.exit(2);
   }
 
-  const judgeCfg = args.judge
-    ? {
-        url: process.env.ANYRAY_JUDGE_URL,
-        key: process.env.ANYRAY_JUDGE_KEY,
-        model: process.env.ANYRAY_JUDGE_MODEL || 'gpt-4o-mini',
-      }
-    : null;
+  // Judge reuses the live-validation path: gateway endpoint + passthrough subscription
+  // auth (resolveLiveConfig → keychain OAuth + ark key). Override via ANYRAY_JUDGE_* env.
+  const judgeCfg = args.judge ? resolveLiveConfig(cfg).judge : null;
   if (args.judge && !judgeCfg.url) {
-    console.error('--judge needs ANYRAY_JUDGE_URL (OpenAI-compatible /chat/completions).');
+    console.error('--judge needs a judge endpoint (ANYRAY_JUDGE_URL or a reachable gateway).');
     process.exit(2);
   }
 
   const keyFactsMap = loadKeyFacts(cfg.root);
-  const suites = args.all ? suiteNames(cfg) : [args.suite];
-  for (const suite of suites) {
-    console.log(`\n== ${suite} ==`);
-    await runSuite(cfg, client, suite, args.workload, args, judgeCfg, keyFactsMap);
+  // Quality only re-pins a strategy when no stashed request exists; snapshot and
+  // restore anyway so a fall-back optimize call can't leave the optimizer pinned.
+  const snapshot = await client.getSettings().catch(() => null);
+  try {
+    const suites = args.all ? suiteNames(cfg) : [args.suite];
+    for (const suite of suites) {
+      console.log(`\n== ${suite} ==`);
+      await runSuite(cfg, client, suite, args.workload, args, judgeCfg, keyFactsMap);
+    }
+    console.log('\nDone. Quality in <suite>/results/quality.json');
+  } finally {
+    if (snapshot) {
+      try {
+        await client.putConfig(snapshot);
+      } catch (e) {
+        console.error(`Warning: failed to restore optimizer config: ${e.message ?? e}`);
+      }
+    }
   }
-  console.log('\nDone. Quality in <suite>/results/quality.json');
 }
 
 main().catch((err) => {

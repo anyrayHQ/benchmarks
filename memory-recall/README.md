@@ -15,15 +15,15 @@ billed unless it's filtered to what the question actually touches.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cross-session catch-up — "catch me up on this branch" | `relevance_filter` | `keepChars=2500` | 5,895 | 838 | **86%** |
-| Decision recall — "what did we decide, and why?" | `relevance_filter` | `keepChars=700, headLines=2` | 1,086 | 282 | **74%** |
-| Research brief — "everything I have found on this, in one brief" | `relevance_filter` | `keepChars=2500` | 5,601 | 841 | **85%** |
-| Content memory — "what have I already published on this?" | `relevance_filter` | `keepChars=2200` | 4,219 | 793 | **81%** |
-| Open loops — "what is still open and waiting on me?" | `relevance_filter` | `keepChars=2200` | 2,008 | 426 | **79%** |
+| Cross-session catch-up — "catch me up on this branch" | `relevance_filter` | `keepChars=2500` | 5,895 | 867 | **85%** |
+
+> Kept as a **single representative**. This "recall a big store" shape is handled by
+> `relevance_filter` and is rare in coding-agent traffic, so the suite was slimmed
+> from five near-identical workloads to one (see the README's traffic-weighting note).
 
 ## How it works
 
-All five are the same mechanic — a big store + a narrow question →
+It's the same mechanic — a big store + a narrow question →
 **`relevance_filter`** (BM25, lexical, no model call) keeps the on-topic records
 and elides the rest (each stashed for retrieval). Two things make it reliable
 here:
@@ -34,9 +34,6 @@ here:
 - **BM25's IDF ignores the boilerplate** every record shares (`branch=`, `status=`,
   `shipped`/`merged`) and locks onto the rare discriminator — a branch name, a
   decision topic, the words `blocked`/`waiting`/`open`.
-
-`headLines` (decision recall) pins the first lines of each kept record so a
-decision's header survives alongside its rationale.
 
 ## Measurement
 

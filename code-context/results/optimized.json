@@ -1,56 +1,20 @@
 [
   {
-    "id": "5-code-search",
-    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=1500, roles=user",
-    "tier": "accounting",
-    "beforeChars": 12528,
-    "afterChars": 3643,
-    "beforeTok": 3132,
-    "afterTok": 911,
-    "savedPct": 71,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (12528->3643 chars, -71%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=2000, roles=user",
-    "tier": "accounting",
-    "beforeChars": 13890,
-    "afterChars": 4077,
-    "beforeTok": 3473,
-    "afterTok": 1019,
-    "savedPct": 71,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (13890->4077 chars, -71%); 1 stashed for retrieval"
-    ]
-  },
-  {
     "id": "7-codebase-explore",
     "title": "Codebase exploration — \"explain the architecture & where retries live\"",
     "strategy": "code_skeleton",
     "knob": "minBodyLines=3, roles=user",
     "tier": "accounting",
     "beforeChars": 18714,
-    "afterChars": 13123,
+    "afterChars": 13488,
     "beforeTok": 4679,
-    "afterTok": 3281,
-    "savedPct": 30,
+    "afterTok": 3372,
+    "savedPct": 28,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "outlined 1 source file(s), elided 171 body line(s) 18714->13123 chars (-30%); 1 stashed for retrieval"
+      "outlined 1 source file(s), elided 168 body line(s) 18714->13488 chars (-28%); 1 stashed for retrieval"
     ]
   },
   {
@@ -59,16 +23,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 8364,
-    "afterChars": 5574,
-    "beforeTok": 2091,
-    "afterTok": 1394,
-    "savedPct": 33,
+    "beforeChars": 8367,
+    "afterChars": 5678,
+    "beforeTok": 2092,
+    "afterTok": 1420,
+    "savedPct": 32,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 71 body line(s) 6424->3634 chars (-43%); 8 stashed for retrieval"
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3735 chars (-42%); 8 stashed for retrieval"
     ]
   },
   {
@@ -77,16 +41,88 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 7144,
-    "afterChars": 4560,
-    "beforeTok": 1786,
-    "afterTok": 1140,
-    "savedPct": 36,
+    "beforeChars": 7147,
+    "afterChars": 4763,
+    "beforeTok": 1787,
+    "afterTok": 1191,
+    "savedPct": 33,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->3910 chars (-40%); 10 stashed for retrieval"
+      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4110 chars (-37%); 10 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "27-read-service-ts",
+    "title": "Read a large TS service file (tool result) — keep the on-path bodies",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2",
+    "tier": "accounting",
+    "beforeChars": 10597,
+    "afterChars": 3561,
+    "beforeTok": 2649,
+    "afterTok": 890,
+    "savedPct": 66,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 1 file(s): kept 3 working-set symbol(s) (2 from intent, 0 central), elided 140 body line(s) 10484->3448 chars (-67%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "28-read-module-py",
+    "title": "Read a Python module (tool result) — keep the on-path bodies",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2",
+    "tier": "accounting",
+    "beforeChars": 8872,
+    "afterChars": 2617,
+    "beforeTok": 2218,
+    "afterTok": 654,
+    "savedPct": 71,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 1 file(s): kept 2 working-set symbol(s) (2 from intent, 0 central), elided 113 body line(s) 8780->2525 chars (-71%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "5-code-search",
+    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1500, roles=user, semanticRerank=true, semanticWeight=0.9",
+    "tier": "accounting",
+    "beforeChars": 12528,
+    "afterChars": 3995,
+    "beforeTok": 3132,
+    "afterTok": 999,
+    "savedPct": 68,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (12528->3995 chars, -68%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=2000, roles=user, semanticRerank=true, semanticWeight=0.9",
+    "tier": "accounting",
+    "beforeChars": 13890,
+    "afterChars": 4429,
+    "beforeTok": 3473,
+    "afterTok": 1107,
+    "savedPct": 68,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (13890->4429 chars, -68%); 1 stashed for retrieval"
     ]
   }
 ]

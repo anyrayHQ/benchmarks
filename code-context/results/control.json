@@ -1,5 +1,40 @@
 [
   {
+    "id": "7-codebase-explore",
+    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
+    "chars": 18714,
+    "tokens": 4679,
+    "max_tokens": 1024
+  },
+  {
+    "id": "15-multifile-graph",
+    "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
+    "chars": 8367,
+    "tokens": 2092,
+    "max_tokens": 1024
+  },
+  {
+    "id": "17-python-multifile",
+    "title": "Multi-file trace (Python) — \"how does Checkout.submit_order capture payment?\"",
+    "chars": 7147,
+    "tokens": 1787,
+    "max_tokens": 1024
+  },
+  {
+    "id": "27-read-service-ts",
+    "title": "Read a large TS service file (tool result) — keep the on-path bodies",
+    "chars": 10597,
+    "tokens": 2649,
+    "max_tokens": 1024
+  },
+  {
+    "id": "28-read-module-py",
+    "title": "Read a Python module (tool result) — keep the on-path bodies",
+    "chars": 8872,
+    "tokens": 2218,
+    "max_tokens": 1024
+  },
+  {
     "id": "5-code-search",
     "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
     "chars": 12528,
@@ -11,27 +46,6 @@
     "title": "Git diff — \"any risky change in this PR?\"",
     "chars": 13890,
     "tokens": 3473,
-    "max_tokens": 1024
-  },
-  {
-    "id": "7-codebase-explore",
-    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
-    "chars": 18714,
-    "tokens": 4679,
-    "max_tokens": 1024
-  },
-  {
-    "id": "15-multifile-graph",
-    "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
-    "chars": 8364,
-    "tokens": 2091,
-    "max_tokens": 1024
-  },
-  {
-    "id": "17-python-multifile",
-    "title": "Multi-file trace (Python) — \"how does Checkout.submit_order capture payment?\"",
-    "chars": 7144,
-    "tokens": 1786,
     "max_tokens": 1024
   }
 ]

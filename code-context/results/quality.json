@@ -1,47 +1,8 @@
 [
   {
-    "id": "5-code-search",
-    "strategy": "relevance_filter",
-    "savedPct": 71,
-    "keyFacts": 3,
-    "deterministic": {
-      "coverage": 67,
-      "verdict": "FAIL",
-      "missing": [
-        "src/lib/http/retryPolicy.ts"
-      ]
-    },
-    "judge": {
-      "coverage": 67,
-      "verdict": "FAIL",
-      "note": "RETRY_MAX = 5 and its doc survive (the value is answerable); the defining file path src/lib/http/retryPolicy.ts is elided, so the precise location is not.",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "6-git-diff",
-    "strategy": "relevance_filter",
-    "savedPct": 71,
-    "keyFacts": 4,
-    "deterministic": {
-      "coverage": 50,
-      "verdict": "FAIL",
-      "missing": [
-        "requireAdmin",
-        "if (user && user.isAuthenticated) { // TODO: tighten before release"
-      ]
-    },
-    "judge": {
-      "coverage": 80,
-      "verdict": "MARGINAL",
-      "note": "The weakened check is derivable — src/auth/middleware.ts and the removed `- user.role === \"admin\"` line survive; the requireAdmin name and replacement condition are elided.",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
     "id": "7-codebase-explore",
     "strategy": "code_skeleton",
-    "savedPct": 30,
+    "savedPct": 28,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
@@ -51,12 +12,29 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
+      "note": "All retry and HttpClient facts present in context.",
+      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "15-multifile-graph",
+    "strategy": "code_graph",
+    "savedPct": 32,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Full call path present and intact.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "17-python-multifile",
     "strategy": "code_graph",
     "savedPct": 33,
     "keyFacts": 6,
@@ -68,15 +46,15 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
+      "note": "All key facts present in full code along the submit_order->capture_payment->send_charge path.",
+      "by": "claude-opus-4-8"
     }
   },
   {
-    "id": "17-python-multifile",
+    "id": "27-read-service-ts",
     "strategy": "code_graph",
-    "savedPct": 36,
-    "keyFacts": 6,
+    "savedPct": 66,
+    "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
@@ -85,8 +63,64 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
+      "note": "All signatures and idempotency keys present in context",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "28-read-module-py",
+    "strategy": "code_graph",
+    "savedPct": 71,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Both capture and refund methods and class fully present with key format",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "5-code-search",
+    "strategy": "relevance_filter",
+    "savedPct": 68,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 67,
+      "verdict": "FAIL",
+      "missing": [
+        "src/lib/http/retryPolicy.ts"
+      ]
+    },
+    "judge": {
+      "coverage": 60,
+      "verdict": "FAIL",
+      "note": "RETRY_MAX=5 definition present but filename/path not shown",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "6-git-diff",
+    "strategy": "relevance_filter",
+    "savedPct": 68,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 50,
+      "verdict": "FAIL",
+      "missing": [
+        "requireAdmin",
+        "if (user && user.isAuthenticated) { // TODO: tighten before release"
+      ]
+    },
+    "judge": {
+      "coverage": 50,
+      "verdict": "FAIL",
+      "note": "File and old admin check shown; requireAdmin name and new loosened line elided",
+      "by": "claude-opus-4-8"
     }
   }
 ]

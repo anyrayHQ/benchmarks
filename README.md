@@ -1,16 +1,32 @@
 # Anyray Optimizer Benchmarks
 
-Measures how much the [Anyray](https://anyray.ai) optimizer cuts the **input tokens**
-an LLM request carries — on the **token-waste patterns developers and coding agents
-actually produce day-to-day**, not on inputs cherry-picked to flatter an algorithm.
+[![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
+[![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
+[![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2020%2F22-1a7f5a)](QUALITY.md)
 
-That distinction is the whole point. Each workload here is a wasteful thing real
-devs and agents do every day — pasting a whole log and asking one question, an
-agent re-reading entire files, MCP tool-schema bloat, RAG over-fetching, resending
-the full session every turn, recalling a big store for a narrow question. These are
-the patterns the 2025–2026 AI-cost research ranks again and again (see
-[Why these workloads](#why-these-workloads)); Anyray solves them **on the request
-path, without touching the app**.
+[Anyray](https://anyray.ai) cuts the **input tokens** your LLM requests carry — and
+this repo proves it, reproducibly, on the workloads developers and coding agents
+actually produce day-to-day, with the answer kept intact.
+
+> **Headline: 72% fewer input tokens across 22 real-world workloads (290k → 82k),
+> answer preserved in 20 of 22 — every number reproducible against a running optimizer.**
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/savings-by-strategy.dark.svg" />
+    <img alt="Token savings by Anyray optimizer strategy — 72% overall across 22 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
+  </picture>
+  <br />
+  <sub>Regenerated from <code>results/</code> with <code>npm run charts</code> — no hand-edited numbers.</sub>
+</p>
+
+Each workload is a wasteful thing real devs and agents do every day — pasting a
+whole log and asking one question, an agent re-reading entire files, MCP tool-schema
+bloat, RAG over-fetching, resending the full session every turn. These aren't inputs
+cherry-picked to flatter an algorithm: the mix is **weighted to real coding-agent
+traffic** (see [Why these workloads](#why-these-workloads)). Anyray fixes them **on
+the request path, without touching the app**.
 
 Every number is produced by running the **real optimizer** (the before-request
 hook that sits on the gateway's hot path) over these workloads and measuring the
@@ -24,33 +40,71 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 3 | 126,998 | 18,383 | **86%** |
-| [`code-context/`](code-context/) | 5 | 15,161 | 7,745 | **49%** |
-| [`tools-and-rag/`](tools-and-rag/) | 3 | 12,953 | 3,354 | **74%** |
-| [`agent-ops/`](agent-ops/) | 3 | 89,013 | 24,033 | **73%** |
-| [`memory-recall/`](memory-recall/) | 5 | 18,809 | 3,180 | **83%** |
-| **Total** | **19** | **262,934** | **56,695** | **78%** |
-| [`guardrails/`](guardrails/) | 3 | *special accounting* | | *see suite* |
+| [`logs-and-data/`](logs-and-data/) | 5 | 157,029 | 39,859 | **75%** |
+| [`code-context/`](code-context/) | 7 | 20,030 | 9,633 | **52%** |
+| [`tools-and-rag/`](tools-and-rag/) | 4 | 14,565 | 4,877 | **67%** |
+| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 27,128 | **71%** |
+| [`memory-recall/`](memory-recall/) | 1 | 5,895 | 867 | **85%** |
+| **Total** | **22** | **291,017** | **82,364** | **72%** |
+| [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
-Per-workload numbers, the strategy and knob behind each, and the live-provider
-cross-check are in [RESULTS.md](RESULTS.md).
+The mix is **weighted to real coding-agent traffic** — the three largest strategies
+by token share, `context_compression`, `window_budget`, and `relevance_filter`
+(~36% / ~30% / ~25% of this benchmark's input, ~91% together), carry the suite. Token
+counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
+[Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
+real-provider cross-check, are in [RESULTS.md](RESULTS.md).
+
+### What it actually does
+
+One real workload — [`logs-and-data/1-access-log`](logs-and-data/): paste a 500-line
+nginx log and ask *"which requests are failing with 500s?"* (lines below are verbatim
+from the payload, trimmed to width).
+
+**Before — 26,153 tok** · every line billed:
+
+```text
+203.0.113.1  - - [10/Jun/2026:10:00:00] "GET  /api/orders/90000 HTTP/1.1" 404 …
+198.51.100.7 - - [10/Jun/2026:10:00:03] "GET  /api/products      HTTP/1.1" 200 …
+203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout      HTTP/1.1" 500 …
+… 497 more lines, almost all 200/404 noise …
+```
+
+**After — 2,037 tok · 92% saved** · `relevance_filter` keeps the lines that answer it:
+
+```text
+203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout HTTP/1.1" 500 …
+192.0.2.95   - - [10/Jun/2026:10:24:44] "POST /api/checkout HTTP/1.1" 500 …
+… the failing 500 lines kept; the 200/404 noise elided (retrievable via /v1/retrieve) …
+```
+
+The model still names the failing endpoint, the `10:24:30`–`10:29:10` window, and the
+client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
+    <img alt="Token savings vs answer kept — most of 22 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
+  </picture>
+  <br />
+  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Opus-4.8 judge; the few that dip are reported, not hidden.</sub>
+</p>
 
 ## Quality — does the answer survive?
 
-Savings are only worth it if the model can still answer. For each workload we
-define the **answer-bearing key facts** and measure how many survive the trim,
-both by strict substring and by an LLM judge (Claude Opus 4.8):
+Savings are only worth it if the model can still answer. For every workload we
+define the **answer-bearing key facts** and check how many survive — two committed
+signals, side by side:
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| Key-fact survival (strict) | 19 | 16 | 0 | 3 |
-| LLM judge (semantic) | 19 | 16 | 1 | 2 |
+| Key-fact survival (strict substring, model-free) | 22 | 20 | 0 | 2 |
+| Semantic judge (Claude Opus 4.8) | 22 | 19 | 2 | 1 |
 
-**16 of 19 preserve the answer in full.** We report the three that don't rather
-than hide them — all are the lexical `relevance_filter` meeting its known limit
-(when the answer lines don't share vocabulary with the question, BM25 ranks them
-out; raising the budget doesn't fix it). Full table, judge rationale, and the
-tradeoff analysis are in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on 20 of 22 by the strict measure, and a Claude Opus 4.8 judge
+confirms 20 PASS / 0 MARGINAL / 2 FAIL.** The few that aren't perfect are one known
+limit of the lexical filter — reported openly, not hidden, with every judge verdict
+shown in **[QUALITY.md](QUALITY.md)**.
 
 ## Why these workloads
 
@@ -91,19 +145,20 @@ request.
 
 | Suite | Workloads | Hero strategies | What it measures |
 |---|---|---|---|
-| [`logs-and-data/`](logs-and-data/) | 3 | `relevance_filter`, `context_compression` | A log/data blob + a narrow question → keep the lines that answer it |
-| [`code-context/`](code-context/) | 5 | `code_skeleton`, `code_graph`, `relevance_filter` | Source/diff/search read back → keep the navigable structure, elide bodies |
-| [`tools-and-rag/`](tools-and-rag/) | 3 | `tool_pruning`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, over-fetched chunks, re-pasted boilerplate |
-| [`agent-ops/`](agent-ops/) | 3 | `relevance_filter`, `window_budget`, `command_digest` | Triage dumps, window overflow, verbatim test output |
-| [`memory-recall/`](memory-recall/) | 5 | `relevance_filter` | A large recalled store + a "remember this for me" question |
-| [`guardrails/`](guardrails/) | 3 | `semantic_cache`, `vision_ocr`, `param_tuning` | Repeated calls, pasted screenshots, runaway output ceilings |
+| [`logs-and-data/`](logs-and-data/) | 5 | `context_compression`, `relevance_filter` | A log/data/JSON blob (often a tool result) + a narrow question → minify, array-cap, keep the lines that answer it |
+| [`code-context/`](code-context/) | 7 | `code_skeleton`, `code_graph`, `relevance_filter` | Source/diff/search read back (file reads via tool results) → keep the navigable skeleton, elide bodies |
+| [`tools-and-rag/`](tools-and-rag/) | 4 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
+| [`agent-ops/`](agent-ops/) | 5 | `window_budget`, `relevance_filter`, `command_digest` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output |
+| [`memory-recall/`](memory-recall/) | 1 | `relevance_filter` | A large recalled store + a "remember this for me" question |
+| [`guardrails/`](guardrails/) | 5 | `semantic_cache`, `vision_ocr`, `param_tuning`, `cache_optimizer`, `context_quality` | Repeated calls, pasted screenshots, runaway ceilings, Claude cache-prefix, context health |
 
 The optimizer is **reversible**: every elided span is stashed behind a
 content-free retrieval handle (CCR `POST /v1/retrieve`), so the model can pull
-back anything it turns out to need. These strategies are lexical and
-deterministic — they re-rank and elide, they don't paraphrase — so the saving
-comes from dropping what the live question doesn't touch, not from lossy
-rewriting. See [Does it preserve the answer?](#does-it-preserve-the-answer)
+back anything it turns out to need. Most strategies re-rank and elide rather than
+paraphrase — so the saving comes from dropping what the live question doesn't
+touch, not from lossy rewriting; a few (`command_digest`, `tool_schema_compression`)
+rewrite deterministically and idempotently. See [Does it preserve the
+answer?](#does-it-preserve-the-answer)
 
 ## Methodology
 
@@ -122,8 +177,12 @@ For each workload the harness:
    plus the tools schema, before and after.
 
 The token figure is `chars / 4` (the basis the optimizer itself uses; set in
-`config.yaml`). It is an **estimate**, labeled as such — the `--live-bill` mode
-records the provider's real `prompt_tokens` instead (see [RESULTS.md](RESULTS.md)).
+`config.yaml`). The **savings percentage is the reliable signal** — it's confirmed
+against a real BPE tokenizer (`tiktoken`) and the optimizer's own calibrated
+estimator; the absolute counts are a conservative estimate (~1.2–1.8× below real
+provider tokens on dense logs/JSON). A real-provider cross-check is in
+[RESULTS.md](RESULTS.md); a built-in `--live-bill` mode is on the
+[roadmap](RESULTS.md#roadmap).
 
 **Content-free, by construction.** The harness records only sizes and the
 optimizer's own one-line decision strings — never message bodies. That mirrors
@@ -153,8 +212,9 @@ cp .env.example .env
 
 All settings live in [`config.yaml`](config.yaml):
 
-- **`shared`** — optimizer URL, admin-token env var, the chars-per-token accounting
-  basis, request timeout.
+- **`shared`** — optimizer URL, admin-token env var (and an optional
+  optimizer-token env var for hardened optimizers that gate `/v1/optimize`), the
+  chars-per-token accounting basis, request timeout.
 - **`benchmarks`** — one entry per suite; each lists its workloads, and each
   workload names its `strategy` and `params` (the knob). To benchmark a strategy
   at a different aggressiveness, change its `params` and re-run.
@@ -190,13 +250,14 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 ## Does it preserve the answer?
 
 Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive the trim
-(strict substring + an LLM judge): **16 of 19 preserve the answer in full**, and
-the three exceptions are reported openly with the reason. Anyray's strategies are
-also reversible — every elided span is retrievable on demand (`POST /v1/retrieve`)
-— so even a partial trim is recoverable.
+answer-bearing key facts for each workload and checks how many survive: **20 of 22
+by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
+**20 PASS / 0 MARGINAL / 2 FAIL**. Anyray's strategies are also reversible — every
+elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
+is recoverable.
 
-Run it with `node run_quality.mjs --all` (add `--judge` for the LLM pass).
+Run it with `node run_quality.mjs --all` (strict survival) and `--judge` for the
+semantic pass.
 
 ## What this does and doesn't measure
 

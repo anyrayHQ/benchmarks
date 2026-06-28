@@ -6,15 +6,15 @@
     "knob": "keepChars=2000, roles=user",
     "tier": "accounting",
     "beforeChars": 22333,
-    "afterChars": 3417,
+    "afterChars": 3607,
     "beforeTok": 5583,
-    "afterTok": 854,
-    "savedPct": 85,
+    "afterTok": 902,
+    "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (22333->3417 chars, -85%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (22333->3607 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -23,16 +23,16 @@
     "strategy": "window_budget",
     "knob": "maxTokens=24000",
     "tier": "accounting",
-    "beforeChars": 327659,
-    "afterChars": 91325,
-    "beforeTok": 81915,
-    "afterTok": 22831,
+    "beforeChars": 328438,
+    "afterChars": 92322,
+    "beforeTok": 82110,
+    "afterTok": 23081,
     "savedPct": 72,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 22 message(s) to fit ~24000-token budget (est 82172->23088 tokens, -72%); 22 stashed for retrieval"
+      "cropped 22 message(s) to fit ~24000-token budget (est 82375->23344 tokens, -72%); 22 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +42,51 @@
     "knob": "maxFailures=10, contextLines=12, roles=user",
     "tier": "accounting",
     "beforeChars": 6060,
-    "afterChars": 1393,
+    "afterChars": 1402,
     "beforeTok": 1515,
-    "afterTok": 348,
+    "afterTok": 351,
     "savedPct": 77,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "digested test-run tool output — test run (3 failed, 77 passed): kept 3 failure block(s); 6060->1393 chars (-77%); stashed for retrieval"
+      "digested test-run tool output — test run (3 failed, 77 passed): kept 3 failure block(s); 6060->1402 chars (-77%); stashed for retrieval"
+    ]
+  },
+  {
+    "id": "24-agent-toolcalls",
+    "title": "Agentic tool-call session — fit a multi-step investigation in budget",
+    "strategy": "window_budget",
+    "knob": "maxTokens=700",
+    "tier": "accounting",
+    "beforeChars": 3122,
+    "afterChars": 2349,
+    "beforeTok": 781,
+    "afterTok": 587,
+    "savedPct": 25,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "cropped 2 message(s) to fit ~700-token budget (est 836->642 tokens, -23%); 2 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "31-long-toolsession",
+    "title": "Long tool-call session — fit a 10-file investigation in budget",
+    "strategy": "window_budget",
+    "knob": "maxTokens=2500",
+    "tier": "accounting",
+    "beforeChars": 14036,
+    "afterChars": 8829,
+    "beforeTok": 3509,
+    "afterTok": 2207,
+    "savedPct": 37,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "cropped 4 message(s) to fit ~2500-token budget (est 3602->2299 tokens, -36%); 4 stashed for retrieval"
     ]
   }
 ]

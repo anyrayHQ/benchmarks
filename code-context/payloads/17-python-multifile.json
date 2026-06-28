@@ -1,1 +1,170 @@
-{"model":"openai.gpt-oss-120b-1:0","max_tokens":1024,"messages":[{"role":"user","content":"I am tracing one flow across these Python service files. Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment. I only care about that path; skip the rest."},{"role":"tool","content":"# ===== src/checkout/checkout.py =====\nfrom payments.payments import Payments\nfrom inventory.inventory import Inventory\n\n\nclass Checkout:\n    def __init__(self, payments, inventory):\n        self.payments = payments\n        self.inventory = inventory\n\n    def submit_order(self, cart):\n        hold = self.inventory.reserve_stock(cart.lines)\n        charge = self.payments.capture_payment(cart.total, cart.token)\n        if not charge.ok:\n            self.inventory.release_stock(hold)\n            raise PaymentDeclined(cart.id)\n        return OrderReceipt(charge.id, hold.at)"},{"role":"tool","content":"# ===== src/payments/payments.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.logger import logger\n\n\nclass Payments:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def capture_payment(self, amount, token):\n        idem = f\"{token}:{amount}\"\n        res = self.gateway.send_charge(amount=amount, token=token, idem=idem)\n        logger.info(\"captured\", ok=res.ok)\n        return res\n\n    def refund_payment(self, charge_id, amount):\n        self.gateway.send_charge(amount=-amount, ref=charge_id, idem=charge_id)\n        logger.info(\"refunded\", charge_id=charge_id)"},{"role":"tool","content":"# ===== src/payments/gateway.py =====\nfrom lib.retry import with_retry\n\n\nclass PaymentGateway:\n    def __init__(self, base_url, key):\n        self.base_url = base_url\n        self.key = key\n\n    def send_charge(self, charge):\n        res = http_post(self.base_url + \"/charges\", charge, self.key)\n        if res.status >= 400:\n            res = with_retry(self.base_url + \"/charges\", charge, self.key)\n        return res.json()"},{"role":"tool","content":"# ===== src/inventory/inventory.py =====\nfrom lib.db import db\n\n\nclass Inventory:\n    def reserve_stock(self, lines):\n        ids = [line.sku for line in lines]\n        db.stock.decrement(ids)\n        at = db.holds.insert(ids=ids, status=\"held\")\n        return StockHold(at.id, at.created)\n\n    def release_stock(self, hold):\n        db.holds.update(hold.id, status=\"released\")\n        db.stock.increment(hold.ids)"},{"role":"tool","content":"# ===== src/billing/subscriptions.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.db import db\n\n\nclass Subscriptions:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def charge_cycle(self, sub):\n        due = sub.plan.price_cents * sub.seats\n        discount = round(due * sub.coupon.rate) if sub.coupon else 0\n        self.gateway.send_charge(amount=due - discount, token=sub.token, idem=sub.cycle_id)\n        db.subscriptions.update(sub.id, next_billing_at=now_ms() + sub.plan.interval_ms)\n\n    def cancel(self, sub, reason):\n        sub.status = \"cancelled\"\n        sub.cancel_reason = reason\n        db.subscriptions.update(sub.id, sub)\n\n    def proration(self, sub, new_seats):\n        remaining = sub.next_billing_at - now_ms()\n        per_seat = sub.plan.price_cents * (remaining / sub.plan.interval_ms)\n        return round(per_seat * (new_seats - sub.seats))"},{"role":"tool","content":"# ===== src/billing/payouts.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.db import db\n\n\nclass Payouts:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def disburse_funds(self, account):\n        net = account.balance_cents - account.fee_cents\n        if net <= 0:\n            raise NothingToDisburse(account.id)\n        self.gateway.send_charge(amount=-net, ref=account.id, idem=account.payout_id)\n        db.payouts.insert(account_id=account.id, net=net)\n\n    def schedule(self, account, when):\n        existing = db.payouts.pending(account.id)\n        if existing:\n            db.payouts.update(existing.id, scheduled_at=when)\n        else:\n            db.payouts.insert(account_id=account.id, scheduled_at=when)\n\n    def statement(self, account, month):\n        rows = db.payouts.for_month(account.id, month)\n        total = sum(r.net for r in rows)\n        return Statement(account.id, month, total, len(rows))"},{"role":"tool","content":"# ===== src/notify/notifier.py =====\nfrom lib.db import db\n\n\nclass Notifier:\n    def deliver_email(self, job):\n        tpl = db.templates.get(job.template)\n        html = render(tpl, job.vars)\n        send_smtp(job.to, tpl.subject, html)\n        db.outbox.insert(to=job.to, template=job.template)\n\n    def deliver_sms(self, job):\n        body = truncate(render(job.template, job.vars), 160)\n        send_sms(job.phone, body)\n        db.outbox.insert(to=job.phone, channel=\"sms\")\n\n    def retry_failed(self, since):\n        failed = db.outbox.failed_since(since)\n        for row in failed:\n            self.deliver_email(row.job)\n        return len(failed)"},{"role":"tool","content":"# ===== src/obs/metrics.py =====\nclass Metrics:\n    def __init__(self):\n        self.buf = []\n\n    def record_event(self, name, value, tags):\n        self.buf.append(Sample(name, value, tags, now_ms()))\n        if len(self.buf) >= 500:\n            self.flush()\n\n    def gauge(self, name, value, tags):\n        existing = next((i for i, s in enumerate(self.buf) if s.name == name), -1)\n        if existing >= 0:\n            self.buf[existing] = Sample(name, value, tags, now_ms())\n        else:\n            self.buf.append(Sample(name, value, tags, now_ms()))\n\n    def flush(self):\n        batch = self.buf[:]\n        self.buf.clear()\n        ship(batch)"},{"role":"tool","content":"# ===== src/config/loader.py =====\nfrom schema import config_schema\n\n\nclass ConfigLoader:\n    def load_settings(self, env):\n        parsed = config_schema.validate(\n            gateway_url=env.get(\"GATEWAY_URL\"),\n            retry_max=env.get(\"RETRY_MAX\"),\n            cache_ttl_ms=env.get(\"CACHE_TTL_MS\"),\n        )\n        if not parsed.ok:\n            raise BadConfig(parsed.error)\n        return parsed.data\n\n    def redact_for_log(self, cfg):\n        return {\"gateway_url\": cfg.gateway_url, \"retry_max\": cfg.retry_max}"},{"role":"tool","content":"# ===== src/audit/audit.py =====\nfrom lib.db import db\n\n\nclass AuditTrail:\n    def append_entry(self, actor, action, meta):\n        prev = db.audit.latest()\n        digest = chain(prev.hash if prev else None, actor, action)\n        db.audit.insert(actor=actor, action=action, meta=meta, hash=digest)\n\n    def verify_chain(self):\n        rows = db.audit.all()\n        prev = None\n        for row in rows:\n            if chain(prev, row.actor, row.action) != row.hash:\n                return False\n            prev = row.hash\n        return True"},{"role":"tool","content":"# ===== src/cache/session.py =====\nclass SessionCache:\n    def __init__(self, ttl_ms):\n        self.store = {}\n        self.ttl_ms = ttl_ms\n\n    def lookup_session(self, token):\n        hit = self.store.get(token)\n        if not hit or hit.exp < now_ms():\n            self.store.pop(token, None)\n            return None\n        return hit.value\n\n    def put_session(self, token, session):\n        self.store[token] = Entry(session, now_ms() + self.ttl_ms)\n\n    def evict_expired(self):\n        now = now_ms()\n        expired = [k for k, e in self.store.items() if e.exp < now]\n        for k in expired:\n            self.store.pop(k, None)\n        return len(expired)"}]}
+{
+  "model": "openai.gpt-oss-120b-1:0",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "I am tracing one flow across these Python service files. Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment. I only care about that path; skip the rest."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_00",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/checkout/checkout.py\"}"
+          }
+        },
+        {
+          "id": "call_01",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/payments/payments.py\"}"
+          }
+        },
+        {
+          "id": "call_02",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/payments/gateway.py\"}"
+          }
+        },
+        {
+          "id": "call_03",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/inventory/inventory.py\"}"
+          }
+        },
+        {
+          "id": "call_04",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/billing/subscriptions.py\"}"
+          }
+        },
+        {
+          "id": "call_05",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/billing/payouts.py\"}"
+          }
+        },
+        {
+          "id": "call_06",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/notify/notifier.py\"}"
+          }
+        },
+        {
+          "id": "call_07",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/obs/metrics.py\"}"
+          }
+        },
+        {
+          "id": "call_08",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/config/loader.py\"}"
+          }
+        },
+        {
+          "id": "call_09",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/audit/audit.py\"}"
+          }
+        },
+        {
+          "id": "call_10",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/cache/session.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_00",
+      "name": "read_file",
+      "content": "# ===== src/checkout/checkout.py =====\nfrom payments.payments import Payments\nfrom inventory.inventory import Inventory\n\n\nclass Checkout:\n    def __init__(self, payments, inventory):\n        self.payments = payments\n        self.inventory = inventory\n\n    def submit_order(self, cart):\n        hold = self.inventory.reserve_stock(cart.lines)\n        charge = self.payments.capture_payment(cart.total, cart.token)\n        if not charge.ok:\n            self.inventory.release_stock(hold)\n            raise PaymentDeclined(cart.id)\n        return OrderReceipt(charge.id, hold.at)"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_01",
+      "name": "read_file",
+      "content": "# ===== src/payments/payments.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.logger import logger\n\n\nclass Payments:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def capture_payment(self, amount, token):\n        idem = f\"{token}:{amount}\"\n        res = self.gateway.send_charge(amount=amount, token=token, idem=idem)\n        logger.info(\"captured\", ok=res.ok)\n        return res\n\n    def refund_payment(self, charge_id, amount):\n        self.gateway.send_charge(amount=-amount, ref=charge_id, idem=charge_id)\n        logger.info(\"refunded\", charge_id=charge_id)"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_02",
+      "name": "read_file",
+      "content": "# ===== src/payments/gateway.py =====\nfrom lib.retry import with_retry\n\n\nclass PaymentGateway:\n    def __init__(self, base_url, key):\n        self.base_url = base_url\n        self.key = key\n\n    def send_charge(self, charge):\n        res = http_post(self.base_url + \"/charges\", charge, self.key)\n        if res.status >= 400:\n            res = with_retry(self.base_url + \"/charges\", charge, self.key)\n        return res.json()"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_03",
+      "name": "read_file",
+      "content": "# ===== src/inventory/inventory.py =====\nfrom lib.db import db\n\n\nclass Inventory:\n    def reserve_stock(self, lines):\n        ids = [line.sku for line in lines]\n        db.stock.decrement(ids)\n        at = db.holds.insert(ids=ids, status=\"held\")\n        return StockHold(at.id, at.created)\n\n    def release_stock(self, hold):\n        db.holds.update(hold.id, status=\"released\")\n        db.stock.increment(hold.ids)"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_04",
+      "name": "read_file",
+      "content": "# ===== src/billing/subscriptions.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.db import db\n\n\nclass Subscriptions:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def charge_cycle(self, sub):\n        due = sub.plan.price_cents * sub.seats\n        discount = round(due * sub.coupon.rate) if sub.coupon else 0\n        self.gateway.send_charge(amount=due - discount, token=sub.token, idem=sub.cycle_id)\n        db.subscriptions.update(sub.id, next_billing_at=now_ms() + sub.plan.interval_ms)\n\n    def cancel(self, sub, reason):\n        sub.status = \"cancelled\"\n        sub.cancel_reason = reason\n        db.subscriptions.update(sub.id, sub)\n\n    def proration(self, sub, new_seats):\n        remaining = sub.next_billing_at - now_ms()\n        per_seat = sub.plan.price_cents * (remaining / sub.plan.interval_ms)\n        return round(per_seat * (new_seats - sub.seats))"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_05",
+      "name": "read_file",
+      "content": "# ===== src/billing/payouts.py =====\nfrom payments.gateway import PaymentGateway\nfrom lib.db import db\n\n\nclass Payouts:\n    def __init__(self, gateway):\n        self.gateway = gateway\n\n    def disburse_funds(self, account):\n        net = account.balance_cents - account.fee_cents\n        if net <= 0:\n            raise NothingToDisburse(account.id)\n        self.gateway.send_charge(amount=-net, ref=account.id, idem=account.payout_id)\n        db.payouts.insert(account_id=account.id, net=net)\n\n    def schedule(self, account, when):\n        existing = db.payouts.pending(account.id)\n        if existing:\n            db.payouts.update(existing.id, scheduled_at=when)\n        else:\n            db.payouts.insert(account_id=account.id, scheduled_at=when)\n\n    def statement(self, account, month):\n        rows = db.payouts.for_month(account.id, month)\n        total = sum(r.net for r in rows)\n        return Statement(account.id, month, total, len(rows))"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_06",
+      "name": "read_file",
+      "content": "# ===== src/notify/notifier.py =====\nfrom lib.db import db\n\n\nclass Notifier:\n    def deliver_email(self, job):\n        tpl = db.templates.get(job.template)\n        html = render(tpl, job.vars)\n        send_smtp(job.to, tpl.subject, html)\n        db.outbox.insert(to=job.to, template=job.template)\n\n    def deliver_sms(self, job):\n        body = truncate(render(job.template, job.vars), 160)\n        send_sms(job.phone, body)\n        db.outbox.insert(to=job.phone, channel=\"sms\")\n\n    def retry_failed(self, since):\n        failed = db.outbox.failed_since(since)\n        for row in failed:\n            self.deliver_email(row.job)\n        return len(failed)"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_07",
+      "name": "read_file",
+      "content": "# ===== src/obs/metrics.py =====\nclass Metrics:\n    def __init__(self):\n        self.buf = []\n\n    def record_event(self, name, value, tags):\n        self.buf.append(Sample(name, value, tags, now_ms()))\n        if len(self.buf) >= 500:\n            self.flush()\n\n    def gauge(self, name, value, tags):\n        existing = next((i for i, s in enumerate(self.buf) if s.name == name), -1)\n        if existing >= 0:\n            self.buf[existing] = Sample(name, value, tags, now_ms())\n        else:\n            self.buf.append(Sample(name, value, tags, now_ms()))\n\n    def flush(self):\n        batch = self.buf[:]\n        self.buf.clear()\n        ship(batch)"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_08",
+      "name": "read_file",
+      "content": "# ===== src/config/loader.py =====\nfrom schema import config_schema\n\n\nclass ConfigLoader:\n    def load_settings(self, env):\n        parsed = config_schema.validate(\n            gateway_url=env.get(\"GATEWAY_URL\"),\n            retry_max=env.get(\"RETRY_MAX\"),\n            cache_ttl_ms=env.get(\"CACHE_TTL_MS\"),\n        )\n        if not parsed.ok:\n            raise BadConfig(parsed.error)\n        return parsed.data\n\n    def redact_for_log(self, cfg):\n        return {\"gateway_url\": cfg.gateway_url, \"retry_max\": cfg.retry_max}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_09",
+      "name": "read_file",
+      "content": "# ===== src/audit/audit.py =====\nfrom lib.db import db\n\n\nclass AuditTrail:\n    def append_entry(self, actor, action, meta):\n        prev = db.audit.latest()\n        digest = chain(prev.hash if prev else None, actor, action)\n        db.audit.insert(actor=actor, action=action, meta=meta, hash=digest)\n\n    def verify_chain(self):\n        rows = db.audit.all()\n        prev = None\n        for row in rows:\n            if chain(prev, row.actor, row.action) != row.hash:\n                return False\n            prev = row.hash\n        return True"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_10",
+      "name": "read_file",
+      "content": "# ===== src/cache/session.py =====\nclass SessionCache:\n    def __init__(self, ttl_ms):\n        self.store = {}\n        self.ttl_ms = ttl_ms\n\n    def lookup_session(self, token):\n        hit = self.store.get(token)\n        if not hit or hit.exp < now_ms():\n            self.store.pop(token, None)\n            return None\n        return hit.value\n\n    def put_session(self, token, session):\n        self.store[token] = Entry(session, now_ms() + self.ttl_ms)\n\n    def evict_expired(self):\n        now = now_ms()\n        expired = [k for k, e in self.store.items() if e.exp < now]\n        for k in expired:\n            self.store.pop(k, None)\n        return len(expired)"
+    }
+  ]
+}

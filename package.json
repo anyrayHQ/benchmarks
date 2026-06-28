@@ -5,8 +5,19 @@
   "type": "module",
   "description": "Reproducible token-savings benchmarks for the Anyray optimizer.",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "bench": "node run_benchmark.mjs",
-    "bench:all": "node run_benchmark.mjs --all"
+    "bench:all": "node run_benchmark.mjs --all",
+    "quality": "node run_quality.mjs",
+    "quality:all": "node run_quality.mjs --all",
+    "live": "node run_live.mjs --mode per-strategy",
+    "pipeline": "node run_live.mjs --mode pipeline",
+    "sweep": "node run_live.mjs --mode sweep",
+    "summary": "node -e \"import('./lib/writeSummary.mjs').then(m=>console.log(m.renderSummary()))\"",
+    "verdicts": "node -e \"import('./lib/writeVerdicts.mjs').then(m=>m.renderVerdicts())\"",
+    "report": "node -e \"import('./lib/writePipelineSummary.mjs').then(m=>console.log(m.renderPipelineSummary()))\"",
+    "validate": "node run_live.mjs --mode pipeline --all && npm run report && node run_live.mjs --mode per-strategy --all && npm run verdicts",
+    "charts": "node tools/make-charts.mjs"
   },
   "engines": {
     "node": ">=20"

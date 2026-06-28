@@ -6,99 +6,147 @@ the **answer-bearing key facts** (the specific lines, identifiers, codes, and
 paths a correct answer must rest on — all verbatim from the payload), then measure
 how many survive the optimizer's trim.
 
+**In one line:** *saved* = how much smaller the request got; *key-facts* = how much of
+the answer survived that trim. **PASS** = ≥ 90% of the answer's facts survive,
+**MARGINAL** = ≥ 75%, **FAIL** = below — so a FAIL means the optimizer cut too much of
+the answer on that workload, not that anything errored.
+
 ## Overview
+
+Two committed signals sit beside each saving. **Strict substring survival** is the
+reproducible-by-anyone floor — no model required. The **Claude Opus 4.8 judge** is a
+committed semantic overlay: it reads the same kept context and rules whether each key
+fact is still *answerable*, catching what the substring test is too blunt for in both
+directions — a miss that's really fine, and a verbatim "survivor" that doesn't carry
+the answer.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict) | 19 | 16 | 0 | 3 |
-| **LLM judge** (Claude Opus 4.8, semantic) | 19 | 16 | 1 | 2 |
+| **Key-fact survival** (substring, strict — committed) | 22 | 20 | 0 | 2 |
+| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 22 | 20 | 0 | 2 |
 
-**16 of 19 workloads preserve the answer in full.** The three that don't are *all*
-the same case — the lexical `relevance_filter` meeting its known limit — and the
-benchmark surfaces them rather than hiding them (see [Why three aren't
-green](#why-three-arent-green)). Verdict bands: **PASS** ≥ 90% of key facts
-survive · **MARGINAL** ≥ 75% · **FAIL** below.
+On the strict floor **20 of 22 preserve the answer in full**; the two that don't
+(`5-code-search`, `6-git-diff`) are both the lexical `relevance_filter` meeting its
+known limit on code. The Claude Opus 4.8 judge **agrees** — the same **20 PASS · 0
+MARGINAL · 2 FAIL**, the same two workloads — confirming those are genuine misses and
+the other twenty carry the answer. The benchmark surfaces these rather than hiding
+them (see [Why two aren't green](#why-two-arent-green)). Verdict bands: **PASS** ≥ 90%
+of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
 
 ## Per workload
 
 `saved` is the token reduction (from [RESULTS.md](RESULTS.md)); `key-facts` is the
-strict substring survival; `judge` is the semantic coverage + verdict.
+strict substring survival; `judge` is the committed Claude Opus 4.8 semantic verdict
+(each row records the model in its `by` field).
 
-| Workload | Strategy | Saved | Key-facts | Judge |
-|---|---|--:|--:|--|
-| `1-access-log` | `relevance_filter` | 93% | 100% | 100% ✅ PASS |
-| `2-sre-incident` | `relevance_filter` | 98% | 0% | 20% ❌ FAIL |
-| `4-json-array` | `context_compression` | 78% | 100% | 100% ✅ PASS |
-| `5-code-search` | `relevance_filter` | 71% | 67% | 67% ❌ FAIL |
-| `6-git-diff` | `relevance_filter` | 71% | 50% | 80% ⚠️ MARGINAL |
-| `7-codebase-explore` | `code_skeleton` | 30% | 100% | 100% ✅ PASS |
-| `15-multifile-graph` | `code_graph` | 33% | 100% | 100% ✅ PASS |
-| `17-python-multifile` | `code_graph` | 36% | 100% | 100% ✅ PASS |
-| `11-mcp-tools` | `tool_pruning` | 65% | 100% | 100% ✅ PASS |
-| `12-rag-overfetch` | `relevance_filter` | 69% | 100% | 100% ✅ PASS |
-| `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% | 100% ✅ PASS |
-| `3-github-triage` | `relevance_filter` | 85% | 100% | 100% ✅ PASS |
-| `8-long-session` | `window_budget` | 72% | 100% | 100% ✅ PASS |
-| `16-test-run` | `command_digest` | 77% | 100%¹ | 100% ✅ PASS |
-| `18-session-recall` | `relevance_filter` | 86% | 100% | 100% ✅ PASS |
-| `19-decision-recall` | `relevance_filter` | 74% | 100% | 100% ✅ PASS |
-| `20-research-brief` | `relevance_filter` | 85% | 100% | 100% ✅ PASS |
-| `21-content-memory` | `relevance_filter` | 81% | 100% | 100% ✅ PASS |
-| `22-ops-open-loops` | `relevance_filter` | 79% | 100% | 100% ✅ PASS |
+| Workload | Strategy | Saved | Key-facts (strict) | Judge (Opus 4.8) |
+|---|---|--:|--:|--:|
+| `1-access-log` | `relevance_filter` | 92% | 100% ✅ | 100% ✅ |
+| `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
+| `4-json-array` | `context_compression` | 78% | 100% ✅ | 100% ✅ |
+| `29-orders-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
+| `30-metrics-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
+| `5-code-search` | `relevance_filter` | 68% | 67% ❌ | 60% ❌ |
+| `6-git-diff` | `relevance_filter` | 68% | 50% ❌ | 50% ❌ |
+| `7-codebase-explore` | `code_skeleton` | 28% | 100% ✅ | 100% ✅ |
+| `15-multifile-graph` | `code_graph` | 32% | 100% ✅ | 100% ✅ |
+| `17-python-multifile` | `code_graph` | 33% | 100% ✅ | 100% ✅ |
+| `27-read-service-ts` | `code_graph` | 66% | 100% ✅ | 100% ✅ |
+| `28-read-module-py` | `code_graph` | 71% | 100% ✅ | 100% ✅ |
+| `11-mcp-tools` | `tool_pruning` | 65% | 100% ✅ | 100% ✅ |
+| `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
+| `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
+| `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
+| `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
+| `8-long-session` | `window_budget` | 72% | 100% ✅ | 100% ✅ |
+| `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
+| `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
+| `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
+| `18-session-recall` | `relevance_filter` | 85% | 100% ✅ | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
-the raw-form markers needed a reformatted shape; all three failing tests + their
-root causes are present. For every other strategy the kept text is verbatim, so
-substring survival is exact.
+`16-test-run`'s key facts are written in the digest's reformatted shape — its 100%
+therefore confirms the digest **round-trips** the failing tests + root causes, not
+that raw-log strings survive verbatim. `keyfacts.json` flags this with a `_note`.
+For every elide-only strategy the kept text is verbatim, so substring survival is
+exact.
 
 ## How it's measured
 
-- **Key-fact survival (deterministic).** Each key fact is a verbatim substring of
-  the payload; we check whether it still appears in the request the optimizer
-  returns. No model, fully reproducible. A *strict* floor: a paraphrased or
-  reformatted survivor counts as a miss.
-- **LLM judge (semantic).** A model reads the kept context and rules whether each
-  key fact is still *answerable* — catching survival the substring test is too
-  blunt for (e.g. a rewriting strategy, or an answer derivable from neighboring
-  lines). Committed numbers were judged by Claude Opus 4.8; reproduce against any
-  OpenAI-compatible endpoint with `node run_quality.mjs --all --judge`
-  (`ANYRAY_JUDGE_URL` / `ANYRAY_JUDGE_KEY` / `ANYRAY_JUDGE_MODEL`).
+- **Key-fact survival (deterministic, committed).** Each key fact is a verbatim
+  substring of the payload; we check whether it still appears in the request the
+  optimizer returns. No model, fully reproducible. A *strict* floor: a paraphrased
+  or reformatted survivor counts as a miss.
+- **LLM judge (semantic, committed).** A model reads the kept context and rules
+  whether each key fact is still *answerable* — catching what the substring test is
+  too blunt for in both directions: an answer derivable from neighboring lines that
+  the strict floor scores a miss, and a verbatim "survivor" that doesn't actually
+  carry the answer. The committed verdicts are Claude Opus 4.8's (recorded per row in
+  the `by` field). Regenerate them against any OpenAI-compatible model with
+  `node run_quality.mjs --all --judge` (`ANYRAY_JUDGE_URL` / `ANYRAY_JUDGE_KEY` /
+  `ANYRAY_JUDGE_MODEL`), or offline with `--dump` (writes `judge-inputs.json` for an
+  external judge to score, then merge the verdicts back). Reproducing the judge needs
+  a model; reproducing the strict floor does not.
 
 The answer-bearing markers live in [`keyfacts.json`](keyfacts.json).
 
-## Why three aren't green
+## Why two aren't green
 
-All three weak spots are `relevance_filter` — the **lexical** (BM25) strategy —
-and the cause is the same: when the answer-bearing lines don't share vocabulary
-with the question, lexical ranking scores them low and elides them.
+Both weak spots are `relevance_filter` — the **lexical** (BM25) strategy — and the
+cause is the same: when the answer-bearing lines don't share vocabulary with the
+question, lexical ranking scores them low and elides them.
 
-- **`2-sre-incident` (FAIL).** The question asks why p99 *spiked*; the root cause
-  is a *db connection pool saturating* (`max_conns=20 in_use=20`). Those lines
-  share almost no words with the question, so they rank out — while the normal
-  request lines that *do* contain "checkout"/"p99" survive. The answer is lost.
-- **`5-code-search` (FAIL).** The constant `RETRY_MAX = 5` survives, but the line
-  carrying its defining file path (`src/lib/http/retryPolicy.ts`) ranks lower than
-  the many *usage* lines and is elided — you get the value, not the location.
-- **`6-git-diff` (MARGINAL).** The file `src/auth/middleware.ts` and the removed
-  `- user.role === "admin"` line survive, so the weakening *is* derivable; the
-  surrounding hunk detail is elided.
+- **`5-code-search` (FAIL, both signals).** The constant `RETRY_MAX = 5` survives,
+  but the line carrying its defining file path (`src/lib/http/retryPolicy.ts`) ranks
+  lower than the many *usage* lines and is elided — you get the value, not the
+  location. The Opus-4.8 judge agrees (67% FAIL): the precise location is genuinely
+  gone.
+- **`6-git-diff` (FAIL, both signals).** Only half the key facts survive verbatim:
+  the file `src/auth/middleware.ts` survives, but the specific weakened admin-check
+  lines are ranked out, so the precise risk isn't reliably derivable — the committed
+  Opus-4.8 judge agrees (50% FAIL).
 
-**It is not an aggressiveness problem.** Backing the budget off does not fix it —
-`2-sre` stays at 0% key-fact survival even at `keepChars=4000` (95% saved, vs 98%
-at the headline knob), because the root-cause lines are *ranked* out, not
-*budgeted* out. The honest fix is a **semantic / embedding relevance filter** for
-vocabulary-mismatch workloads — on the [roadmap](RESULTS.md#roadmap). Until then,
-these are exactly the workloads to watch when a strategy is purely lexical.
+**It is not an aggressiveness problem.** Both stay below the bar **even at the
+production knob** (`keepChars=32000`, far more generous than the benchmark's): the
+answer-bearing lines are *ranked* out, not *budgeted* out. (A third case,
+`2-sre-incident`, used to FAIL here — but that was a rigged `keepChars=1000` knob;
+at a fair budget it preserves the answer, so it's no longer a failure.)
+
+**The semantic re-rank doesn't rescue them either.** `relevance_filter` ships an
+optional local-embedding re-rank (`semanticRerank`) and the embedder is live — but it
+is gated by `lexConfidentHits` (default 6): a message with ≥ 6 BM25 hits counts as
+"lexically confident" and skips the embedding step. Code searches and diffs clear that
+on *usage* lines alone, so the re-rank never fires on exactly the vocabulary-gap cases
+it targets. Ungating it confirms it isn't the fix anyway — `5-code-search` is unchanged
+(2/3 key facts) and `6-git-diff` only climbs to MARGINAL (3/4); the defining lines rank
+low even by embedding similarity. Recovering these needs a code-/path-aware relevance
+signal, not just embeddings — so for now they're the workloads to watch when a strategy
+is rank-based.
 
 The strategies that **keep structure rather than rank lines** — `code_skeleton`,
-`code_graph`, `tool_pruning`, `window_budget`, `context_compression`,
-`command_digest` — preserve the answer at 100% across the board.
+`code_graph`, `tool_pruning`, `tool_schema_compression`, `window_budget`,
+`context_compression`, `command_digest` — preserve the answer at 100% on **both
+signals** across the board. `8-long-session` (`window_budget`) shows the design working:
+the agent consolidates its per-subsystem findings into a short recommendation in the
+final turns, and `window_budget` pins those recent turns — so even after cropping the
+verbose middle to fit budget, the answer (canonical location + migration order)
+survives, and Opus 4.8 rates it **100% PASS**.
 
 ## Reproduce
 
 ```bash
-node run_quality.mjs --all            # deterministic key-fact survival
-node run_quality.mjs --all --judge    # + LLM judge (needs ANYRAY_JUDGE_* )
+node run_quality.mjs --all            # strict key-fact survival (committed, no model)
+# Semantic judge — committed verdicts are Claude Opus 4.8's; regenerate against any
+# OpenAI-compatible endpoint, crediting the model in each row's `by` field:
+ANYRAY_JUDGE_URL=… ANYRAY_JUDGE_KEY=… ANYRAY_JUDGE_MODEL=claude-opus-4-8 \
+  node run_quality.mjs --all --judge
+# …or offline: dump the judge inputs for an external model, then merge verdicts back:
+node run_quality.mjs --all --dump     # writes <suite>/results/judge-inputs.json
 ```
 
-Results are written to `<suite>/results/quality.json`.
+Results are written to `<suite>/results/quality.json`. The strict run is resume-safe
+(re-running skips already-scored workloads); a later `--judge` run fills in the
+`judge` column on top without redoing the deterministic pass.
+
+Results are content-free in spirit but synthetic throughout: every key fact and
+payload here is invented, never real user data.

@@ -1,0 +1,87 @@
+{
+  "model": "openai.gpt-oss-120b-1:0",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a senior coding assistant working in a TypeScript payments monorepo. Investigate with tools (read_file, grep, bash) before answering, and keep going until you have the concrete root cause and the smallest safe fix."
+    },
+    {
+      "role": "user",
+      "content": "Customers are occasionally charged twice at checkout. Find the root cause and the smallest fix."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        { "id": "call_00", "type": "function", "function": { "name": "bash", "arguments": "{\"cmd\":\"git log --oneline -8 -- src/checkout src/payments\"}" } }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_00",
+      "name": "bash",
+      "content": "a1c4f0e fix(checkout): retry capture on gateway timeout\n9b22de1 feat(payments): add gateway timeout + retry wrapper\n7e10aa3 refactor(payments): extract capture() from submitOrder\n5d3c8b2 feat(checkout): idempotency key per order attempt\n3f9911a chore: bump payment-sdk to 4.2.0\n2a7e5c4 test(payments): cover declined-card hold release\n1b0d3a9 feat(payments): authorize + capture split\n0c9f1e2 init payments module"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        { "id": "call_01", "type": "function", "function": { "name": "read_file", "arguments": "{\"path\":\"src/checkout/checkout.ts\"}" } }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_01",
+      "name": "read_file",
+      "content": "// src/checkout/checkout.ts\nexport class Checkout {\n  constructor(private payments: Payments, private orders: Orders) {}\n  async submitOrder(order: Order) {\n    const idempotencyKey = `order:${order.id}:attempt:${order.attempt}`;\n    const auth = await this.payments.authorize(order.total, order.card, idempotencyKey);\n    if (!auth.ok) return this.orders.markDeclined(order, auth.reason);\n    const capture = await this.payments.capture(auth.id, idempotencyKey);\n    return this.orders.markPaid(order, capture.id);\n  }\n}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        { "id": "call_02", "type": "function", "function": { "name": "read_file", "arguments": "{\"path\":\"src/payments/payments.ts\"}" } }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_02",
+      "name": "read_file",
+      "content": "// src/payments/payments.ts\nimport { withRetry } from './retry';\nimport { Gateway } from './gateway';\nexport class Payments {\n  constructor(private gateway: Gateway) {}\n  async authorize(amount: number, card: Card, idempotencyKey: string) {\n    return this.gateway.authorize({ amount, card, idempotencyKey });\n  }\n  async capture(authId: string, idempotencyKey: string) {\n    // capture is wrapped so a transient gateway timeout is retried\n    return withRetry(() => this.gateway.capture({ authId }));\n  }\n}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        { "id": "call_03", "type": "function", "function": { "name": "grep", "arguments": "{\"pattern\":\"idempotencyKey\",\"path\":\"src/payments\"}" } }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_03",
+      "name": "grep",
+      "content": "src/payments/payments.ts:  async authorize(amount, card, idempotencyKey)\nsrc/payments/payments.ts:    return this.gateway.authorize({ amount, card, idempotencyKey });\nsrc/payments/gateway.ts:  authorize({ amount, card, idempotencyKey })\nsrc/payments/gateway.ts:  capture({ authId, idempotencyKey })\nsrc/payments/retry.ts:  // (no idempotencyKey reference found)"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        { "id": "call_04", "type": "function", "function": { "name": "read_file", "arguments": "{\"path\":\"src/payments/retry.ts\"}" } }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_04",
+      "name": "read_file",
+      "content": "// src/payments/retry.ts\n// Retries a gateway call on a transient timeout. NOTE: the closure it retries is\n// whatever the caller passed; capture() passes () => gateway.capture({ authId })\n// with NO idempotencyKey, so each retry is a brand-new capture to the gateway.\nexport async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {\n  let lastErr;\n  for (let i = 0; i < tries; i++) {\n    try { return await fn(); }\n    catch (e) { if (!isTimeout(e)) throw e; lastErr = e; await sleep(200 * (i + 1)); }\n  }\n  throw lastErr;\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "Root cause: capture() wraps the gateway call in withRetry, but it re-invokes capture() without forwarding the idempotency key, so on a transient gateway timeout the retry triggers a second authorized capture — the customer is charged twice. The smallest fix is to thread idempotencyKey into the retried gateway.capture call in src/payments/payments.ts so the gateway dedupes the retry."
+    },
+    {
+      "role": "user",
+      "content": "Good — summarize the root cause and the one-line fix."
+    }
+  ]
+}

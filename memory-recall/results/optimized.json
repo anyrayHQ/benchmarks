@@ -5,88 +5,16 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2500",
     "tier": "accounting",
-    "beforeChars": 23578,
-    "afterChars": 3353,
+    "beforeChars": 23581,
+    "afterChars": 3466,
     "beforeTok": 5895,
-    "afterTok": 838,
-    "savedPct": 86,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (23413->3188 chars, -86%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "19-decision-recall",
-    "title": "Decision recall — \"what did we decide, and why?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=700, headLines=2",
-    "tier": "accounting",
-    "beforeChars": 4344,
-    "afterChars": 1128,
-    "beforeTok": 1086,
-    "afterTok": 282,
-    "savedPct": 74,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (4178->962 chars, -77%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "20-research-brief",
-    "title": "Research brief — \"everything I have found on this, in one brief\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=2500",
-    "tier": "accounting",
-    "beforeChars": 22403,
-    "afterChars": 3365,
-    "beforeTok": 5601,
-    "afterTok": 841,
+    "afterTok": 867,
     "savedPct": 85,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (22220->3182 chars, -86%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "21-content-memory",
-    "title": "Content memory — \"what have I already published on this?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=2200",
-    "tier": "accounting",
-    "beforeChars": 16874,
-    "afterChars": 3173,
-    "beforeTok": 4219,
-    "afterTok": 793,
-    "savedPct": 81,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (16691->2990 chars, -82%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "22-ops-open-loops",
-    "title": "Open loops — \"what is still open and waiting on me?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=2200",
-    "tier": "accounting",
-    "beforeChars": 8032,
-    "afterChars": 1702,
-    "beforeTok": 2008,
-    "afterTok": 426,
-    "savedPct": 79,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (7870->1540 chars, -80%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (23413->3298 chars, -86%); 1 stashed for retrieval"
     ]
   }
 ]

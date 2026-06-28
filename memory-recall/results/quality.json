@@ -2,58 +2,7 @@
   {
     "id": "18-session-recall",
     "strategy": "relevance_filter",
-    "savedPct": 86,
-    "keyFacts": 5,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "19-decision-recall",
-    "strategy": "relevance_filter",
-    "savedPct": 74,
-    "keyFacts": 5,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "20-research-brief",
-    "strategy": "relevance_filter",
     "savedPct": 85,
-    "keyFacts": 6,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "21-content-memory",
-    "strategy": "relevance_filter",
-    "savedPct": 81,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
@@ -63,25 +12,8 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
-    }
-  },
-  {
-    "id": "22-ops-open-loops",
-    "strategy": "relevance_filter",
-    "savedPct": 79,
-    "keyFacts": 5,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "all key facts present verbatim in the kept context",
-      "by": "Claude Opus 4.8"
+      "note": "All payments-retry facts present in context.",
+      "by": "claude-opus-4-8"
     }
   }
 ]

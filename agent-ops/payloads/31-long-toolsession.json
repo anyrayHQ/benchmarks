@@ -1,0 +1,222 @@
+{
+  "model": "openai.gpt-oss-120b-1:0",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a coding agent. Investigate with tools and keep going until you have the root cause."
+    },
+    {
+      "role": "user",
+      "content": "The nightly reconciliation job is dropping a few transactions. Find the root cause."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_0",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/run.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_0",
+      "name": "read_file",
+      "content": "// src/recon/run.ts\n// Stage 0 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_0(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 0, idx: 0 }),\n    transform(input.rows[1], { stage: 0, idx: 1 }),\n    transform(input.rows[2], { stage: 0, idx: 2 }),\n    transform(input.rows[3], { stage: 0, idx: 3 }),\n    transform(input.rows[4], { stage: 0, idx: 4 }),\n    transform(input.rows[5], { stage: 0, idx: 5 }),\n    transform(input.rows[6], { stage: 0, idx: 6 }),\n    transform(input.rows[7], { stage: 0, idx: 7 }),\n    transform(input.rows[8], { stage: 0, idx: 8 }),\n    transform(input.rows[9], { stage: 0, idx: 9 }),\n    transform(input.rows[10], { stage: 0, idx: 10 }),\n    transform(input.rows[11], { stage: 0, idx: 11 }),\n    transform(input.rows[12], { stage: 0, idx: 12 }),\n    transform(input.rows[13], { stage: 0, idx: 13 }),\n    transform(input.rows[14], { stage: 0, idx: 14 }),\n    transform(input.rows[15], { stage: 0, idx: 15 }),\n    transform(input.rows[16], { stage: 0, idx: 16 }),\n    transform(input.rows[17], { stage: 0, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/loader.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "name": "read_file",
+      "content": "// src/recon/loader.ts\n// Stage 1 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_1(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 1, idx: 0 }),\n    transform(input.rows[1], { stage: 1, idx: 1 }),\n    transform(input.rows[2], { stage: 1, idx: 2 }),\n    transform(input.rows[3], { stage: 1, idx: 3 }),\n    transform(input.rows[4], { stage: 1, idx: 4 }),\n    transform(input.rows[5], { stage: 1, idx: 5 }),\n    transform(input.rows[6], { stage: 1, idx: 6 }),\n    transform(input.rows[7], { stage: 1, idx: 7 }),\n    transform(input.rows[8], { stage: 1, idx: 8 }),\n    transform(input.rows[9], { stage: 1, idx: 9 }),\n    transform(input.rows[10], { stage: 1, idx: 10 }),\n    transform(input.rows[11], { stage: 1, idx: 11 }),\n    transform(input.rows[12], { stage: 1, idx: 12 }),\n    transform(input.rows[13], { stage: 1, idx: 13 }),\n    transform(input.rows[14], { stage: 1, idx: 14 }),\n    transform(input.rows[15], { stage: 1, idx: 15 }),\n    transform(input.rows[16], { stage: 1, idx: 16 }),\n    transform(input.rows[17], { stage: 1, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/matcher.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "name": "read_file",
+      "content": "// src/recon/matcher.ts\n// Stage 2 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_2(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 2, idx: 0 }),\n    transform(input.rows[1], { stage: 2, idx: 1 }),\n    transform(input.rows[2], { stage: 2, idx: 2 }),\n    transform(input.rows[3], { stage: 2, idx: 3 }),\n    transform(input.rows[4], { stage: 2, idx: 4 }),\n    transform(input.rows[5], { stage: 2, idx: 5 }),\n    transform(input.rows[6], { stage: 2, idx: 6 }),\n    transform(input.rows[7], { stage: 2, idx: 7 }),\n    transform(input.rows[8], { stage: 2, idx: 8 }),\n    transform(input.rows[9], { stage: 2, idx: 9 }),\n    transform(input.rows[10], { stage: 2, idx: 10 }),\n    transform(input.rows[11], { stage: 2, idx: 11 }),\n    transform(input.rows[12], { stage: 2, idx: 12 }),\n    transform(input.rows[13], { stage: 2, idx: 13 }),\n    transform(input.rows[14], { stage: 2, idx: 14 }),\n    transform(input.rows[15], { stage: 2, idx: 15 }),\n    transform(input.rows[16], { stage: 2, idx: 16 }),\n    transform(input.rows[17], { stage: 2, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_3",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/ledger.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_3",
+      "name": "read_file",
+      "content": "// src/recon/ledger.ts\n// Stage 3 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_3(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 3, idx: 0 }),\n    transform(input.rows[1], { stage: 3, idx: 1 }),\n    transform(input.rows[2], { stage: 3, idx: 2 }),\n    transform(input.rows[3], { stage: 3, idx: 3 }),\n    transform(input.rows[4], { stage: 3, idx: 4 }),\n    transform(input.rows[5], { stage: 3, idx: 5 }),\n    transform(input.rows[6], { stage: 3, idx: 6 }),\n    transform(input.rows[7], { stage: 3, idx: 7 }),\n    transform(input.rows[8], { stage: 3, idx: 8 }),\n    transform(input.rows[9], { stage: 3, idx: 9 }),\n    transform(input.rows[10], { stage: 3, idx: 10 }),\n    transform(input.rows[11], { stage: 3, idx: 11 }),\n    transform(input.rows[12], { stage: 3, idx: 12 }),\n    transform(input.rows[13], { stage: 3, idx: 13 }),\n    transform(input.rows[14], { stage: 3, idx: 14 }),\n    transform(input.rows[15], { stage: 3, idx: 15 }),\n    transform(input.rows[16], { stage: 3, idx: 16 }),\n    transform(input.rows[17], { stage: 3, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_4",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/report.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_4",
+      "name": "read_file",
+      "content": "// src/recon/report.ts\n// Stage 4 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_4(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 4, idx: 0 }),\n    transform(input.rows[1], { stage: 4, idx: 1 }),\n    transform(input.rows[2], { stage: 4, idx: 2 }),\n    transform(input.rows[3], { stage: 4, idx: 3 }),\n    transform(input.rows[4], { stage: 4, idx: 4 }),\n    transform(input.rows[5], { stage: 4, idx: 5 }),\n    transform(input.rows[6], { stage: 4, idx: 6 }),\n    transform(input.rows[7], { stage: 4, idx: 7 }),\n    transform(input.rows[8], { stage: 4, idx: 8 }),\n    transform(input.rows[9], { stage: 4, idx: 9 }),\n    transform(input.rows[10], { stage: 4, idx: 10 }),\n    transform(input.rows[11], { stage: 4, idx: 11 }),\n    transform(input.rows[12], { stage: 4, idx: 12 }),\n    transform(input.rows[13], { stage: 4, idx: 13 }),\n    transform(input.rows[14], { stage: 4, idx: 14 }),\n    transform(input.rows[15], { stage: 4, idx: 15 }),\n    transform(input.rows[16], { stage: 4, idx: 16 }),\n    transform(input.rows[17], { stage: 4, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_5",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/payments/gateway.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_5",
+      "name": "read_file",
+      "content": "// src/payments/gateway.ts\n// Stage 5 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_5(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 5, idx: 0 }),\n    transform(input.rows[1], { stage: 5, idx: 1 }),\n    transform(input.rows[2], { stage: 5, idx: 2 }),\n    transform(input.rows[3], { stage: 5, idx: 3 }),\n    transform(input.rows[4], { stage: 5, idx: 4 }),\n    transform(input.rows[5], { stage: 5, idx: 5 }),\n    transform(input.rows[6], { stage: 5, idx: 6 }),\n    transform(input.rows[7], { stage: 5, idx: 7 }),\n    transform(input.rows[8], { stage: 5, idx: 8 }),\n    transform(input.rows[9], { stage: 5, idx: 9 }),\n    transform(input.rows[10], { stage: 5, idx: 10 }),\n    transform(input.rows[11], { stage: 5, idx: 11 }),\n    transform(input.rows[12], { stage: 5, idx: 12 }),\n    transform(input.rows[13], { stage: 5, idx: 13 }),\n    transform(input.rows[14], { stage: 5, idx: 14 }),\n    transform(input.rows[15], { stage: 5, idx: 15 }),\n    transform(input.rows[16], { stage: 5, idx: 16 }),\n    transform(input.rows[17], { stage: 5, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_6",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/payments/store.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6",
+      "name": "read_file",
+      "content": "// src/payments/store.ts\n// Stage 6 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_6(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 6, idx: 0 }),\n    transform(input.rows[1], { stage: 6, idx: 1 }),\n    transform(input.rows[2], { stage: 6, idx: 2 }),\n    transform(input.rows[3], { stage: 6, idx: 3 }),\n    transform(input.rows[4], { stage: 6, idx: 4 }),\n    transform(input.rows[5], { stage: 6, idx: 5 }),\n    transform(input.rows[6], { stage: 6, idx: 6 }),\n    transform(input.rows[7], { stage: 6, idx: 7 }),\n    transform(input.rows[8], { stage: 6, idx: 8 }),\n    transform(input.rows[9], { stage: 6, idx: 9 }),\n    transform(input.rows[10], { stage: 6, idx: 10 }),\n    transform(input.rows[11], { stage: 6, idx: 11 }),\n    transform(input.rows[12], { stage: 6, idx: 12 }),\n    transform(input.rows[13], { stage: 6, idx: 13 }),\n    transform(input.rows[14], { stage: 6, idx: 14 }),\n    transform(input.rows[15], { stage: 6, idx: 15 }),\n    transform(input.rows[16], { stage: 6, idx: 16 }),\n    transform(input.rows[17], { stage: 6, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_7",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/dedupe.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_7",
+      "name": "read_file",
+      "content": "// src/recon/dedupe.ts\n// Stage 7 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_7(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 7, idx: 0 }),\n    transform(input.rows[1], { stage: 7, idx: 1 }),\n    transform(input.rows[2], { stage: 7, idx: 2 }),\n    transform(input.rows[3], { stage: 7, idx: 3 }),\n    transform(input.rows[4], { stage: 7, idx: 4 }),\n    transform(input.rows[5], { stage: 7, idx: 5 }),\n    transform(input.rows[6], { stage: 7, idx: 6 }),\n    transform(input.rows[7], { stage: 7, idx: 7 }),\n    transform(input.rows[8], { stage: 7, idx: 8 }),\n    transform(input.rows[9], { stage: 7, idx: 9 }),\n    transform(input.rows[10], { stage: 7, idx: 10 }),\n    transform(input.rows[11], { stage: 7, idx: 11 }),\n    transform(input.rows[12], { stage: 7, idx: 12 }),\n    transform(input.rows[13], { stage: 7, idx: 13 }),\n    transform(input.rows[14], { stage: 7, idx: 14 }),\n    transform(input.rows[15], { stage: 7, idx: 15 }),\n    transform(input.rows[16], { stage: 7, idx: 16 }),\n    transform(input.rows[17], { stage: 7, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_8",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/window.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_8",
+      "name": "read_file",
+      "content": "// src/recon/window.ts\n// Stage 8 of the nightly reconciliation pipeline: a pure, retry-safe transform\n// pass. It maps each row through transform() and returns the collected batch. It carries\n// no cursor or pagination state, so a retry simply re-runs it over the same rows.\nexport function step_8(input: Batch): Batch {\n  const rows = [\n    transform(input.rows[0], { stage: 8, idx: 0 }),\n    transform(input.rows[1], { stage: 8, idx: 1 }),\n    transform(input.rows[2], { stage: 8, idx: 2 }),\n    transform(input.rows[3], { stage: 8, idx: 3 }),\n    transform(input.rows[4], { stage: 8, idx: 4 }),\n    transform(input.rows[5], { stage: 8, idx: 5 }),\n    transform(input.rows[6], { stage: 8, idx: 6 }),\n    transform(input.rows[7], { stage: 8, idx: 7 }),\n    transform(input.rows[8], { stage: 8, idx: 8 }),\n    transform(input.rows[9], { stage: 8, idx: 9 }),\n    transform(input.rows[10], { stage: 8, idx: 10 }),\n    transform(input.rows[11], { stage: 8, idx: 11 }),\n    transform(input.rows[12], { stage: 8, idx: 12 }),\n    transform(input.rows[13], { stage: 8, idx: 13 }),\n    transform(input.rows[14], { stage: 8, idx: 14 }),\n    transform(input.rows[15], { stage: 8, idx: 15 }),\n    transform(input.rows[16], { stage: 8, idx: 16 }),\n    transform(input.rows[17], { stage: 8, idx: 17 }),\n  ];\n  return collect({ ...input, rows }); // transformed rows threaded back into the batch\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_9",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"src/recon/cursor.ts\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_9",
+      "name": "read_file",
+      "content": "// src/recon/cursor.ts\n// Pages through the ledger in batches for the nightly reconciliation job. Unlike the\n// stateless transform stages above, this stage carries pagination state across batches.\n// BUG: nextBatch() advances the page cursor to the next page as soon as it reads the\n// current page — BEFORE that batch has been acknowledged by the downstream writer. If a\n// batch fails mid-flight and is retried, the cursor has already moved past those rows, so\n// the unacknowledged transactions are never re-read and are dropped from reconciliation.\nexport async function nextBatch(state: CursorState): Promise<Batch> {\n  const batch = await readPage(state.cursor, state.pageSize);\n  state.cursor = batch.nextCursor; // advances before the batch is acknowledged\n  return batch;\n}\n\nexport function ack(state: CursorState, batch: Batch): void {\n  // The cursor should only advance here, after a durable ack — but it was already moved\n  // in nextBatch(), so this just records the ack and the skipped rows are lost.\n  state.lastAcked = batch.id;\n}\n"
+    },
+    {
+      "role": "assistant",
+      "content": "Found it: recon/cursor.ts advances the page cursor before the batch is acknowledged, so a mid-batch retry skips the unacked rows — those transactions are dropped from reconciliation. The fix is to advance the cursor only after ack in src/recon/cursor.ts."
+    },
+    {
+      "role": "user",
+      "content": "Summarize the root cause and the one-line fix."
+    }
+  ]
+}
