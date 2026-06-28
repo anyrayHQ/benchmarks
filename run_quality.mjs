@@ -28,6 +28,7 @@ import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { OptimizerClient } from './lib/optimizerClient.mjs';
 import { sizeOf, savedPct } from './lib/tokens.mjs';
 import { keyFactSurvival, fullText, judgePrompt, verdictFor } from './lib/quality.mjs';
+import { extractJsonObject } from './lib/judge.mjs';
 
 function parseArgs(argv) {
   const a = { all: false, suite: null, workload: null, judge: false, dump: false };
@@ -56,26 +57,6 @@ function loadKeyFacts(root) {
     if (Array.isArray(v?.keyFacts) && v.keyFacts.length) map.set(id, v);
   }
   return map;
-}
-
-/** Extract the first balanced JSON object from a model reply (ignores braces in strings). */
-function extractJsonObject(text) {
-  const start = text.indexOf('{');
-  if (start === -1) throw new Error('no JSON object in judge reply');
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === '\\') esc = true;
-      else if (ch === '"') inStr = false;
-    } else if (ch === '"') inStr = true;
-    else if (ch === '{') depth++;
-    else if (ch === '}' && --depth === 0) return text.slice(start, i + 1);
-  }
-  throw new Error('unterminated JSON object in judge reply');
 }
 
 async function judgeOne(judgeCfg, question, context, keyFacts) {
