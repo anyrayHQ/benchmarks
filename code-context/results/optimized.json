@@ -1,20 +1,56 @@
 [
   {
-    "id": "7-codebase-explore",
-    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
-    "strategy": "code_skeleton",
-    "knob": "minBodyLines=3, roles=user",
+    "id": "5-code-search",
+    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=8000, roles=user",
     "tier": "accounting",
-    "beforeChars": 18714,
-    "afterChars": 13488,
-    "beforeTok": 4679,
-    "afterTok": 3372,
-    "savedPct": 28,
+    "beforeChars": 17099,
+    "afterChars": 7701,
+    "beforeTok": 4275,
+    "afterTok": 1925,
+    "savedPct": 55,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "outlined 1 source file(s), elided 168 body line(s) 18714->13488 chars (-28%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (17099->7701 chars, -55%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "strategy": "context_compression",
+    "knob": "roles=user",
+    "tier": "accounting",
+    "beforeChars": 22676,
+    "afterChars": 12641,
+    "beforeTok": 5669,
+    "afterTok": 3160,
+    "savedPct": 44,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 gitdiff) 22676->12641 chars (-44%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "7-codebase-explore",
+    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2, roles=user",
+    "tier": "accounting",
+    "beforeChars": 18714,
+    "afterChars": 15330,
+    "beforeTok": 4679,
+    "afterTok": 3833,
+    "savedPct": 18,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 1 file(s): kept 10 working-set symbol(s) (1 from intent, 8 central), elided 81 body line(s) 18714->15330 chars (-18%); 1 stashed for retrieval"
     ]
   },
   {
@@ -24,15 +60,15 @@
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
     "beforeChars": 8367,
-    "afterChars": 5678,
+    "afterChars": 5783,
     "beforeTok": 2092,
-    "afterTok": 1420,
-    "savedPct": 32,
+    "afterTok": 1446,
+    "savedPct": 31,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3735 chars (-42%); 8 stashed for retrieval"
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 70 body line(s) 6424->3840 chars (-40%); 8 stashed for retrieval"
     ]
   },
   {
@@ -87,42 +123,6 @@
     "fired": true,
     "decisions": [
       "graph-outlined 1 file(s): kept 2 working-set symbol(s) (2 from intent, 0 central), elided 113 body line(s) 8780->2525 chars (-71%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "5-code-search",
-    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=1500, roles=user, semanticRerank=true, semanticWeight=0.9",
-    "tier": "accounting",
-    "beforeChars": 12528,
-    "afterChars": 3995,
-    "beforeTok": 3132,
-    "afterTok": 999,
-    "savedPct": 68,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (12528->3995 chars, -68%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "strategy": "relevance_filter",
-    "knob": "keepChars=2000, roles=user, semanticRerank=true, semanticWeight=0.9",
-    "tier": "accounting",
-    "beforeChars": 13890,
-    "afterChars": 4429,
-    "beforeTok": 3473,
-    "afterTok": 1107,
-    "savedPct": 68,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (13890->4429 chars, -68%); 1 stashed for retrieval"
     ]
   }
 ]

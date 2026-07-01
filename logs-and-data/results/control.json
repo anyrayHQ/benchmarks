@@ -14,6 +14,13 @@
     "max_tokens": 1024
   },
   {
+    "id": "33-synonym-gap-logs",
+    "title": "Synonym-gap logs — \"find the resource-exhaustion event\" (OOM/cgroup)",
+    "chars": 11850,
+    "tokens": 2963,
+    "max_tokens": 1024
+  },
+  {
     "id": "4-json-array",
     "title": "JSON array (500 items) — \"which orders failed and why?\"",
     "chars": 297840,

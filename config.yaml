@@ -35,7 +35,8 @@ shared:
 # overridden by $ANYRAY_LIVE_MODEL. Judge defaults to the same gateway (subscription).
 live:
   gateway_url: "http://localhost:8787"
-  model: "claude-sonnet-4-6"
+  # claude-opus-4-8 is the real production hero — ~74% of deployed traffic.
+  model: "claude-opus-4-8"
   judge_model: "claude-opus-4-8"
   temperature: 0
 
@@ -52,7 +53,7 @@ verdict:
 sweep:
   relevance_filter: { param: keepChars, values: [1500, 3000, 6000, 12000, 32000] }
   context_compression: { param: maxArrayItems, values: [50, 200, 500] }
-  code_skeleton: { param: minBodyLines, values: [2, 4, 8] }
+  code_graph: { param: minBodyLines, values: [2, 4, 8] }
   window_budget: { param: maxTokens, values: [700, 2500, 24000, 100000] }
   prompt_compression: { param: minChars, values: [200, 400, 800] }
 
@@ -70,13 +71,22 @@ benchmarks:
       - id: "1-access-log"
         title: 'Access log (500 requests) — "find the failing requests"'
         strategy: "relevance_filter"
-        params: { keepChars: 6000, roles: ["user"] }
+        # Swept on v0.3.24: keepChars=3000 keeps the failing-request lines + window + IPs
+        # at 96% and clears the Opus-4.8 judge (1500/98% was judge-MARGINAL — too tight).
+        params: { keepChars: 3000, roles: ["user"] }
       - id: "2-sre-incident"
         title: 'SRE incident — "why did checkout p99 spike at 10:05?"'
         strategy: "relevance_filter"
         # keepChars=12000 keeps the answer (root-cause lines survive); the old 1000
         # was an unfair knob that kept <1% of a 26k-token input and dropped the answer.
         params: { keepChars: 12000, roles: ["user"] }
+      - id: "33-synonym-gap-logs"
+        title: 'Synonym-gap logs — "find the resource-exhaustion event" (OOM/cgroup)'
+        strategy: "relevance_filter"
+        # Synonym gap: query says "resource exhaustion"/"capacity saturation"; answer
+        # lines say "OOM killer"/"heap exhaustion"/"cgroup". semanticWeight=0.7 surfaces
+        # the OOMKilled block lexical BM25 misses; keepChars=3000 keeps all 4 facts at 60%.
+        params: { keepChars: 3000, roles: ["user"], semanticRerank: true, semanticWeight: 0.7 }
       - id: "4-json-array"
         title: 'JSON array (500 items) — "which orders failed and why?"'
         strategy: "context_compression"
@@ -100,15 +110,21 @@ benchmarks:
       - id: "5-code-search"
         title: 'Code search (100 hits) — "where is the retry policy configured?"'
         strategy: "relevance_filter"
-        params: { keepChars: 1500, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
+        # keepChars=8000 keeps the definition line (file path + RETRY_MAX) alongside the
+        # use sites, so the answer survives the rank-and-trim (55% on v0.3.24).
+        params: { keepChars: 8000, roles: ["user"] }
       - id: "6-git-diff"
         title: 'Git diff — "any risky change in this PR?"'
-        strategy: "relevance_filter"
-        params: { keepChars: 2000, roles: ["user"], semanticRerank: true, semanticWeight: 0.9 }
+        # relevance_filter ranked the loosened-auth hunk below larger hunks (a FAIL);
+        # context_compression keeps every hunk structurally, so the auth change survives.
+        strategy: "context_compression"
+        params: { roles: ["user"] }
       - id: "7-codebase-explore"
         title: 'Codebase exploration — "explain the architecture & where retries live"'
-        strategy: "code_skeleton"
-        params: { minBodyLines: 3, roles: ["user"] }
+        # code_skeleton is retired in v0.3.24 (mutually exclusive with code_graph, rejected);
+        # code_graph is what production runs for code reads.
+        strategy: "code_graph"
+        params: { minChars: 200, minBodyLines: 2, roles: ["user"] }
       - id: "15-multifile-graph"
         title: 'Multi-file trace — "how does Checkout.submitOrder capture payment?"'
         strategy: "code_graph"
@@ -142,6 +158,13 @@ benchmarks:
         title: "RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer"
         strategy: "relevance_filter"
         params: { keepChars: 1200, roles: ["user"] }
+      - id: "32-vocab-mismatch-rag"
+        title: 'Vocab-mismatch RAG (20 chunks) — "what revokes their credential?"'
+        strategy: "relevance_filter"
+        # Retrieved chunks ride in a tool message; query ("involuntary disconnections")
+        # shares no vocabulary with the answer chunks ("session eviction" / "auth context
+        # invalidated"), so semantic rerank — not lexical BM25 — must keep chunks 03 & 06.
+        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.7 }
       - id: "13-prompt-boilerplate"
         title: "Templated boilerplate — the same instructions re-pasted 40x"
         strategy: "prompt_compression"
@@ -166,7 +189,9 @@ benchmarks:
       - id: "8-long-session"
         title: "Long agent session — keep a 60-message session inside the window"
         strategy: "window_budget"
-        params: { maxTokens: 24000 }
+        # maxTokens=8000 keeps the leading turn + the recent turns that hold the final
+        # recommendation; swept to 91% with both answer facts intact on v0.3.24.
+        params: { maxTokens: 8000 }
       - id: "16-test-run"
         title: 'Test-suite output — "which tests failed and why?"'
         strategy: "command_digest"
@@ -191,7 +216,9 @@ benchmarks:
       - id: "18-session-recall"
         title: 'Cross-session catch-up — "catch me up on this branch"'
         strategy: "relevance_filter"
-        params: { keepChars: 2500 }
+        # The recalled store rides in a tool message, so roles must include tool/function
+        # for the filter to fire on v0.3.24 (roles=user alone is a no-op here).
+        params: { keepChars: 2500, roles: ["tool", "function", "user"] }
 
   guardrails:
     title: "Guardrails (special accounting)"

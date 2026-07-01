@@ -13,8 +13,9 @@ entirely off-topic to the question being asked.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=6000, roles=user` | 26,153 | 2,037 | **92%** |
+| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=3000, roles=user` | 26,153 | 1,078 | **96%** |
 | SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=12000, roles=user` | 26,385 | 4,326 | **84%** |
+| Synonym-gap logs — "find the resource-exhaustion event" (OOM/cgroup) | `relevance_filter` | `keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7` | 2,963 | 1,185 | **60%** |
 | JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 16,013 | **78%** |
 | Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,940 | 10,436 | **42%** |
 | Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,091 | 7,047 | **42%** |

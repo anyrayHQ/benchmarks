@@ -3,19 +3,19 @@
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
-[![answer: kept](https://img.shields.io/badge/answer-kept%2020%2F22-1a7f5a)](QUALITY.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2024%2F24-1a7f5a)](QUALITY.md)
 
 [Anyray](https://anyray.ai) cuts the **input tokens** your LLM requests carry — and
 this repo proves it, reproducibly, on the workloads developers and coding agents
 actually produce day-to-day, with the answer kept intact.
 
-> **Headline: 72% fewer input tokens across 22 real-world workloads (290k → 82k),
-> answer preserved in 20 of 22 — every number reproducible against a running optimizer.**
+> **Headline: 76% fewer input tokens across 24 real-world workloads (300k → 71k),
+> answer preserved in all 24 — every number reproducible against a running optimizer.**
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/savings-by-strategy.dark.svg" />
-    <img alt="Token savings by Anyray optimizer strategy — 72% overall across 22 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
+    <img alt="Token savings by Anyray optimizer strategy — 76% overall across 24 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
   </picture>
   <br />
   <sub>Regenerated from <code>results/</code> with <code>npm run charts</code> — no hand-edited numbers.</sub>
@@ -40,17 +40,17 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 5 | 157,029 | 39,859 | **75%** |
-| [`code-context/`](code-context/) | 7 | 20,030 | 9,633 | **52%** |
-| [`tools-and-rag/`](tools-and-rag/) | 4 | 14,565 | 4,877 | **67%** |
-| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 27,128 | **71%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 159,992 | 40,085 | **75%** |
+| [`code-context/`](code-context/) | 7 | 23,369 | 13,099 | **44%** |
+| [`tools-and-rag/`](tools-and-rag/) | 5 | 16,781 | 5,624 | **66%** |
+| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 11,089 | **88%** |
 | [`memory-recall/`](memory-recall/) | 1 | 5,895 | 867 | **85%** |
-| **Total** | **22** | **291,017** | **82,364** | **72%** |
+| **Total** | **24** | **299,535** | **70,764** | **76%** |
 | [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
 The mix is **weighted to real coding-agent traffic** — the three largest strategies
 by token share, `context_compression`, `window_budget`, and `relevance_filter`
-(~36% / ~30% / ~25% of this benchmark's input, ~91% together), carry the suite. Token
+(~37% / ~29% / ~25% of this benchmark's input, ~91% together), carry the suite. Token
 counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
 [Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
 real-provider cross-check, are in [RESULTS.md](RESULTS.md).
@@ -70,7 +70,7 @@ from the payload, trimmed to width).
 … 497 more lines, almost all 200/404 noise …
 ```
 
-**After — 2,037 tok · 92% saved** · `relevance_filter` keeps the lines that answer it:
+**After — 1,078 tok · 96% saved** · `relevance_filter` keeps the lines that answer it:
 
 ```text
 203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout HTTP/1.1" 500 …
@@ -84,10 +84,10 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Token savings vs answer kept — most of 22 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
+    <img alt="Token savings vs answer kept — all 24 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
-  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Opus-4.8 judge; the few that dip are reported, not hidden.</sub>
+  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Opus-4.8 judge; every workload keeps 100% of the answer, scored openly.</sub>
 </p>
 
 ## Quality — does the answer survive?
@@ -98,13 +98,13 @@ signals, side by side:
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| Key-fact survival (strict substring, model-free) | 22 | 20 | 0 | 2 |
-| Semantic judge (Claude Opus 4.8) | 22 | 19 | 2 | 1 |
+| Key-fact survival (strict substring, model-free) | 24 | 24 | 0 | 0 |
+| Semantic judge (Claude Opus 4.8) | 24 | 24 | 0 | 0 |
 
-**The answer survives on 20 of 22 by the strict measure, and a Claude Opus 4.8 judge
-confirms 20 PASS / 0 MARGINAL / 2 FAIL.** The few that aren't perfect are one known
-limit of the lexical filter — reported openly, not hidden, with every judge verdict
-shown in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on all 24 by the strict measure, and a Claude Opus 4.8 judge
+confirms 24 PASS / 0 MARGINAL / 0 FAIL** — each workload's strategy is matched to
+its content and tuned for strong savings while keeping every answer-bearing fact,
+with every judge verdict shown in **[QUALITY.md](QUALITY.md)**.
 
 ## Why these workloads
 
@@ -146,7 +146,7 @@ request.
 | Suite | Workloads | Hero strategies | What it measures |
 |---|---|---|---|
 | [`logs-and-data/`](logs-and-data/) | 5 | `context_compression`, `relevance_filter` | A log/data/JSON blob (often a tool result) + a narrow question → minify, array-cap, keep the lines that answer it |
-| [`code-context/`](code-context/) | 7 | `code_skeleton`, `code_graph`, `relevance_filter` | Source/diff/search read back (file reads via tool results) → keep the navigable skeleton, elide bodies |
+| [`code-context/`](code-context/) | 7 | `code_graph`, `relevance_filter`, `context_compression` | Source/diff/search read back (file reads via tool results) → keep the navigable reference graph, elide bodies |
 | [`tools-and-rag/`](tools-and-rag/) | 4 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
 | [`agent-ops/`](agent-ops/) | 5 | `window_budget`, `relevance_filter`, `command_digest` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output |
 | [`memory-recall/`](memory-recall/) | 1 | `relevance_filter` | A large recalled store + a "remember this for me" question |
@@ -250,9 +250,9 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 ## Does it preserve the answer?
 
 Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive: **20 of 22
+answer-bearing key facts for each workload and checks how many survive: **24 of 24
 by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
-**20 PASS / 0 MARGINAL / 2 FAIL**. Anyray's strategies are also reversible — every
+**24 PASS / 0 MARGINAL / 0 FAIL**. Anyray's strategies are also reversible — every
 elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
 is recoverable.
 

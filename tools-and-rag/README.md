@@ -14,8 +14,9 @@ instruction block once per item — all billed every call.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| MCP tool bloat — 41 tool schemas ride along, 2 are needed | `tool_pruning` | `keepUnnamed=true` | 5,614 | 1,972 | **65%** |
+| MCP tool bloat — 41 tool schemas ride along, 2 are needed | `tool_pruning` | `keepUnnamed=true` | 5,614 | 2,076 | **63%** |
 | RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer | `relevance_filter` | `keepChars=1200, roles=user` | 1,498 | 487 | **67%** |
+| Vocab-mismatch RAG (20 chunks) — "what revokes their credential?" | `relevance_filter` | `keepChars=1500, roles=tool\|function\|user, semanticRerank=true, semanticWeight=0.7` | 2,216 | 643 | **71%** |
 | Templated boilerplate — the same instructions re-pasted 40x | `prompt_compression` | `minChars=400` | 5,841 | 914 | **84%** |
 | MCP tool schemas — 41 verbose schemas, compress the prose not the set | `tool_schema_compression` | `collapseWhitespace=true, stripBoilerplate=true` | 1,612 | 1,504 | **7%** |
 

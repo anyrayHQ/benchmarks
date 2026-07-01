@@ -14,6 +14,13 @@
     "max_tokens": 1024
   },
   {
+    "id": "32-vocab-mismatch-rag",
+    "title": "Vocab-mismatch RAG (20 chunks) — \"what revokes their credential?\"",
+    "chars": 8864,
+    "tokens": 2216,
+    "max_tokens": 1024
+  },
+  {
     "id": "13-prompt-boilerplate",
     "title": "Templated boilerplate — the same instructions re-pasted 40x",
     "chars": 23365,

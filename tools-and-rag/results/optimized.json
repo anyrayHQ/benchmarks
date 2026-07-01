@@ -6,15 +6,15 @@
     "knob": "keepUnnamed=true",
     "tier": "accounting",
     "beforeChars": 22455,
-    "afterChars": 7889,
+    "afterChars": 8302,
     "beforeTok": 5614,
-    "afterTok": 1972,
-    "savedPct": 65,
+    "afterTok": 2076,
+    "savedPct": 63,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "pruned 28/41 unused tools"
+      "pruned 27/41 unused tools"
     ]
   },
   {
@@ -33,6 +33,24 @@
     "fired": true,
     "decisions": [
       "relevance-filtered 1 message(s) against the live turn (5990->1948 chars, -67%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "32-vocab-mismatch-rag",
+    "title": "Vocab-mismatch RAG (20 chunks) — \"what revokes their credential?\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.7",
+    "tier": "accounting",
+    "beforeChars": 8864,
+    "afterChars": 2571,
+    "beforeTok": 2216,
+    "afterTok": 643,
+    "savedPct": 71,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (8662->2369 chars, -73%); 1 stashed for retrieval; semantic re-rank: 1 msg, 59 lines embedded"
     ]
   },
   {

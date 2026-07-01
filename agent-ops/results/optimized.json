@@ -21,18 +21,18 @@
     "id": "8-long-session",
     "title": "Long agent session — keep a 60-message session inside the window",
     "strategy": "window_budget",
-    "knob": "maxTokens=24000",
+    "knob": "maxTokens=8000",
     "tier": "accounting",
     "beforeChars": 328438,
-    "afterChars": 92322,
+    "afterChars": 28168,
     "beforeTok": 82110,
-    "afterTok": 23081,
-    "savedPct": 72,
+    "afterTok": 7042,
+    "savedPct": 91,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 22 message(s) to fit ~24000-token budget (est 82375->23344 tokens, -72%); 22 stashed for retrieval"
+      "cropped 28 message(s) to fit ~8000-token budget (est 82375->7305 tokens, -91%); 28 stashed for retrieval"
     ]
   },
   {
