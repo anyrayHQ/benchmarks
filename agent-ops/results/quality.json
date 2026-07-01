@@ -12,14 +12,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All three issues with P0 auth labels and descriptions present",
+      "note": "All three issue numbers and their P0 auth labels present.",
       "by": "claude-opus-4-8"
     }
   },
   {
     "id": "8-long-session",
     "strategy": "window_budget",
-    "savedPct": 72,
+    "savedPct": 91,
     "keyFacts": 2,
     "deterministic": {
       "coverage": 100,
@@ -29,7 +29,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Final consolidation explicitly states both facts.",
+      "note": "Final consolidation states both retryPolicy location and orders→billing→inventory order",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,7 +46,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All three failing tests and their error details preserved.",
+      "note": "All three failing tests and their root causes present.",
       "by": "claude-opus-4-8"
     }
   },
@@ -63,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts explicitly present in context",
+      "note": "All key facts explicitly present in context.",
       "by": "claude-opus-4-8"
     }
   },

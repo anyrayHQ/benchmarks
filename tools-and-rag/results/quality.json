@@ -2,7 +2,7 @@
   {
     "id": "11-mcp-tools",
     "strategy": "tool_pruning",
-    "savedPct": 65,
+    "savedPct": 63,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
@@ -12,7 +12,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present in context and tool definitions",
+      "note": "All facts present including tools and PAY P0 bug search.",
       "by": "claude-opus-4-8"
     }
   },
@@ -29,7 +29,24 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present in chunks 01 and 02",
+      "note": "All facts present in chunks 01 and 02.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "32-vocab-mismatch-rag",
+    "strategy": "relevance_filter",
+    "savedPct": 71,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All facts present in context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All five tickets present in context.",
+      "note": "All five tickets present in context",
       "by": "claude-opus-4-8"
     }
   },
@@ -63,7 +80,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All tools and task present in context",
+      "note": "All tool names and task preserved in context",
       "by": "claude-opus-4-8"
     }
   }

@@ -2,7 +2,7 @@
   {
     "id": "1-access-log",
     "strategy": "relevance_filter",
-    "savedPct": 92,
+    "savedPct": 96,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
@@ -12,7 +12,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All 500 checkout entries, time window endpoints, and client IP present.",
+      "note": "All key facts present: POST /api/checkout 500s, time window 10:24:30-10:29:10, IP 203.0.113.21 visible",
       "by": "claude-opus-4-8"
     }
   },
@@ -34,6 +34,23 @@
     }
   },
   {
+    "id": "33-synonym-gap-logs",
+    "strategy": "relevance_filter",
+    "savedPct": 60,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All key facts present in checkout-service logs",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
     "id": "4-json-array",
     "strategy": "context_compression",
     "savedPct": 78,
@@ -46,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All failed orders with their failure_codes present in context",
+      "note": "All failure codes and failed order ids present in context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -80,7 +97,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Spike point with p99 4200 and errors 512 present in context",
+      "note": "Spike point p99:4200, errors:512 present in context",
       "by": "claude-opus-4-8"
     }
   }

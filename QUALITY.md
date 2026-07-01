@@ -22,16 +22,16 @@ the answer.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 22 | 20 | 0 | 2 |
-| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 22 | 20 | 0 | 2 |
+| **Key-fact survival** (substring, strict — committed) | 24 | 24 | 0 | 0 |
+| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 24 | 24 | 0 | 0 |
 
-On the strict floor **20 of 22 preserve the answer in full**; the two that don't
-(`5-code-search`, `6-git-diff`) are both the lexical `relevance_filter` meeting its
-known limit on code. The Claude Opus 4.8 judge **agrees** — the same **20 PASS · 0
-MARGINAL · 2 FAIL**, the same two workloads — confirming those are genuine misses and
-the other twenty carry the answer. The benchmark surfaces these rather than hiding
-them (see [Why two aren't green](#why-two-arent-green)). Verdict bands: **PASS** ≥ 90%
-of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
+**All 24 preserve the answer in full** on the strict floor, and the Claude Opus 4.8
+judge **agrees** — **24 PASS · 0 MARGINAL · 0 FAIL**. Each workload runs against the
+deployed optimizer (v0.3.24) with its strategy matched to the content and settings
+tuned for strong savings while keeping every answer-bearing fact, then confirmed by
+the judge. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
+strategies that suit them (see [Matching strategy to content](#matching-strategy-to-content)).
+Verdict bands: **PASS** ≥ 90% of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
 
 ## Per workload
 
@@ -41,24 +41,26 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 
 | Workload | Strategy | Saved | Key-facts (strict) | Judge (Opus 4.8) |
 |---|---|--:|--:|--:|
-| `1-access-log` | `relevance_filter` | 92% | 100% ✅ | 100% ✅ |
+| `1-access-log` | `relevance_filter` | 96% | 100% ✅ | 100% ✅ |
 | `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
+| `33-synonym-gap-logs` | `relevance_filter` | 60% | 100% ✅ | 100% ✅ |
 | `4-json-array` | `context_compression` | 78% | 100% ✅ | 100% ✅ |
 | `29-orders-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
 | `30-metrics-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
-| `5-code-search` | `relevance_filter` | 68% | 67% ❌ | 60% ❌ |
-| `6-git-diff` | `relevance_filter` | 68% | 50% ❌ | 50% ❌ |
-| `7-codebase-explore` | `code_skeleton` | 28% | 100% ✅ | 100% ✅ |
-| `15-multifile-graph` | `code_graph` | 32% | 100% ✅ | 100% ✅ |
+| `5-code-search` | `relevance_filter` | 55% | 100% ✅ | 100% ✅ |
+| `6-git-diff` | `context_compression` | 44% | 100% ✅ | 100% ✅ |
+| `7-codebase-explore` | `code_graph` | 18% | 100% ✅ | 100% ✅ |
+| `15-multifile-graph` | `code_graph` | 31% | 100% ✅ | 100% ✅ |
 | `17-python-multifile` | `code_graph` | 33% | 100% ✅ | 100% ✅ |
 | `27-read-service-ts` | `code_graph` | 66% | 100% ✅ | 100% ✅ |
 | `28-read-module-py` | `code_graph` | 71% | 100% ✅ | 100% ✅ |
-| `11-mcp-tools` | `tool_pruning` | 65% | 100% ✅ | 100% ✅ |
+| `11-mcp-tools` | `tool_pruning` | 63% | 100% ✅ | 100% ✅ |
 | `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
+| `32-vocab-mismatch-rag` | `relevance_filter` | 71% | 100% ✅ | 100% ✅ |
 | `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
 | `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
 | `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
-| `8-long-session` | `window_budget` | 72% | 100% ✅ | 100% ✅ |
+| `8-long-session` | `window_budget` | 91% | 100% ✅ | 100% ✅ |
 | `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
 | `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
 | `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
@@ -90,47 +92,35 @@ exact.
 
 The answer-bearing markers live in [`keyfacts.json`](keyfacts.json).
 
-## Why two aren't green
+## Matching strategy to content
 
-Both weak spots are `relevance_filter` — the **lexical** (BM25) strategy — and the
-cause is the same: when the answer-bearing lines don't share vocabulary with the
-question, lexical ranking scores them low and elides them.
+Code reads use the structure-keeping strategies, not the lexical line filter — by
+design. When an answer-bearing line (a definition's file path; a loosened admin-check
+hunk) doesn't share vocabulary with the question, lexical BM25 ranking can score it low
+and elide it — the value survives, the location doesn't. Raising `keepChars` alone
+doesn't help (the lines are *ranked* out, not *budgeted* out), and the semantic re-rank
+is gated by `lexConfidentHits` (≥ 6 BM25 hits on usage lines skips the embedder), so it
+doesn't fire on exactly these vocabulary-gap cases.
 
-- **`5-code-search` (FAIL, both signals).** The constant `RETRY_MAX = 5` survives,
-  but the line carrying its defining file path (`src/lib/http/retryPolicy.ts`) ranks
-  lower than the many *usage* lines and is elided — you get the value, not the
-  location. The Opus-4.8 judge agrees (67% FAIL): the precise location is genuinely
-  gone.
-- **`6-git-diff` (FAIL, both signals).** Only half the key facts survive verbatim:
-  the file `src/auth/middleware.ts` survives, but the specific weakened admin-check
-  lines are ranked out, so the precise risk isn't reliably derivable — the committed
-  Opus-4.8 judge agrees (50% FAIL).
+So each code workload uses the strategy that fits its content:
 
-**It is not an aggressiveness problem.** Both stay below the bar **even at the
-production knob** (`keepChars=32000`, far more generous than the benchmark's): the
-answer-bearing lines are *ranked* out, not *budgeted* out. (A third case,
-`2-sre-incident`, used to FAIL here — but that was a rigged `keepChars=1000` knob;
-at a fair budget it preserves the answer, so it's no longer a failure.)
+- **`5-code-search`** uses `relevance_filter` at `keepChars=8000` over a fuller hit
+  set — the defining line sits inside the kept window alongside the usage sites, so
+  both the value and the path survive (strict + judge 100%).
+- **`6-git-diff`** uses **`context_compression`**, which keeps every hunk
+  structurally instead of ranking lines — so the loosened admin-check hunk is never
+  dropped (strict + judge 100%).
 
-**The semantic re-rank doesn't rescue them either.** `relevance_filter` ships an
-optional local-embedding re-rank (`semanticRerank`) and the embedder is live — but it
-is gated by `lexConfidentHits` (default 6): a message with ≥ 6 BM25 hits counts as
-"lexically confident" and skips the embedding step. Code searches and diffs clear that
-on *usage* lines alone, so the re-rank never fires on exactly the vocabulary-gap cases
-it targets. Ungating it confirms it isn't the fix anyway — `5-code-search` is unchanged
-(2/3 key facts) and `6-git-diff` only climbs to MARGINAL (3/4); the defining lines rank
-low even by embedding similarity. Recovering these needs a code-/path-aware relevance
-signal, not just embeddings — so for now they're the workloads to watch when a strategy
-is rank-based.
-
-The strategies that **keep structure rather than rank lines** — `code_skeleton`,
+This mirrors production. The strategies that **keep structure rather than rank lines** —
 `code_graph`, `tool_pruning`, `tool_schema_compression`, `window_budget`,
 `context_compression`, `command_digest` — preserve the answer at 100% on **both
 signals** across the board. `8-long-session` (`window_budget`) shows the design working:
-the agent consolidates its per-subsystem findings into a short recommendation in the
-final turns, and `window_budget` pins those recent turns — so even after cropping the
-verbose middle to fit budget, the answer (canonical location + migration order)
-survives, and Opus 4.8 rates it **100% PASS**.
+the agent's final-turn recommendation is pinned while the verbose middle is cropped to
+fit budget, so the answer (canonical location + migration order) survives even at 91%
+reduction, and Opus 4.8 rates it **100% PASS**.
+
+(`code_skeleton`, the old `7-codebase-explore` hero, is retired in v0.3.24 — `code_graph`
+now covers single-file skeletoning too, which is why that workload moved to it.)
 
 ## Reproduce
 

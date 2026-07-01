@@ -27,7 +27,7 @@ From the two provider responses it records:
 
 | `qualityCheck` | Strategies | Test |
 |---|---|---|
-| `answer_judge` (default) | relevance_filter, context_compression, code_skeleton, code_graph, command_digest, window_budget, prompt_compression, tool_schema_compression, vision_ocr | An LLM judge (Opus) rules whether the optimized answer preserves the **baseline answer's** correctness/completeness on the task, using `keyfacts.json` as the rubric. PASS ≥ 90 & preserved · MARGINAL ≥ 75 · else FAIL. |
+| `answer_judge` (default) | relevance_filter, context_compression, code_graph, command_digest, window_budget, prompt_compression, tool_schema_compression, vision_ocr | An LLM judge (Opus) rules whether the optimized answer preserves the **baseline answer's** correctness/completeness on the task, using `keyfacts.json` as the rubric. PASS ≥ 90 & preserved · MARGINAL ≥ 75 · else FAIL. |
 | `tool_safety` | tool_pruning | `answer_judge` **and** no pruned tool was actually needed. |
 | `cache_hit` | semantic_cache | The 2nd identical request is served from cache (exact hit). |
 | `identical` | cache_optimizer | Lossless — the answer is byte-identical to baseline. |

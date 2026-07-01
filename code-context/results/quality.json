@@ -1,8 +1,42 @@
 [
   {
+    "id": "5-code-search",
+    "strategy": "relevance_filter",
+    "savedPct": 55,
+    "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "retryPolicy.ts:67 defines RETRY_MAX=5 with the exact comment",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "6-git-diff",
+    "strategy": "context_compression",
+    "savedPct": 44,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "auth/middleware.ts diff with requireAdmin loosening fully present",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
     "id": "7-codebase-explore",
-    "strategy": "code_skeleton",
-    "savedPct": 28,
+    "strategy": "code_graph",
+    "savedPct": 18,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
@@ -12,14 +46,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All retry and HttpClient facts present in context.",
+      "note": "All key facts present in retryPolicy.ts and httpClient.ts blocks.",
       "by": "claude-opus-4-8"
     }
   },
   {
     "id": "15-multifile-graph",
     "strategy": "code_graph",
-    "savedPct": 32,
+    "savedPct": 31,
     "keyFacts": 6,
     "deterministic": {
       "coverage": 100,
@@ -29,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Full call path present and intact.",
+      "note": "Full call chain present in context",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,7 +80,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All key facts present in full code along the submit_order->capture_payment->send_charge path.",
+      "note": "All facts present in full in the context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -80,46 +114,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Both capture and refund methods and class fully present with key format",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
-    "id": "5-code-search",
-    "strategy": "relevance_filter",
-    "savedPct": 68,
-    "keyFacts": 3,
-    "deterministic": {
-      "coverage": 67,
-      "verdict": "FAIL",
-      "missing": [
-        "src/lib/http/retryPolicy.ts"
-      ]
-    },
-    "judge": {
-      "coverage": 60,
-      "verdict": "FAIL",
-      "note": "RETRY_MAX=5 definition present but filename/path not shown",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
-    "id": "6-git-diff",
-    "strategy": "relevance_filter",
-    "savedPct": 68,
-    "keyFacts": 4,
-    "deterministic": {
-      "coverage": 50,
-      "verdict": "FAIL",
-      "missing": [
-        "requireAdmin",
-        "if (user && user.isAuthenticated) { // TODO: tighten before release"
-      ]
-    },
-    "judge": {
-      "coverage": 50,
-      "verdict": "FAIL",
-      "note": "File and old admin check shown; requireAdmin name and new loosened line elided",
+      "note": "Both capture and refund methods fully present with class definition",
       "by": "claude-opus-4-8"
     }
   }

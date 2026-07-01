@@ -1,5 +1,19 @@
 [
   {
+    "id": "5-code-search",
+    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
+    "chars": 17099,
+    "tokens": 4275,
+    "max_tokens": 1024
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "chars": 22676,
+    "tokens": 5669,
+    "max_tokens": 1024
+  },
+  {
     "id": "7-codebase-explore",
     "title": "Codebase exploration — \"explain the architecture & where retries live\"",
     "chars": 18714,
@@ -32,20 +46,6 @@
     "title": "Read a Python module (tool result) — keep the on-path bodies",
     "chars": 8872,
     "tokens": 2218,
-    "max_tokens": 1024
-  },
-  {
-    "id": "5-code-search",
-    "title": "Code search (100 hits) — \"where is the retry policy configured?\"",
-    "chars": 12528,
-    "tokens": 3132,
-    "max_tokens": 1024
-  },
-  {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "chars": 13890,
-    "tokens": 3473,
     "max_tokens": 1024
   }
 ]

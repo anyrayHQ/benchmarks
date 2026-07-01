@@ -3,18 +3,18 @@
     "id": "1-access-log",
     "title": "Access log (500 requests) — \"find the failing requests\"",
     "strategy": "relevance_filter",
-    "knob": "keepChars=6000, roles=user",
+    "knob": "keepChars=3000, roles=user",
     "tier": "accounting",
     "beforeChars": 104612,
-    "afterChars": 8148,
+    "afterChars": 4310,
     "beforeTok": 26153,
-    "afterTok": 2037,
-    "savedPct": 92,
+    "afterTok": 1078,
+    "savedPct": 96,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (104612->8148 chars, -92%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (104612->4310 chars, -96%); 1 stashed for retrieval"
     ]
   },
   {
@@ -33,6 +33,24 @@
     "fired": true,
     "decisions": [
       "relevance-filtered 1 message(s) against the live turn (105541->17304 chars, -84%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "33-synonym-gap-logs",
+    "title": "Synonym-gap logs — \"find the resource-exhaustion event\" (OOM/cgroup)",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7",
+    "tier": "accounting",
+    "beforeChars": 11850,
+    "afterChars": 4740,
+    "beforeTok": 2963,
+    "afterTok": 1185,
+    "savedPct": 60,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (11850->4740 chars, -60%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
     ]
   },
   {

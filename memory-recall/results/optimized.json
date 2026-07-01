@@ -3,7 +3,7 @@
     "id": "18-session-recall",
     "title": "Cross-session catch-up — \"catch me up on this branch\"",
     "strategy": "relevance_filter",
-    "knob": "keepChars=2500",
+    "knob": "keepChars=2500, roles=tool|function|user",
     "tier": "accounting",
     "beforeChars": 23581,
     "afterChars": 3466,

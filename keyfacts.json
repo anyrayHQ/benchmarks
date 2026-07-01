@@ -166,7 +166,7 @@
   },
   "27-read-service-ts": {
     "question": "How are capture and refund structured, and what idempotency key do they use?",
-    "_note": "code_skeleton keeps declaration signatures and collapses bodies — so the keyfacts are signature lines, which survive.",
+    "_note": "code_graph keeps declaration signatures and collapses bodies — so the keyfacts are signature lines, which survive.",
     "keyFacts": [
       "export class PaymentService",
       "async capture(amount: number, ctx: TxnContext): Promise<TxnResult>",
@@ -175,7 +175,7 @@
   },
   "28-read-module-py": {
     "question": "How do capture and refund work, and what is the idempotency key format?",
-    "_note": "code_skeleton keeps def signatures and collapses bodies — keyfacts are signature lines.",
+    "_note": "code_graph keeps def signatures and collapses bodies — keyfacts are signature lines.",
     "keyFacts": [
       "class PaymentService:",
       "def capture(self, amount, ctx):",
@@ -206,6 +206,26 @@
     "keyFacts": [
       "recon/cursor.ts advances the page cursor before the batch is acknowledged",
       "advance the cursor only after ack"
+    ]
+  },
+  "32-vocab-mismatch-rag": {
+    "question": "Folks keep experiencing involuntary disconnections — mid-workflow they get bounced to the authentication prompt. What mechanism forcibly revokes their ongoing credential?",
+    "_note": "Vocabulary mismatch: query says 'involuntary disconnections' / 'bounced', answer says 'session eviction' / 'concurrent_login_policy' / 'auth context invalidated'. BM25 < 6 hits, semantic re-rank fires.",
+    "keyFacts": [
+      "session eviction triggered by concurrent_login_policy",
+      "auth context invalidated",
+      "IdP SAML certificate rotation",
+      "max_concurrent_sessions=1"
+    ]
+  },
+  "33-synonym-gap-logs": {
+    "question": "Our monitoring flagged resource exhaustion and capacity saturation on one of the pods. Dig through these application logs and find what happened.",
+    "_note": "Synonym gap: query says 'resource exhaustion' / 'capacity saturation', answer says 'OOM killer' / 'heap exhaustion' / 'cgroup limit'. BM25 < 6 hits (1 hit on 'exhaustion'), semantic re-rank fires.",
+    "keyFacts": [
+      "OOMKilled event",
+      "heap exhaustion after 14 GC cycles",
+      "container cgroup limit 2Gi breached",
+      "checkout-service-7f8b9c"
     ]
   }
 }
