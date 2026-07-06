@@ -227,5 +227,93 @@
       "container cgroup limit 2Gi breached",
       "checkout-service-7f8b9c"
     ]
+  },
+  "34-repeat-reads": {
+    "question": "What is the exact root cause of the burst starvation in the checkout rate limiter, and which invariant should a regression test pin down?",
+    "_note": "The limiter file and git status each appear twice byte-identically; facts anchor on the FIRST copies, which context_dedupe must keep verbatim while collapsing the repeats.",
+    "keyFacts": [
+      "Math.floor(1000 / cfg.refillRatePerSec)",
+      "refillRatePerSec: 10",
+      "maxBurst: 40",
+      "\"checkout\": { \"rps\": 25",
+      "test/middleware/rateLimiter.burst.test.js",
+      "{ tokens: 1, updatedAtMs: 40 }"
+    ]
+  },
+  "35-flaky-test-rerun": {
+    "question": "Which payments test is actually flaky vs genuinely failing, what changed between the two runs, and which fixture likely causes the instability?",
+    "_note": "Run 2 is a near-duplicate of run 1; the flipped 'refund_idempotency PASSED' line is a CHANGED line and must survive inside the unified delta context_dedupe keeps.",
+    "keyFacts": [
+      "ConnectionResetError: [Errno 104] Connection reset by peer",
+      "refund_idempotency PASSED",
+      "expected 409, got 200 — replay window not enforced",
+      "pool_max_size=4",
+      "reruns = 2"
+    ]
+  },
+  "36-stale-observations": {
+    "question": "Summarize the root cause of the stuck orders-service v2.31.0 rollout and its current status; what remains before promoting to production?",
+    "_note": "The bulky helm/describe/pods dumps are maskable and carry no keyfacts by design; every fact lives in the error-bearing log slice (hard-kept by ERROR_RE) or the fresh last-3 turns.",
+    "keyFacts": [
+      "failed to bind :8080",
+      "CrashLoopBackOff",
+      "HTTP_PORT resolved to 8081",
+      "inbound listener moved to :15006",
+      "successfully rolled out",
+      "readyReplicas: 3",
+      "\"version\":\"v2.31.0\""
+    ]
+  },
+  "37-durable-blob": {
+    "question": "Which flagged dependency blocks commercial redistribution outright as deployed, and what should replace each of the three copyleft packages?",
+    "_note": "The 100 KB manifest blob is externalized wholesale behind a durable handle; facts deliberately live OUTSIDE it, in the license-scan output and the assistant summary.",
+    "keyFacts": [
+      "libfoo-native 2.4.1",
+      "pdf-render 1.9.0",
+      "geo-tiles 0.8.2",
+      "AGPL triggers on network use alone",
+      "312 packages"
+    ]
+  },
+  "38-anthropic-context-trim": {
+    "question": "Lay out the landscape refactor plan for the invoice PDF generator: what changes in usableHeight and the block builders, and which tests cover the rotated grid?",
+    "_note": "provider_context_trim is annotation-only. One fact per tool round, including the earliest — anything below 100% survival is a do-no-harm violation, not a quality trade.",
+    "keyFacts": [
+      "PAGE = { width: 595, height: 842, margin: 48 }",
+      "orientation === 'landscape' ? PAGE.width : PAGE.height",
+      "breaks pages between blocks, never inside a row",
+      "0 problems (0 errors, 0 warnings)",
+      "render.ts         94.1     88.2"
+    ]
+  },
+  "39-reasoning-downshift": {
+    "question": "Confirm the array.js migration is complete and behavior-preserving: which lodash calls were replaced with what, and which guarantees were preserved?",
+    "_note": "reasoning_budget only touches the reasoning-effort knob; message content is untouched, so 100% survival is the do-no-harm assertion.",
+    "keyFacts": [
+      "SameValueZero",
+      "Array.prototype.flat(Infinity)",
+      "Object.groupBy",
+      "6 hunks."
+    ]
+  },
+  "40-output-shaping": {
+    "question": "Report the ProfileCard to UserCard rename outcome: scope covered, files changed, and anything left to verify.",
+    "_note": "The '[anyray:output-guidance]' fact is ABSENT from the raw payload by design — it asserts the advisory actually fired; the other facts assert nothing else moved.",
+    "keyFacts": [
+      "[anyray:output-guidance]",
+      "Applied. 14 files changed.",
+      "web/src/features/mentions/HoverPreview.tsx",
+      "tsc --noEmit: clean"
+    ]
+  },
+  "42-semantic-rerank-rag": {
+    "question": "How do we lower our monthly cloud bill without hurting latency, according to the retrieved internal docs?",
+    "_note": "Third vocab-mismatch scenario: the 'Cloud bill anomaly alerts' doc is a lexical trap; the three answer docs (rightsizing, committed-use, egress) share almost no vocabulary with the question.",
+    "keyFacts": [
+      "rightsizing the c7g fleet saved 31%",
+      "p99 latency unchanged at 84ms",
+      "committed-use discounts",
+      "14,200 USD monthly"
+    ]
   }
 }

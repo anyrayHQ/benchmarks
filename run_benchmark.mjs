@@ -71,7 +71,10 @@ const SYNTHETIC_CACHE_RESPONSE = {
 async function measureOptimized(client, w, payload, cfg) {
   if (w.strategy === 'semantic_cache') return measureSemanticCacheHit(client, payload, cfg);
   await client.setStrategy(w.strategy, w.params ?? {});
-  const res = await client.optimize(payload, [w.strategy]);
+  const res = await client.optimize(payload, [w.strategy], {
+    endpoint: w.endpoint,
+    metadata: w.metadata,
+  });
   const afterReq = res.request ?? payload;
   const afterChars = sizeOf(afterReq);
   const decisions = (res.decisions ?? []).map((d) => d.summary ?? d.kind ?? String(d));

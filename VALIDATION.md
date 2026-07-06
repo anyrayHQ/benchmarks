@@ -32,7 +32,38 @@ From the two provider responses it records:
 | `cache_hit` | semantic_cache | The 2nd identical request is served from cache (exact hit). |
 | `identical` | cache_optimizer | Lossless — the answer is byte-identical to baseline. |
 | `truncation` | param_tuning | The clamped output is not cut mid-answer (`finish_reason`). |
-| `readonly` | context_quality | Read-only signal — reports the health metric, not an answer. |
+| `readonly` | context_quality, content_census | Read-only signal — reports the health metric / shape counters, not an answer. |
+
+The 2026-07-06 coverage expansion adds strategies whose checks lean on
+`keyfacts.json` in two inverted ways worth knowing when reading `quality.json`:
+
+- **Do-no-harm workloads** (38 `provider_context_trim`, 39 `reasoning_budget`,
+  40 `output_shaping`): the strategy must not touch message bytes, so anything
+  below **100%** deterministic key-fact survival is a failure of the strategy's
+  contract, not a savings/quality trade.
+- **Fired-assertion keyfact** (40): the `[anyray:output-guidance]` fact is absent
+  from the raw payload and only appears if the advisory was appended — a 0% on
+  that single fact means the strategy never fired, not that content was lost.
+
+## Environment prerequisites
+
+Two workloads exercise strategies that self-gate on deployment features; without
+them they no-op (an honest 0% row, not a failure):
+
+- **37-durable-blob (`output_externalize`)** needs the durable CCR tier:
+  `ANYRAY_CONTENT_KEY` set, content mode not `off`, and the spend DB reachable.
+- **42-semantic-rerank-rag (`relevance_filter` + `semanticRerank`)** needs the
+  optimizer's local embedder (MiniLM) available; without it the filter falls back
+  to lexical-only ranking and the lexical-trap doc wins.
+
+## Per-workload `endpoint` / `metadata` overrides
+
+Workload entries in `config.yaml` may set `endpoint` (e.g. `/v1/messages` for
+38 — `provider_context_trim` only fires on Anthropic's messages endpoint with a
+bare `claude-*` model) and `metadata` (e.g. a `sessionId` for 39 —
+`reasoning_budget` keys its per-session downshift state off it). Both are passed
+through by `run_benchmark.mjs` / `run_quality.mjs` on the `/v1/optimize` call and
+default to the shared endpoint / `{}` when absent.
 
 ## Verdicts
 

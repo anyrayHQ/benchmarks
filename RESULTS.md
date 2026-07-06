@@ -119,11 +119,39 @@ strategies are also **reversible** (every elided span is retrievable via
 `POST /v1/retrieve`) and **fail open** (a slow/down optimizer forwards the request
 unoptimized).
 
+## Coverage expansion (2026-07-06, pending first run)
+
+Nine workloads were added to close the gap against the optimizer's current
+registry — the July "trajectory diet" wave (RFC 0004) shipped seven strategies
+this repo had never exercised, several of them **on by default in production**.
+Payloads, config entries, and key facts are committed; the numbers land in the
+tables on the next `./run.sh` + `node run_quality.mjs --all`.
+
+| Workload | Suite | Strategy (new coverage) |
+|---|---|---|
+| 34-repeat-reads | agent-ops | `context_dedupe` (exact duplicates) |
+| 35-flaky-test-rerun | agent-ops | `context_dedupe` (near-dupe delta) |
+| 36-stale-observations | memory-recall | `observation_mask` |
+| 37-durable-blob | memory-recall | `output_externalize` |
+| 38-anthropic-context-trim | guardrails | `provider_context_trim` |
+| 39-reasoning-downshift | guardrails | `reasoning_budget` |
+| 40-output-shaping | guardrails | `output_shaping` |
+| 41-mixed-content-census | guardrails | `content_census` |
+| 42-semantic-rerank-rag | tools-and-rag | `relevance_filter` + `semanticRerank` |
+
+Two registry entries stay intentionally uncovered: `audited_holdout` (a read-only
+holdout-arm marker driven by the top-level holdout config, not the strategy
+pipeline — byte-identical by contract) and `code_skeleton` (retired, superseded by
+`code_graph` and mutually exclusive with it). Workloads 37 and 42 have environment
+prerequisites — see [VALIDATION.md](VALIDATION.md#environment-prerequisites).
+
 ## Roadmap
 
 - **Semantic relevance filter.** An embedding-based filter for the vocabulary-
   mismatch workloads where lexical BM25 ranks the answer lines out (see
-  [QUALITY.md](QUALITY.md#why-two-arent-green)).
+  [QUALITY.md](QUALITY.md#why-two-arent-green)). *Partially covered now:
+  workloads 32/33 carry `semanticRerank: true`, and new workload 42 adds a
+  lexical-trap scenario that BM25 alone gets wrong.*
 - **`--live-bill` mode in this repo.** Wire the gateway round-trip so the live tier
   is reproducible here, not just on the demo stack.
 - **Latency.** Record the hook's added latency per workload (it fails open past
