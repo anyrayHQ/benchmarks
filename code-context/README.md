@@ -13,13 +13,13 @@ pegs roughly **70% of a coding agent's tokens as irrelevant file reads**.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Code search (100 hits) — "where is the retry policy configured?" | `relevance_filter` | `keepChars=8000, roles=user` | 4,275 | 1,925 | **55%** |
-| Git diff — "any risky change in this PR?" | `context_compression` | `roles=user` | 5,669 | 3,160 | **44%** |
-| Codebase exploration — "explain the architecture & where retries live" | `code_graph` | `minChars=200, minBodyLines=2, roles=user` | 4,679 | 3,833 | **18%** |
-| Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,092 | 1,446 | **31%** |
-| Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,787 | 1,191 | **33%** |
-| Read a large TS service file (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,649 | 890 | **66%** |
-| Read a Python module (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,218 | 654 | **71%** |
+| Code search (100 hits) — "where is the retry policy configured?" | `relevance_filter` | `keepChars=8000, roles=user` | 4,275 | 1,912 | **55%** |
+| Git diff — "any risky change in this PR?" | `context_compression` | `roles=user` | 5,669 | 3,154 | **44%** |
+| Codebase exploration — "explain the architecture & where retries live" | `code_graph` | `minChars=200, minBodyLines=2, roles=user` | 4,679 | 3,820 | **18%** |
+| Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,166 | 1,515 | **30%** |
+| Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,863 | 1,258 | **32%** |
+| Read a large TS service file (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,689 | 927 | **66%** |
+| Read a Python module (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,249 | 682 | **70%** |
 
 ## How it works
 

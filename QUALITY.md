@@ -50,21 +50,21 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 | `5-code-search` | `relevance_filter` | 55% | 100% ✅ | 100% ✅ |
 | `6-git-diff` | `context_compression` | 44% | 100% ✅ | 100% ✅ |
 | `7-codebase-explore` | `code_graph` | 18% | 100% ✅ | 100% ✅ |
-| `15-multifile-graph` | `code_graph` | 31% | 100% ✅ | 100% ✅ |
-| `17-python-multifile` | `code_graph` | 33% | 100% ✅ | 100% ✅ |
+| `15-multifile-graph` | `code_graph` | 30% | 100% ✅ | 100% ✅ |
+| `17-python-multifile` | `code_graph` | 32% | 100% ✅ | 100% ✅ |
 | `27-read-service-ts` | `code_graph` | 66% | 100% ✅ | 100% ✅ |
-| `28-read-module-py` | `code_graph` | 71% | 100% ✅ | 100% ✅ |
+| `28-read-module-py` | `code_graph` | 70% | 100% ✅ | 100% ✅ |
 | `11-mcp-tools` | `tool_pruning` | 63% | 100% ✅ | 100% ✅ |
-| `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
-| `32-vocab-mismatch-rag` | `relevance_filter` | 71% | 100% ✅ | 100% ✅ |
+| `12-rag-overfetch` | `relevance_filter` | 68% | 100% ✅ | 100% ✅ |
+| `32-vocab-mismatch-rag` | `relevance_filter` | 69% | 100% ✅ | 100% ✅ |
 | `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
 | `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
 | `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
-| `8-long-session` | `window_budget` | 91% | 100% ✅ | 100% ✅ |
+| `8-long-session` | `window_budget` | 72% | 100% ✅ | 100% ✅ |
 | `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
 | `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
 | `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
-| `18-session-recall` | `relevance_filter` | 85% | 100% ✅ | 100% ✅ |
+| `18-session-recall` | `relevance_filter` | 83% | 100% ✅ | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
 `16-test-run`'s key facts are written in the digest's reformatted shape — its 100%
@@ -116,8 +116,10 @@ This mirrors production. The strategies that **keep structure rather than rank l
 `context_compression`, `command_digest` — preserve the answer at 100% on **both
 signals** across the board. `8-long-session` (`window_budget`) shows the design working:
 the agent's final-turn recommendation is pinned while the verbose middle is cropped to
-fit budget, so the answer (canonical location + migration order) survives even at 91%
-reduction, and Opus 4.8 rates it **100% PASS**.
+fit budget, so the answer (canonical location + migration order) survives at 72%
+reduction (knob re-tuned to `maxTokens=24000` after the 2026-07-08 audit — the earlier
+8k crop scored 91% savings but dropped answer-bearing turns), and Opus 4.8 rates it
+**100% PASS**.
 
 (`code_skeleton`, the old `7-codebase-explore` hero, is retired in v0.3.24 — `code_graph`
 now covers single-file skeletoning too, which is why that workload moved to it.)

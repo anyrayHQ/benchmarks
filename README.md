@@ -9,13 +9,13 @@
 this repo proves it, reproducibly, on the workloads developers and coding agents
 actually produce day-to-day, with the answer kept intact.
 
-> **Headline: 76% fewer input tokens across 24 real-world workloads (300k → 71k),
+> **Headline: 71% fewer input tokens across 24 real-world workloads (300k → 87k),
 > answer preserved in all 24 — every number reproducible against a running optimizer.**
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/savings-by-strategy.dark.svg" />
-    <img alt="Token savings by Anyray optimizer strategy — 76% overall across 24 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
+    <img alt="Token savings by Anyray optimizer strategy — 71% overall across 24 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
   </picture>
   <br />
   <sub>Regenerated from <code>results/</code> with <code>npm run charts</code> — no hand-edited numbers.</sub>
@@ -40,12 +40,12 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 159,992 | 40,085 | **75%** |
-| [`code-context/`](code-context/) | 7 | 23,369 | 13,099 | **44%** |
-| [`tools-and-rag/`](tools-and-rag/) | 5 | 16,781 | 5,624 | **66%** |
-| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 11,089 | **88%** |
-| [`memory-recall/`](memory-recall/) | 1 | 5,895 | 867 | **85%** |
-| **Total** | **24** | **299,535** | **70,764** | **76%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,091 | 40,157 | **75%** |
+| [`code-context/`](code-context/) | 7 | 23,590 | 13,268 | **44%** |
+| [`tools-and-rag/`](tools-and-rag/) | 5 | 16,847 | 5,685 | **66%** |
+| [`agent-ops/`](agent-ops/) | 5 | 93,498 | 26,944 | **71%** |
+| [`memory-recall/`](memory-recall/) | 1 | 5,961 | 1,014 | **83%** |
+| **Total** | **24** | **299,987** | **87,068** | **71%** |
 | [`guardrails/`](guardrails/) | 5 | *special accounting* | | *see suite* |
 
 The mix is **weighted to real coding-agent traffic** — the three largest strategies
@@ -70,7 +70,7 @@ from the payload, trimmed to width).
 … 497 more lines, almost all 200/404 noise …
 ```
 
-**After — 1,078 tok · 96% saved** · `relevance_filter` keeps the lines that answer it:
+**After — 1,074 tok · 96% saved** · `relevance_filter` keeps the lines that answer it:
 
 ```text
 203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout HTTP/1.1" 500 …
@@ -266,6 +266,13 @@ semantic pass.
 - **Doesn't (yet):** latency added by the hook (the optimizer fails open past
   `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
   guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
+
+## How do these strategies compare to the state of the art?
+
+See [**RESEARCH.md**](RESEARCH.md) — a survey of the research literature
+(LLMLingua, Provence/RECOMP, RAG-MCP, observation masking) and high-adoption
+open source (Aider, GPTCache, Mem0, TOON) mapped strategy-by-strategy against
+this suite, with a prioritized improve/add roadmap.
 
 ---
 
