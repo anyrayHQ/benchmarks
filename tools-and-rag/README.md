@@ -20,11 +20,11 @@ instruction block once per item — all billed every call.
 | Templated boilerplate — the same instructions re-pasted 40x | `prompt_compression` | `minChars=400` | 5,841 | 914 | **84%** |
 | MCP tool schemas — 41 verbose schemas, compress the prose not the set | `tool_schema_compression` | `collapseWhitespace=true, stripBoilerplate=true` | 1,612 | 1,504 | **7%** |
 
-### New workloads (pending first run)
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.7, lexConfidentHits=999` | — | — | — |
+| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999` | 942 | 627 | **33%** |
 
 A third vocabulary-mismatch scenario, this one with a deliberate **lexical trap**:
 a distractor doc titled "Cloud bill anomaly alerts" matches the question's wording

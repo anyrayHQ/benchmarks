@@ -21,18 +21,17 @@ the `param_tuning` case.
 | Claude prompt-cache prefix — stabilize the system+tools prefix | `cache_optimizer` | `minPrefixChars=4096` | cached-read reuse | tools sorted + `cache_control` injected (tools, system) |
 | Context health — flag a bloated, over-fetched context | `context_quality` | `bloatedToolChars=1500` | health score (read-only) | 69/100 (6 bloated, 2 duplicate) |
 
-### New workloads (pending first run)
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
 
 Four more strategies whose value is invisible to request-byte accounting — two
-save on the *output/provider* side, two must prove they change *nothing*. Results
-land on the next `./run.sh`.
+save on the *output/provider* side, two must prove they change *nothing*.
 
-| Workload | Strategy | Knob | Basis | Expected result |
+| Workload | Strategy | Knob | Basis | Result |
 |---|---|---|---|---|
-| Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-side clearing | `context_management` edit injected; message bytes untouched (100% key-fact survival) |
-| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking/output tokens | `reasoning_effort=low` added on the resume turn; content untouched |
-| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | one `[anyray:output-guidance]` tail note appended, nothing else moves |
-| Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; shape counters emitted |
+| Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-side clearing | `context_management` edit injected (est. 6,395 input tok, trigger 4,000); message bytes untouched, 100% key-fact survival |
+| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking/output tokens | `reasoning_effort=low` added on the resume turn; content untouched (100% key-fact survival) |
+| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | one `[anyray:output-guidance]` tail note appended (−9% request bytes); nothing else moved, judge PASS |
+| Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; 9 fresh tool outputs censused (json_array 35%, base64 15%, source_code ×2 13%, …) |
 
 ## Why these are special
 

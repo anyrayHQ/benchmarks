@@ -183,7 +183,10 @@ benchmarks:
         # the corpus (fresh tool results are never filtered), and lexConfidentHits is
         # pinned high: 13 bulk lines score >0 on BM25 here, which would otherwise trip
         # the ">=6 lexical hits -> skip embeddings" shortcut and leave semanticRerank inert.
-        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.7, lexConfidentHits: 999 }
+        # semanticWeight=0.85 (not the 0.7 of 32/33): this corpus is deliberately hostile
+        # to lexical signals, and at 0.7 the committed-use doc landed one rank below the
+        # keepChars=1500 cut (MiniLM blend 0.489 vs a ~0.493 keep line, first-run audit).
+        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.85, lexConfidentHits: 999 }
 
   agent-ops:
     title: "Agent operations"

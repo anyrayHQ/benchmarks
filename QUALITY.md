@@ -22,14 +22,16 @@ the answer.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 24 | 24 | 0 | 0 |
-| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 24 | 24 | 0 | 0 |
+| **Key-fact survival** (substring, strict — committed) | 32 | 32 | 0 | 0 |
+| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 32 | 31 | 1 | 0 |
 
-**All 24 preserve the answer in full** on the strict floor, and the Claude Opus 4.8
-judge **agrees** — **24 PASS · 0 MARGINAL · 0 FAIL**. Each workload runs against the
-deployed optimizer (v0.3.24) with its strategy matched to the content and settings
-tuned for strong savings while keeping every answer-bearing fact, then confirmed by
-the judge. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
+**All 32 preserve the answer in full** on the strict floor, and the Claude Opus 4.8
+judge confirms **31 PASS · 1 MARGINAL · 0 FAIL** — the one MARGINAL is a scope note
+on `37-durable-blob` (see ² under the table), not content loss. Each workload runs
+against the deployed optimizer (v0.3.24; the 2026-07-08 coverage-expansion rows
+34–42 against v0.3.41) with its strategy matched to the content and settings tuned
+for strong savings while keeping every answer-bearing fact, then confirmed by the
+judge. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
 strategies that suit them (see [Matching strategy to content](#matching-strategy-to-content)).
 Verdict bands: **PASS** ≥ 90% of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
 
@@ -57,6 +59,7 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 | `11-mcp-tools` | `tool_pruning` | 63% | 100% ✅ | 100% ✅ |
 | `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
 | `32-vocab-mismatch-rag` | `relevance_filter` | 71% | 100% ✅ | 100% ✅ |
+| `42-semantic-rerank-rag` | `relevance_filter` | 33% | 100% ✅ | 100% ✅ |
 | `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
 | `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
 | `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
@@ -64,7 +67,14 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 | `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
 | `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
 | `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
+| `34-repeat-reads` | `context_dedupe` | 37% | 100% ✅ | 100% ✅ |
+| `35-flaky-test-rerun` | `context_dedupe` | 37% | 100% ✅ | 100% ✅ |
 | `18-session-recall` | `relevance_filter` | 85% | 100% ✅ | 100% ✅ |
+| `36-stale-observations` | `observation_mask` | 84% | 100% ✅ | 100% ✅ |
+| `37-durable-blob` | `output_externalize` | 99% | 100% ✅ | 85% ⚠️² |
+| `38-anthropic-context-trim` | `provider_context_trim` | 0%³ | 100% ✅ | 100% ✅ |
+| `39-reasoning-downshift` | `reasoning_budget` | 0%³ | 100% ✅ | 100% ✅ |
+| `40-output-shaping` | `output_shaping` | −9%³ | 100% ✅ | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
 `16-test-run`'s key facts are written in the digest's reformatted shape — its 100%
@@ -72,6 +82,16 @@ therefore confirms the digest **round-trips** the failing tests + root causes, n
 that raw-log strings survive verbatim. `keyfacts.json` flags this with a `_note`.
 For every elide-only strategy the kept text is verbatim, so substring survival is
 exact.
+
+² All five of `37-durable-blob`'s key facts are present (strict 100%); the judge's
+MARGINAL notes that the workload's question also asks it to *derive* replacement
+suggestions that were never in the context — baseline included — so it flags scope,
+not content loss.
+
+³ Guardrail basis: 38 annotates for provider-side clearing without touching message
+bytes, 39's saving is output-side (thinking tokens), and 40 *spends* +9% request
+bytes on an advisory that pays back downstream — see the
+[guardrails suite README](guardrails/README.md).
 
 ## How it's measured
 

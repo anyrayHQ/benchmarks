@@ -20,16 +20,15 @@ input:output. The session only grows, so the bill compounds.
 | Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 587 | **25%** |
 | Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,509 | 2,207 | **37%** |
 
-### New workloads (pending first run)
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
 
 Two `context_dedupe` workloads cover the most common agent-loop waste of all —
-re-reading what was already read. Numbers land in this table on the next
-`./run.sh`; the payloads and key facts are committed.
+re-reading what was already read.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Repeated reads — the agent re-reads a file and re-runs `git status` | `context_dedupe` | (defaults) | — | — | — |
-| Flaky-suite re-run — near-duplicate pytest output collapses to a delta | `context_dedupe` | (defaults, `nearDupe`) | — | — | — |
+| Repeated reads — the agent re-reads a file and re-runs `git status` | `context_dedupe` | (defaults) | 1,793 | 1,123 | **37%** |
+| Flaky-suite re-run — near-duplicate pytest output collapses to a delta | `context_dedupe` | (defaults, `nearDupe`) | 4,989 | 3,143 | **37%** |
 
 ## How it works
 

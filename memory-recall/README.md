@@ -21,17 +21,18 @@ billed unless it's filtered to what the question actually touches.
 > `relevance_filter` and is rare in coding-agent traffic, so the suite was slimmed
 > from five near-identical workloads to one (see the README's traffic-weighting note).
 
-### New workloads (pending first run)
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
 
 These are **not** more of the slimmed shape. They cover the "trajectory diet"
 strategies (RFC 0004) where old context is *stashed behind a retrieval handle*
 rather than filtered — recall as a `/v1/retrieve` round-trip, which is this
-suite's actual subject. Numbers land on the next `./run.sh`.
+suite's actual subject. Both ran with the durable CCR tier available, so nothing
+self-gated to a no-op.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | — | — | — |
-| Durable externalization — a 100 KB manifest becomes a retrieval handle | `output_externalize` | needs the durable CCR tier | — | — | — |
+| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | 6,722 | 1,100 | **84%** |
+| Durable externalization — a 100 KB manifest becomes a retrieval handle | `output_externalize` | needs the durable CCR tier | 24,581 | 341 | **99%** |
 
 ## How it works
 

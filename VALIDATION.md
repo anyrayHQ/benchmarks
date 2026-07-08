@@ -47,7 +47,9 @@ The 2026-07-06 coverage expansion adds strategies whose checks lean on
 
 ## Environment prerequisites
 
-Two workloads depend on deployment features; read their rows accordingly:
+Two workloads depend on deployment features; read their rows accordingly. (The
+committed rows were produced with both available — durable CCR tier up and the
+MiniLM embedder warmed — so neither self-gated on the 2026-07-08 first run.)
 
 - **37-durable-blob (`output_externalize`)** needs the durable CCR tier:
   `ANYRAY_CONTENT_KEY` set, content mode not `off`, and the spend DB reachable.

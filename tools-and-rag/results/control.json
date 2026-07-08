@@ -33,5 +33,12 @@
     "chars": 6449,
     "tokens": 1612,
     "max_tokens": 1024
+  },
+  {
+    "id": "42-semantic-rerank-rag",
+    "title": "Cost-cutting synonyms RAG (14 docs) — \"lower the cloud bill\" vs \"infrastructure spend\"",
+    "chars": 3766,
+    "tokens": 942,
+    "max_tokens": 1024
   }
 ]
