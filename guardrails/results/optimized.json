@@ -124,7 +124,13 @@
     "fired": true,
     "decisions": [
       "injected Anthropic context_management for provider-side tool-result clearing (est 6395 input tokens, trigger 4000)"
-    ]
+    ],
+    "basis": {
+      "name": "provider_clearable_input_tokens",
+      "eligibleTok": 4994,
+      "ofTok": 5289,
+      "sharePct": 94
+    }
   },
   {
     "id": "39-reasoning-downshift",
@@ -142,7 +148,13 @@
     "fired": true,
     "decisions": [
       "downshifted anthropic thinking budget 24576 -> 8192 on routine tool-resume turn (2 assistant turn(s))"
-    ]
+    ],
+    "basis": {
+      "name": "thinking_budget_tokens",
+      "before": 24576,
+      "after": 8192,
+      "savedPct": 67
+    }
   },
   {
     "id": "40-output-shaping",

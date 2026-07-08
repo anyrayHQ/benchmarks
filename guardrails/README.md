@@ -28,9 +28,9 @@ save on the *output/provider* side, two must prove they change *nothing*.
 
 | Workload | Strategy | Knob | Basis | Result |
 |---|---|---|---|---|
-| Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-side clearing | `context_management` edit injected (est. 6,395 input tok, trigger 4,000); message bytes untouched, 100% key-fact survival |
-| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking/output tokens | `thinking.budget_tokens` capped 24576 → 8192 on the resume turn; content untouched (100% key-fact survival); live output delta pending (first attempt hit the subscription rate limit — rerun `run_live.mjs`) |
-| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | one `[anyray:output-guidance]` tail note appended (−7% request bytes); live: output tokens 265 → 201 (**−24%**), judge-PASS answer parity (`results/live-basis.json`) |
+| Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-clearable input | **4,994 of 5,289 input tok (94%)** of stale tool results marked for server-side clearing; message bytes untouched, 100% key-fact survival |
+| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking-token budget | capped **24,576 → 8,192 (−67%)** on the resume turn; content untouched, 100% key-fact survival |
+| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | **−24% live** (265 → 201, judge-PASS answer parity, `results/live-basis.json`) for +7% request bytes |
 | Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; 9 fresh tool outputs censused (json_array 35%, base64 15%, source_code ×2 13%, …) |
 
 ## Why these are special

@@ -191,6 +191,8 @@ async function runSuite(cfg, client, suite, only, limit) {
         fired: m.fired,
         decisions: m.decisions,
       };
+      const basis = w.tier === 'guardrail' ? guardrailBasis(w, payload, m.afterReq, cfg.charsPerToken) : null;
+      if (basis) row.basis = basis;
       optimized.push(row);
       save(optimizedPath, optimized);
       optimizedReqs[w.id] = m.afterReq;
@@ -213,6 +215,48 @@ function formatKnob(params) {
   return Object.entries(params)
     .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('|') : v}`)
     .join(', ');
+}
+
+// Guardrail strategies don't save request bytes — measure each on its own basis
+// so the row carries a real number instead of a misleading 0%.
+function guardrailBasis(w, before, after, charsPerToken) {
+  if (w.strategy === 'reasoning_budget') {
+    const b = before?.thinking?.budget_tokens;
+    const a = after?.thinking?.budget_tokens;
+    if (Number.isFinite(b) && Number.isFinite(a) && a < b) {
+      return {
+        name: 'thinking_budget_tokens',
+        before: b,
+        after: a,
+        savedPct: Math.round((1 - a / b) * 100),
+      };
+    }
+    return null;
+  }
+  if (w.strategy === 'provider_context_trim') {
+    if (!after?.context_management) return null;
+    // What the injected clear_tool_uses edit exposes: every tool_result except
+    // the freshest round (Anthropic keeps recent tool uses, clears from the top).
+    const msgs = Array.isArray(before?.messages) ? before.messages : [];
+    const toolResultChars = (msg) =>
+      Array.isArray(msg?.content)
+        ? msg.content
+            .filter((b) => b?.type === 'tool_result')
+            .reduce((s, b) => s + JSON.stringify(b.content ?? '').length, 0)
+        : 0;
+    const carriers = msgs.map((m, i) => ({ i, chars: toolResultChars(m) })).filter((x) => x.chars > 0);
+    if (carriers.length === 0) return null;
+    const stale = carriers.slice(0, -1).reduce((s, x) => s + x.chars, 0);
+    const eligibleTok = estTokens(stale, charsPerToken);
+    const totalTok = estTokens(sizeOf(before), charsPerToken);
+    return {
+      name: 'provider_clearable_input_tokens',
+      eligibleTok,
+      ofTok: totalTok,
+      sharePct: Math.round((eligibleTok / totalTok) * 100),
+    };
+  }
+  return null;
 }
 
 async function main() {
