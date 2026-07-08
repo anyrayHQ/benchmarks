@@ -51,9 +51,11 @@ The two pending workloads use a different mechanic — **stash, don't filter**:
 
 - **`observation_mask`** replaces tool observations older than `keepRecentTurns`
   assistant turns with a one-hop retrieval marker (the original stashed via CCR).
-  Error-bearing observations are hard-kept — in the payload, the log slice with
-  the bind failure stays inline while the bulky helm/describe/pods dumps mask —
-  so the root-cause facts survive deterministically without any retrieval.
+  Observations the provider flagged failed are hard-kept — the only flag the
+  strategy honors is `is_error: true` on an Anthropic `tool_result`, so the
+  payload is Claude-shaped and the log slice with the bind failure carries it,
+  staying inline while the bulky helm/describe/pods dumps mask — the root-cause
+  facts survive deterministically without any retrieval.
 - **`output_externalize`** goes further: a 100 KB manifest read is replaced
   wholesale by a compact, content-free handle and stashed in the **durable** tier
   (survives restarts, retrievable cross-replica). It self-gates on

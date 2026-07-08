@@ -207,7 +207,7 @@ async function runPerStrategy(cfg, opt, gw, live, suite, only, limit) {
         if (wl.strategy === 'semantic_cache') {
           return evalSemanticCache({ opt, gw, live, original, wl });
         }
-        const r = await opt.optimize(original, [wl.strategy]);
+        const r = await opt.optimize(original, [wl.strategy], { endpoint: wl.endpoint, metadata: wl.metadata });
         const optMetric = (r.decisions || []).find((d) => d.metric)?.metric ?? null;
         return evalOptimized({
           gw, live, original, transformed: r.request, optimizeMode: 'off', wl,
@@ -274,7 +274,7 @@ async function runSweep(cfg, opt, gw, live, suite, only, strategy) {
       const params = { ...(wl.params || {}), [spec.param]: v };
       try {
         const pt = await withIsolatedStrategy(opt, strategy, params, async () => {
-          const r = await opt.optimize(original, [strategy]);
+          const r = await opt.optimize(original, [strategy], { endpoint: wl.endpoint, metadata: wl.metadata });
           return evalOptimized({
             gw, live, original, transformed: r.request, optimizeMode: 'off', wl,
             keyFacts: kf[wl.id] || {},

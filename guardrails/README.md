@@ -100,10 +100,12 @@ land on the next `./run.sh`.
   win is measured downstream via the regression guard.
 
 - **`content_census` — sizing the *next* strategy, changing nothing.** It
-  classifies every context segment into shape classes (JSON array/object, unified
+  classifies fresh tool outputs — only segments after the last assistant turn;
+  re-sent history is excluded — into shape classes (JSON array/object, unified
   diff, grep output, build/test log, source code by family, HTML, base64, prose)
   and emits counters that size what a future strategy could address. The workload
-  routes one of each shape class through it; the pass must be byte-identical.
+  lands one of each shape class in a single parallel read round so all nine are
+  fresh at once; the pass must be byte-identical.
 
 ## Measurement
 

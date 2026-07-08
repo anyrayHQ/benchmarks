@@ -47,23 +47,26 @@ The 2026-07-06 coverage expansion adds strategies whose checks lean on
 
 ## Environment prerequisites
 
-Two workloads exercise strategies that self-gate on deployment features; without
-them they no-op (an honest 0% row, not a failure):
+Two workloads depend on deployment features; read their rows accordingly:
 
 - **37-durable-blob (`output_externalize`)** needs the durable CCR tier:
   `ANYRAY_CONTENT_KEY` set, content mode not `off`, and the spend DB reachable.
+  Without it the strategy self-gates and no-ops — an honest 0% row, not a failure.
 - **42-semantic-rerank-rag (`relevance_filter` + `semanticRerank`)** needs the
-  optimizer's local embedder (MiniLM) available; without it the filter falls back
-  to lexical-only ranking and the lexical-trap doc wins.
+  optimizer's local embedder (MiniLM). Without it the filter does **not** no-op:
+  it degrades to lexical-only ranking, the lexical-trap doc wins, and the row
+  scores a quality FAIL — which is the honest reading ("this workload needs the
+  semantic path"), not a harness bug.
 
 ## Per-workload `endpoint` / `metadata` overrides
 
-Workload entries in `config.yaml` may set `endpoint` (e.g. `/v1/messages` for
-38 — `provider_context_trim` only fires on Anthropic's messages endpoint with a
-bare `claude-*` model) and `metadata` (e.g. a `sessionId` for 39 —
-`reasoning_budget` keys its per-session downshift state off it). Both are passed
-through by `run_benchmark.mjs` / `run_quality.mjs` on the `/v1/optimize` call and
-default to the shared endpoint / `{}` when absent.
+Workload entries in `config.yaml` may set `endpoint` (`/v1/messages` for the
+Claude-shaped payloads 36 and 38; 38's `provider_context_trim` only fires on
+Anthropic's messages endpoint with a bare `claude-*` model) and `metadata` (e.g.
+a `sessionId` for 39 — `reasoning_budget` keys its per-session downshift state
+off it). Both are passed
+through by `run_benchmark.mjs` / `run_quality.mjs` / `run_live.mjs` on the
+`/v1/optimize` call and default to the shared endpoint / `{}` when absent.
 
 ## Verdicts
 

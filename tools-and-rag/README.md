@@ -24,13 +24,18 @@ instruction block once per item — all billed every call.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.7` | — | — | — |
+| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.7, lexConfidentHits=999` | — | — | — |
 
 A third vocabulary-mismatch scenario, this one with a deliberate **lexical trap**:
 a distractor doc titled "Cloud bill anomaly alerts" matches the question's wording
 almost perfectly while the three answer docs (rightsizing, committed-use discounts,
 egress fees) share almost no vocabulary with it. BM25 alone ranks the trap first;
-the semantic re-rank has to pull the answer docs back. Requires the optimizer's
+the semantic re-rank has to pull the answer docs back. Two knobs of the payload
+design keep the semantic path actually reachable: a resume turn follows the doc
+corpus (the filter never touches the current turn's fresh tool result), and
+`lexConfidentHits` is pinned high — 13 corpus lines get *some* BM25 score against
+the question, which would otherwise trip the "enough lexical hits → skip
+embeddings" shortcut and leave `semanticRerank` inert. Requires the optimizer's
 local embedder (MiniLM) — see `VALIDATION.md`.
 
 ## How it works

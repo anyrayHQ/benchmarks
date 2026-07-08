@@ -253,7 +253,7 @@
   },
   "36-stale-observations": {
     "question": "Summarize the root cause of the stuck orders-service v2.31.0 rollout and its current status; what remains before promoting to production?",
-    "_note": "The bulky helm/describe/pods dumps are maskable and carry no keyfacts by design; every fact lives in the error-bearing log slice (hard-kept by ERROR_RE) or the fresh last-3 turns.",
+    "_note": "The bulky helm/describe/pods dumps are maskable and no keyfact depends on them; every fact survives in the error-bearing log slice (an Anthropic tool_result flagged is_error: true — the only hard-keep observation_mask honors), an assistant turn (never maskable), or a tool result past the keepRecentTurns=3 cutoff.",
     "keyFacts": [
       "failed to bind :8080",
       "CrashLoopBackOff",

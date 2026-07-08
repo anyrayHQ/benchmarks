@@ -179,8 +179,11 @@ benchmarks:
         strategy: "relevance_filter"
         # Third vocab-mismatch scenario: the lexical trap doc ("Cloud bill anomaly alerts")
         # matches the query wording but not the intent; the answer docs (rightsizing /
-        # committed-use / egress) win only under semantic rerank.
-        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.7 }
+        # committed-use / egress) win only under semantic rerank. A resume turn follows
+        # the corpus (fresh tool results are never filtered), and lexConfidentHits is
+        # pinned high: 13 bulk lines score >0 on BM25 here, which would otherwise trip
+        # the ">=6 lexical hits -> skip embeddings" shortcut and leave semanticRerank inert.
+        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.7, lexConfidentHits: 999 }
 
   agent-ops:
     title: "Agent operations"
@@ -242,9 +245,11 @@ benchmarks:
       - id: "36-stale-observations"
         title: 'Stale trajectory — mask old bulky observations, keep errors and fresh turns'
         strategy: "observation_mask"
-        # Bulky helm/describe/pods dumps sit 4+ assistant turns back (past keepRecentTurns=3)
-        # and mask to retrieval markers; the error-bearing log slice is hard-kept (ERROR_RE),
-        # so the root-cause facts stay inline while ~60% of the trajectory externalizes.
+        # Bulky helm/describe/pods dumps sit past the keepRecentTurns=3 cutoff and mask to
+        # retrieval markers; the error log rides an Anthropic tool_result flagged
+        # is_error: true — the only hard-keep observation_mask honors — so the root-cause
+        # facts stay inline while the three stale dumps (~22.7 KB) externalize.
+        endpoint: "/v1/messages"
         params: {}
       - id: "37-durable-blob"
         title: 'Durable externalization — a 100 KB manifest becomes a retrieval handle'
@@ -328,7 +333,9 @@ benchmarks:
         title: 'Content census — nine shape classes through a read-only pass'
         strategy: "content_census"
         # Pure measurement: json_array, unified_diff, grep, build log, py/ts source, HTML,
-        # base64, prose in one session. The request must pass through byte-identical.
+        # base64, prose. The census counts only FRESH tool outputs (after the last
+        # assistant turn, monorepo #776), so all nine reads land in one parallel tool
+        # round. The request must pass through byte-identical.
         params: {}
         tier: "diagnostic"
         qualityCheck: readonly
