@@ -267,13 +267,6 @@ semantic pass.
   `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
   guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
 
-## How do these strategies compare to the state of the art?
-
-See [**RESEARCH.md**](RESEARCH.md) — a survey of the research literature
-(LLMLingua, Provence/RECOMP, RAG-MCP, observation masking) and high-adoption
-open source (Aider, GPTCache, Mem0, TOON) mapped strategy-by-strategy against
-this suite, with a prioritized improve/add roadmap.
-
 ---
 
 Built on the Anyray optimizer. Learn more at [anyray.ai](https://anyray.ai) ·
