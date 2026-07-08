@@ -36,6 +36,36 @@ test('textOf flattens both string and block-array message content', () => {
   assert.ok(t.includes('block'));
 });
 
+test('textOf decodes Anthropic tool_result blocks and top-level system verbatim', () => {
+  const req = {
+    system: 'sys-marker',
+    messages: [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'thinking' },
+          { type: 'tool_use', id: 'x', name: 'f', input: { a: 1 } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'x',
+            content: [{ type: 'text', text: '{"version":"v2.31.0"}' }],
+          },
+        ],
+      },
+    ],
+  };
+  const t = textOf(req);
+  assert.ok(t.includes('sys-marker'));
+  // a key fact with literal quotes must match unescaped, not via JSON.stringify
+  assert.ok(t.includes('{"version":"v2.31.0"}'));
+  assert.ok(t.includes('thinking'));
+});
+
 test('verdictFor bands: PASS >= 90%, MARGINAL >= 75%, else FAIL', () => {
   assert.equal(verdictFor(0.95), 'PASS');
   assert.equal(verdictFor(0.9), 'PASS');

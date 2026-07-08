@@ -83,5 +83,39 @@
       "note": "Both root cause and fix explicit in cursor.ts comments and summary",
       "by": "claude-opus-4-8"
     }
+  },
+  {
+    "id": "34-repeat-reads",
+    "strategy": "context_dedupe",
+    "savedPct": 37,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All six key facts appear verbatim in the context.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "35-flaky-test-rerun",
+    "strategy": "context_dedupe",
+    "savedPct": 37,
+    "keyFacts": 5,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All facts present: conn reset, refund PASSED on rerun, 409/200 assertion, pool_max_size=4, reruns=2",
+      "by": "claude-opus-4-8"
+    }
   }
 ]

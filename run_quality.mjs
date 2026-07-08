@@ -130,7 +130,10 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
       let optimizedReq = stashed[w.id];
       if (!optimizedReq) {
         await client.setStrategy(w.strategy, w.params ?? {});
-        const res = await client.optimize(payload, [w.strategy]);
+        const res = await client.optimize(payload, [w.strategy], {
+          endpoint: w.endpoint,
+          metadata: w.metadata,
+        });
         optimizedReq = res.request ?? payload;
       }
       const context = fullText(optimizedReq);

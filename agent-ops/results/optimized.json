@@ -88,5 +88,41 @@
     "decisions": [
       "cropped 4 message(s) to fit ~2500-token budget (est 3602->2299 tokens, -36%); 4 stashed for retrieval"
     ]
+  },
+  {
+    "id": "34-repeat-reads",
+    "title": "Repeated reads — the agent re-reads a file and re-runs git status",
+    "strategy": "context_dedupe",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "beforeChars": 7170,
+    "afterChars": 4490,
+    "beforeTok": 1793,
+    "afterTok": 1123,
+    "savedPct": 37,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "collapsed 2 duplicate tool output(s) (-2680 chars); first occurrence kept verbatim"
+    ]
+  },
+  {
+    "id": "35-flaky-test-rerun",
+    "title": "Flaky-suite re-run — near-duplicate pytest output collapses to a delta",
+    "strategy": "context_dedupe",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "beforeChars": 19956,
+    "afterChars": 12573,
+    "beforeTok": 4989,
+    "afterTok": 3143,
+    "savedPct": 37,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "delta-collapsed 1 near-duplicate tool output(s) (-7383 chars, 15 changed line(s) kept verbatim in-line); anchors kept verbatim"
+    ]
   }
 ]

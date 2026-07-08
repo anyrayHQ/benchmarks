@@ -88,5 +88,23 @@
     "decisions": [
       "compressed 10 tool schemas, −435 chars of definition text"
     ]
+  },
+  {
+    "id": "42-semantic-rerank-rag",
+    "title": "Cost-cutting synonyms RAG (14 docs) — \"lower the cloud bill\" vs \"infrastructure spend\"",
+    "strategy": "relevance_filter",
+    "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999",
+    "tier": "accounting",
+    "beforeChars": 3766,
+    "afterChars": 2506,
+    "beforeTok": 942,
+    "afterTok": 627,
+    "savedPct": 33,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "relevance-filtered 1 message(s) against the live turn (3473->2213 chars, -36%); 1 stashed for retrieval; semantic re-rank: 1 msg, 41 lines embedded"
+    ]
   }
 ]

@@ -227,5 +227,93 @@
       "container cgroup limit 2Gi breached",
       "checkout-service-7f8b9c"
     ]
+  },
+  "34-repeat-reads": {
+    "question": "What is the exact root cause of the burst starvation in the checkout rate limiter, and which invariant should a regression test pin down?",
+    "_note": "The limiter file and git status each appear twice byte-identically; facts anchor on the FIRST copies, which context_dedupe must keep verbatim while collapsing the repeats.",
+    "keyFacts": [
+      "Math.floor(1000 / cfg.refillRatePerSec)",
+      "refillRatePerSec: 10",
+      "maxBurst: 40",
+      "\"checkout\": { \"rps\": 25",
+      "test/middleware/rateLimiter.burst.test.js",
+      "{ tokens: 1, updatedAtMs: 40 }"
+    ]
+  },
+  "35-flaky-test-rerun": {
+    "question": "Which payments test is actually flaky vs genuinely failing, what changed between the two runs, and which fixture likely causes the instability?",
+    "_note": "Run 2 is a near-duplicate of run 1; the flipped 'refund_idempotency PASSED' line is a CHANGED line and must survive inside the unified delta context_dedupe keeps.",
+    "keyFacts": [
+      "ConnectionResetError: [Errno 104] Connection reset by peer",
+      "refund_idempotency PASSED",
+      "expected 409, got 200 — replay window not enforced",
+      "pool_max_size=4",
+      "reruns = 2"
+    ]
+  },
+  "36-stale-observations": {
+    "question": "Summarize the root cause of the stuck orders-service v2.31.0 rollout and its current status; what remains before promoting to production?",
+    "_note": "The bulky helm/describe/pods dumps are maskable and no keyfact depends on them; every fact survives in the error-bearing log slice (an Anthropic tool_result flagged is_error: true — the only hard-keep observation_mask honors), an assistant turn (never maskable), or a tool result past the keepRecentTurns=3 cutoff.",
+    "keyFacts": [
+      "failed to bind :8080",
+      "CrashLoopBackOff",
+      "HTTP_PORT resolved to 8081",
+      "inbound listener moved to :15006",
+      "successfully rolled out",
+      "readyReplicas: 3",
+      "\"version\":\"v2.31.0\""
+    ]
+  },
+  "37-durable-blob": {
+    "question": "Which flagged dependency blocks commercial redistribution outright as deployed, and what should replace each of the three copyleft packages?",
+    "_note": "The 100 KB manifest blob is externalized wholesale behind a durable handle; facts deliberately live OUTSIDE it, in the license-scan output and the assistant summary.",
+    "keyFacts": [
+      "libfoo-native 2.4.1",
+      "pdf-render 1.9.0",
+      "geo-tiles 0.8.2",
+      "AGPL triggers on network use alone",
+      "312 packages"
+    ]
+  },
+  "38-anthropic-context-trim": {
+    "question": "Lay out the landscape refactor plan for the invoice PDF generator: what changes in usableHeight and the block builders, and which tests cover the rotated grid?",
+    "_note": "provider_context_trim is annotation-only. One fact per tool round, including the earliest — anything below 100% survival is a do-no-harm violation, not a quality trade.",
+    "keyFacts": [
+      "PAGE = { width: 595, height: 842, margin: 48 }",
+      "orientation === 'landscape' ? PAGE.width : PAGE.height",
+      "breaks pages between blocks, never inside a row",
+      "0 problems (0 errors, 0 warnings)",
+      "render.ts         94.1     88.2"
+    ]
+  },
+  "39-reasoning-downshift": {
+    "question": "Where does the orders-api canary rollout stand and what protections are active?",
+    "_note": "reasoning_budget only caps the thinking budget knob; message content is untouched, so 100% survival is the do-no-harm assertion. The saving is output-side (thinking tokens), measured live in guardrails/results/live-basis.json.",
+    "keyFacts": [
+      "orders-api 5% -> 25%",
+      "ro_8842",
+      "auto-rollback on p99>350ms or 5xx>0.8%",
+      "next checkpoint in 30m"
+    ]
+  },
+  "40-output-shaping": {
+    "question": "What changed in the checkout service config, and was anything else touched?",
+    "_note": "The '[anyray:output-guidance]' fact is ABSENT from the raw payload by design — it asserts the advisory actually fired; the other facts assert nothing else moved. The payload deliberately tempts the model to re-print the 114-line config; the win is output-side, measured live in guardrails/results/live-basis.json.",
+    "keyFacts": [
+      "[anyray:output-guidance]",
+      "services/checkout/config.yaml",
+      "max_retries: 3 -> 5",
+      "1 line changed"
+    ]
+  },
+  "42-semantic-rerank-rag": {
+    "question": "How do we lower our monthly cloud bill without hurting latency, according to the retrieved internal docs?",
+    "_note": "Third vocab-mismatch scenario: the 'Cloud bill anomaly alerts' doc is a lexical trap; the three answer docs (rightsizing, committed-use, egress) share almost no vocabulary with the question.",
+    "keyFacts": [
+      "rightsizing the c7g fleet saved 31%",
+      "p99 latency unchanged at 84ms",
+      "committed-use discounts",
+      "14,200 USD monthly"
+    ]
   }
 }

@@ -38,7 +38,11 @@ live:
   # claude-opus-4-8 is the real production hero — ~74% of deployed traffic.
   model: "claude-opus-4-8"
   judge_model: "claude-opus-4-8"
-  temperature: 0
+  # temperature is deliberately unset: claude-opus-4-8 rejects the param outright
+  # ("deprecated for this model"); set live.temperature only for models that take it.
+  # Live model calls get their own ceiling — an extended-thinking baseline (workload
+  # 39 carries budget_tokens=24576) can legitimately run minutes, unlike the hook.
+  timeout_ms: 300000
 
 # Verdict thresholds (lib/verdict.mjs): a strategy is WORKING if median real saved >=
 # minSavedPct with no quality FAIL (MARGINAL within allowMarginal); TUNE if a sweep knob
@@ -174,6 +178,19 @@ benchmarks:
         strategy: "tool_schema_compression"
         params: { collapseWhitespace: true, stripBoilerplate: true }
         qualityCheck: tool_calls
+      - id: "42-semantic-rerank-rag"
+        title: 'Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend"'
+        strategy: "relevance_filter"
+        # Third vocab-mismatch scenario: the lexical trap doc ("Cloud bill anomaly alerts")
+        # matches the query wording but not the intent; the answer docs (rightsizing /
+        # committed-use / egress) win only under semantic rerank. A resume turn follows
+        # the corpus (fresh tool results are never filtered), and lexConfidentHits is
+        # pinned high: 13 bulk lines score >0 on BM25 here, which would otherwise trip
+        # the ">=6 lexical hits -> skip embeddings" shortcut and leave semanticRerank inert.
+        # semanticWeight=0.85 (not the 0.7 of 32/33): this corpus is deliberately hostile
+        # to lexical signals, and at 0.7 the committed-use doc landed one rank below the
+        # keepChars=1500 cut (MiniLM blend 0.489 vs a ~0.493 keep line, first-run audit).
+        params: { keepChars: 1500, roles: ["tool", "function", "user"], semanticRerank: true, semanticWeight: 0.85, lexConfidentHits: 999 }
 
   agent-ops:
     title: "Agent operations"
@@ -204,6 +221,19 @@ benchmarks:
         title: "Long tool-call session — fit a 10-file investigation in budget"
         strategy: "window_budget"
         params: { maxTokens: 2500 }
+      - id: "34-repeat-reads"
+        title: 'Repeated reads — the agent re-reads a file and re-runs git status'
+        strategy: "context_dedupe"
+        # Byte-identical re-reads sit BEFORE the keepRecentTurns=2 pin (the dup pair is
+        # turns 3-4 of 6), so the later copies collapse to pointers at the first copy.
+        params: {}
+      - id: "35-flaky-test-rerun"
+        title: 'Flaky-suite re-run — near-duplicate pytest output collapses to a delta'
+        strategy: "context_dedupe"
+        # Run 2 differs from run 1 in ~6 of ~120 lines (one failure flips to PASSED,
+        # seed/durations change): nearDupe keeps a unified delta against the run-1 anchor,
+        # and the flipped PASSED line must survive inside that delta.
+        params: {}
 
   memory-recall:
     title: "Cross-session memory recall"
@@ -219,6 +249,23 @@ benchmarks:
         # The recalled store rides in a tool message, so roles must include tool/function
         # for the filter to fire on v0.3.24 (roles=user alone is a no-op here).
         params: { keepChars: 2500, roles: ["tool", "function", "user"] }
+      - id: "36-stale-observations"
+        title: 'Stale trajectory — mask old bulky observations, keep errors and fresh turns'
+        strategy: "observation_mask"
+        # Bulky helm/describe/pods dumps sit past the keepRecentTurns=3 cutoff and mask to
+        # retrieval markers; the error log rides an Anthropic tool_result flagged
+        # is_error: true — the only hard-keep observation_mask honors — so the root-cause
+        # facts stay inline while the three stale dumps (~22.7 KB) externalize.
+        endpoint: "/v1/messages"
+        params: {}
+      - id: "37-durable-blob"
+        title: 'Durable externalization — a 100 KB manifest becomes a retrieval handle'
+        strategy: "output_externalize"
+        # Requires the durable CCR tier (content key + content mode != off + spend DB) —
+        # the strategy self-gates and no-ops without it (see VALIDATION.md). Key facts live
+        # OUTSIDE the blob (scan output + assistant summary), which is the point: the blob
+        # is wholesale-externalized behind a handle, not summarized.
+        params: {}
 
   guardrails:
     title: "Guardrails (special accounting)"
@@ -259,5 +306,48 @@ benchmarks:
         title: "Context health score — flag a bloated, over-fetched context"
         strategy: "context_quality"
         params: { bloatedToolChars: 1500 }
+        tier: "diagnostic"
+        qualityCheck: readonly
+      - id: "38-anthropic-context-trim"
+        title: 'Provider context trim — Anthropic clear_tool_uses annotation, content untouched'
+        strategy: "provider_context_trim"
+        # Annotation-only: fires on bare claude-* models on /v1/messages past triggerTokens,
+        # injecting the native context_management edit. Message bytes must be unchanged —
+        # key facts from the EARLIEST tool rounds must survive at 100%.
+        endpoint: "/v1/messages"
+        params: { triggerTokens: 4000, clearAtLeastTokens: 500 }
+        tier: "guardrail"
+        qualityCheck: answer_judge
+      - id: "39-reasoning-downshift"
+        title: 'Reasoning downshift — routine tool-resume turn on a reasoning model'
+        strategy: "reasoning_budget"
+        # Anthropic lane: a Claude resume turn (2 assistant turns, ends on a clean tool
+        # result) carrying a client-wide thinking budget of 24576 gets capped to the
+        # default anthropicBudgetCap (8192). Needs a session key in metadata to fire.
+        # Savings are output-side (thinking tokens), invisible to request-byte
+        # accounting — measured live via run_live.mjs (guardrails/results/live.json).
+        endpoint: "/v1/messages"
+        metadata: { sessionId: "bench-39-reasoning-downshift" }
+        params: {}
+        tier: "guardrail"
+        qualityCheck: answer_judge
+      - id: "40-output-shaping"
+        title: 'Output shaping — concise-output advisory appended on a resume turn'
+        strategy: "output_shaping"
+        # Tail-append only: the "[anyray:output-guidance]" keyfact asserts the advisory
+        # fired; the content keyfacts assert nothing else moved. The payload creates
+        # re-print pressure (a 114-line config with a 1-line change) so the advisory has
+        # real output to save — measured live via run_live.mjs (guardrails/results/live.json).
+        params: {}
+        tier: "guardrail"
+        qualityCheck: answer_judge
+      - id: "41-mixed-content-census"
+        title: 'Content census — nine shape classes through a read-only pass'
+        strategy: "content_census"
+        # Pure measurement: json_array, unified_diff, grep, build log, py/ts source, HTML,
+        # base64, prose. The census counts only FRESH tool outputs (after the last
+        # assistant turn, monorepo #776), so all nine reads land in one parallel tool
+        # round. The request must pass through byte-identical.
+        params: {}
         tier: "diagnostic"
         qualityCheck: readonly

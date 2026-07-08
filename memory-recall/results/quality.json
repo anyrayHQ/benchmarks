@@ -15,5 +15,39 @@
       "note": "All payments-retry facts present in context.",
       "by": "claude-opus-4-8"
     }
+  },
+  {
+    "id": "37-durable-blob",
+    "strategy": "output_externalize",
+    "savedPct": 99,
+    "keyFacts": 5,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 85,
+      "verdict": "MARGINAL",
+      "note": "All packages, AGPL trigger, and 312 count present; replacement suggestions not in context but question asks judge to derive.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "36-stale-observations",
+    "strategy": "observation_mask",
+    "savedPct": 84,
+    "keyFacts": 7,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All key facts present in logs and rollout output.",
+      "by": "claude-opus-4-8"
+    }
   }
 ]

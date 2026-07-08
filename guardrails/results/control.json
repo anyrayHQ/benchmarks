@@ -33,5 +33,33 @@
     "chars": 10821,
     "tokens": 2705,
     "max_tokens": 1024
+  },
+  {
+    "id": "41-mixed-content-census",
+    "title": "Content census — nine shape classes through a read-only pass",
+    "chars": 7874,
+    "tokens": 1969,
+    "max_tokens": 1024
+  },
+  {
+    "id": "38-anthropic-context-trim",
+    "title": "Provider context trim — Anthropic clear_tool_uses annotation, content untouched",
+    "chars": 21155,
+    "tokens": 5289,
+    "max_tokens": 1024
+  },
+  {
+    "id": "39-reasoning-downshift",
+    "title": "Reasoning downshift — routine tool-resume turn on a reasoning model",
+    "chars": 2056,
+    "tokens": 514,
+    "max_tokens": 32000
+  },
+  {
+    "id": "40-output-shaping",
+    "title": "Output shaping — concise-output advisory appended on a resume turn",
+    "chars": 2542,
+    "tokens": 636,
+    "max_tokens": 4096
   }
 ]

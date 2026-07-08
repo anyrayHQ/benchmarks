@@ -20,6 +20,16 @@ input:output. The session only grows, so the bill compounds.
 | Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 587 | **25%** |
 | Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,509 | 2,207 | **37%** |
 
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
+
+Two `context_dedupe` workloads cover the most common agent-loop waste of all —
+re-reading what was already read.
+
+| Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
+|---|---|---|--:|--:|--:|
+| Repeated reads — the agent re-reads a file and re-runs `git status` | `context_dedupe` | (defaults) | 1,793 | 1,123 | **37%** |
+| Flaky-suite re-run — near-duplicate pytest output collapses to a delta | `context_dedupe` | (defaults, `nearDupe`) | 4,989 | 3,143 | **37%** |
+
 ## How it works
 
 - **`relevance_filter`** keeps the issues matching the triage query (the P0 auth
@@ -30,6 +40,13 @@ input:output. The session only grows, so the bill compounds.
   lost. Two shapes are covered: a 60-turn prose session, and an **agentic
   tool-call session** (assistant `tool_calls` + linked `tool` results) where the
   answer sits in the pinned final turn and the early investigation is cropped.
+- **`context_dedupe`** collapses repeated tool outputs to a pointer at the first
+  copy. Agent loops re-run the same reads — a file re-read "to check", `git status`
+  after every step, a suite re-run to confirm flakiness — and each redundant copy
+  re-bills the same bytes every remaining turn. Byte-identical repeats collapse
+  outright; a near-identical repeat (the flaky re-run) keeps only a unified diff of
+  the changed lines against the first copy, so the flipped `PASSED` line survives
+  while the ~94% unchanged lines don't re-bill.
 - **`command_digest`** recognizes a test-runner's output shape (pytest/jest/…)
   from the text alone and keeps the failure blocks (signature + traceback, capped
   at `maxFailures`) plus the count summary, dropping the passing lines and the

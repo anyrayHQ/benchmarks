@@ -21,6 +21,18 @@ the `param_tuning` case.
 | Claude prompt-cache prefix — stabilize the system+tools prefix | `cache_optimizer` | `minPrefixChars=4096` | cached-read reuse | tools sorted + `cache_control` injected (tools, system) |
 | Context health — flag a bloated, over-fetched context | `context_quality` | `bloatedToolChars=1500` | health score (read-only) | 69/100 (6 bloated, 2 duplicate) |
 
+### New workloads (first run 2026-07-08, optimizer v0.3.41)
+
+Four more strategies whose value is invisible to request-byte accounting — two
+save on the *output/provider* side, two must prove they change *nothing*.
+
+| Workload | Strategy | Knob | Basis | Result |
+|---|---|---|---|---|
+| Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-clearable input | **4,994 of 5,289 input tok (94%)** of stale tool results marked for server-side clearing; message bytes untouched, 100% key-fact survival |
+| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking-token budget | capped **24,576 → 8,192 (−67%)** on the resume turn; content untouched, 100% key-fact survival |
+| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | **−24% live** (265 → 201, judge-PASS answer parity, `results/live-basis.json`) for +7% request bytes |
+| Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; 9 fresh tool outputs censused (json_array 35%, base64 15%, source_code ×2 13%, …) |
+
 ## Why these are special
 
 - **`semantic_cache` — the saving is a *call*, not a trim.** The benefit is that
@@ -62,6 +74,38 @@ the `param_tuning` case.
   emits a 0–100 score on the decision's `metric` field; the request is returned
   unchanged (0% saved by design). The workload feeds it a deliberately over-fetched
   context (two docs fetched twice) and it scores **69/100**, flagging the bloat.
+
+- **`provider_context_trim` — the provider does the clearing, Anyray only labels.**
+  On metered bare-`claude-*` traffic past `triggerTokens` it injects Anthropic's
+  native `context_management` `clear_tool_uses` edit; Anthropic then clears aged
+  tool results before billing. The gateway never reads or rewrites message bytes —
+  which is exactly what the workload asserts: key facts from the *earliest* tool
+  rounds must survive at **100%**. Anything less is a do-no-harm violation, not a
+  quality trade. Fires only on the `/v1/messages` endpoint (the workload carries
+  an `endpoint` override).
+
+- **`reasoning_budget` — the saving is thinking tokens on the *next* response.**
+  On a routine tool-resume turn (≥2 assistant turns, ends on a clean tool result,
+  no new user question) it downshifts reasoning effort — here the Anthropic lane
+  caps a client-wide `thinking.budget_tokens` of 24576 to the default 8192 on a
+  `claude-opus-4-8` request. Message bytes are untouched; the saving is the
+  thinking the model no longer burns re-deriving context it already has. Needs a
+  session key in the optimize metadata (the workload sets one).
+
+- **`output_shaping` — a nudge, not a transform.** On the same routine-resume
+  shape it appends one sentinel-guarded advisory steering the model away from
+  re-printing unchanged files. The `[anyray:output-guidance]` key fact asserts the
+  advisory actually fired (it is absent from the raw payload); the remaining key
+  facts assert nothing else moved. Reports $0 estimated savings by design — the
+  win is measured downstream via the regression guard.
+
+- **`content_census` — sizing the *next* strategy, changing nothing.** It
+  classifies fresh tool outputs — only segments after the last assistant turn;
+  re-sent history is excluded — into shape classes (JSON array/object, unified
+  diff, grep output, build/test log, source code by family, HTML, base64, prose)
+  and emits counters that size what a future strategy could address. The workload
+  lands one of each shape class in a single parallel read round so all nine are
+  fresh at once; the pass must be byte-identical.
 
 ## Measurement
 

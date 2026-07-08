@@ -33,5 +33,19 @@
     "chars": 14036,
     "tokens": 3509,
     "max_tokens": 1024
+  },
+  {
+    "id": "34-repeat-reads",
+    "title": "Repeated reads — the agent re-reads a file and re-runs git status",
+    "chars": 7170,
+    "tokens": 1793,
+    "max_tokens": 1024
+  },
+  {
+    "id": "35-flaky-test-rerun",
+    "title": "Flaky-suite re-run — near-duplicate pytest output collapses to a delta",
+    "chars": 19956,
+    "tokens": 4989,
+    "max_tokens": 1024
   }
 ]

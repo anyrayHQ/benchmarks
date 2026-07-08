@@ -83,5 +83,22 @@
       "note": "All tool names and task preserved in context",
       "by": "claude-opus-4-8"
     }
+  },
+  {
+    "id": "42-semantic-rerank-rag",
+    "strategy": "relevance_filter",
+    "savedPct": 33,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All four facts present in context.",
+      "by": "claude-opus-4-8"
+    }
   }
 ]
