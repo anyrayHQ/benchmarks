@@ -2,7 +2,7 @@
   {
     "id": "18-session-recall",
     "strategy": "relevance_filter",
-    "savedPct": 85,
+    "savedPct": 83,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,

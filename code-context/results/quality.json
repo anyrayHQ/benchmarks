@@ -12,7 +12,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "retryPolicy.ts:67 defines RETRY_MAX=5 with the exact comment",
+      "note": "retryPolicy.ts:67 with RETRY_MAX=5 and comment present",
       "by": "claude-opus-4-8"
     }
   },
@@ -29,7 +29,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "auth/middleware.ts diff with requireAdmin loosening fully present",
+      "note": "auth/middleware.ts diff fully present with role check removed",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,31 +46,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All key facts present in retryPolicy.ts and httpClient.ts blocks.",
+      "note": "All facts present in retryPolicy.ts and httpClient.ts sections",
       "by": "claude-opus-4-8"
     }
   },
   {
     "id": "15-multifile-graph",
     "strategy": "code_graph",
-    "savedPct": 31,
-    "keyFacts": 6,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Full call chain present in context",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
-    "id": "17-python-multifile",
-    "strategy": "code_graph",
-    "savedPct": 33,
+    "savedPct": 30,
     "keyFacts": 6,
     "deterministic": {
       "coverage": 100,
@@ -81,6 +64,23 @@
       "coverage": 100,
       "verdict": "PASS",
       "note": "All facts present in full in the context.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "17-python-multifile",
+    "strategy": "code_graph",
+    "savedPct": 32,
+    "keyFacts": 6,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Full call path present in context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -97,14 +97,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All signatures and idempotency keys present in context",
+      "note": "Both methods and class fully present with idempotency keys",
       "by": "claude-opus-4-8"
     }
   },
   {
     "id": "28-read-module-py",
     "strategy": "code_graph",
-    "savedPct": 71,
+    "savedPct": 70,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
@@ -114,7 +114,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Both capture and refund methods fully present with class definition",
+      "note": "Full capture and refund methods and key format present",
       "by": "claude-opus-4-8"
     }
   }

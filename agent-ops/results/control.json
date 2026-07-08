@@ -7,13 +7,6 @@
     "max_tokens": 1024
   },
   {
-    "id": "8-long-session",
-    "title": "Long agent session — keep a 60-message session inside the window",
-    "chars": 328438,
-    "tokens": 82110,
-    "max_tokens": 1024
-  },
-  {
     "id": "16-test-run",
     "title": "Test-suite output — \"which tests failed and why?\"",
     "chars": 6060,
@@ -32,6 +25,13 @@
     "title": "Long tool-call session — fit a 10-file investigation in budget",
     "chars": 14036,
     "tokens": 3509,
+    "max_tokens": 1024
+  },
+  {
+    "id": "8-long-session",
+    "title": "Long agent session — keep a 60-message session inside the window",
+    "chars": 328438,
+    "tokens": 82110,
     "max_tokens": 1024
   }
 ]

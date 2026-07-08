@@ -12,24 +12,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All three issue numbers and their P0 auth labels present.",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
-    "id": "8-long-session",
-    "strategy": "window_budget",
-    "savedPct": 91,
-    "keyFacts": 2,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Final consolidation states both retryPolicy location and orders→billing→inventory order",
+      "note": "All three P0 auth issues with titles and labels present",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,7 +29,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All three failing tests and their root causes present.",
+      "note": "All three failures and their causes present.",
       "by": "claude-opus-4-8"
     }
   },
@@ -63,7 +46,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All key facts explicitly present in context.",
+      "note": "All facts explicitly stated in context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -80,7 +63,24 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Both root cause and fix explicit in cursor.ts comments and summary",
+      "note": "Both root cause and fix explicit in cursor.ts context",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "8-long-session",
+    "strategy": "window_budget",
+    "savedPct": 72,
+    "keyFacts": 2,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "Consolidated recommendation explicitly states both facts.",
       "by": "claude-opus-4-8"
     }
   }

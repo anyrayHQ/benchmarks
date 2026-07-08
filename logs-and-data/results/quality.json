@@ -10,9 +10,9 @@
       "missing": []
     },
     "judge": {
-      "coverage": 100,
+      "coverage": 95,
       "verdict": "PASS",
-      "note": "All key facts present: POST /api/checkout 500s, time window 10:24:30-10:29:10, IP 203.0.113.21 visible",
+      "note": "All facts present; total 500 count derivable from many but some elided lines may hide exact count.",
       "by": "claude-opus-4-8"
     }
   },
@@ -29,7 +29,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present in the 10:05:00.100Z error log line.",
+      "note": "All facts present in 10:05:00.100Z error log line",
       "by": "claude-opus-4-8"
     }
   },
@@ -46,7 +46,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All key facts present in checkout-service logs",
+      "note": "All four key facts present in checkout-service logs.",
       "by": "claude-opus-4-8"
     }
   },
@@ -63,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All failure codes and failed order ids present in context.",
+      "note": "All failed statuses and failure_codes present in visible context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -80,7 +80,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Both failed orders with their failure codes present in context",
+      "note": "Both failed orders and their codes present in context",
       "by": "claude-opus-4-8"
     }
   },
@@ -97,7 +97,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "Spike point p99:4200, errors:512 present in context",
+      "note": "Spike point p99:4200 errors:512 present at T17:00Z",
       "by": "claude-opus-4-8"
     }
   }

@@ -24,9 +24,9 @@
     "knob": "imageTokenEstimate=1000",
     "tier": "vision",
     "beforeChars": 54354,
-    "afterChars": 790,
+    "afterChars": 789,
     "beforeTok": 13589,
-    "afterTok": 198,
+    "afterTok": 197,
     "savedPct": 99,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
@@ -69,7 +69,7 @@
     "fired": true,
     "decisions": [
       "reordered 3 tools by name for cache stability",
-      "injected 2 cache_control breakpoint(s): tools, system"
+      "injected 2 cache_control breakpoint(s): tools, system (model floor 1024 tok/sonnet-3-5)"
     ]
   },
   {

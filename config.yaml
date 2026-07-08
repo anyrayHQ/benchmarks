@@ -189,9 +189,10 @@ benchmarks:
       - id: "8-long-session"
         title: "Long agent session — keep a 60-message session inside the window"
         strategy: "window_budget"
-        # maxTokens=8000 keeps the leading turn + the recent turns that hold the final
-        # recommendation; swept to 91% with both answer facts intact on v0.3.24.
-        params: { maxTokens: 8000 }
+        # maxTokens=8000 swept to 91% on v0.3.24 but FAILED the live judge on
+        # v0.3.41 (2026-07-08 audit): the crop dropped answer-bearing turns.
+        # 24000 (next sweep knob) keeps both facts and still saves ~75%.
+        params: { maxTokens: 24000 }
       - id: "16-test-run"
         title: 'Test-suite output — "which tests failed and why?"'
         strategy: "command_digest"

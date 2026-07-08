@@ -5,16 +5,16 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2500, roles=tool|function|user",
     "tier": "accounting",
-    "beforeChars": 23581,
-    "afterChars": 3466,
-    "beforeTok": 5895,
-    "afterTok": 867,
-    "savedPct": 85,
+    "beforeChars": 23842,
+    "afterChars": 4057,
+    "beforeTok": 5961,
+    "afterTok": 1014,
+    "savedPct": 83,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (23413->3298 chars, -86%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (23413->3628 chars, -85%); 1 stashed for retrieval"
     ]
   }
 ]

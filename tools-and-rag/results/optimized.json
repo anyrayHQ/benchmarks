@@ -24,15 +24,15 @@
     "knob": "keepChars=1200, roles=user",
     "tier": "accounting",
     "beforeChars": 5990,
-    "afterChars": 1948,
+    "afterChars": 1934,
     "beforeTok": 1498,
-    "afterTok": 487,
-    "savedPct": 67,
+    "afterTok": 484,
+    "savedPct": 68,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (5990->1948 chars, -67%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (5990->1934 chars, -68%); 1 stashed for retrieval"
     ]
   },
   {
@@ -41,16 +41,16 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
-    "beforeChars": 8864,
-    "afterChars": 2571,
-    "beforeTok": 2216,
-    "afterTok": 643,
-    "savedPct": 71,
+    "beforeChars": 9128,
+    "afterChars": 2827,
+    "beforeTok": 2282,
+    "afterTok": 707,
+    "savedPct": 69,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (8662->2369 chars, -73%); 1 stashed for retrieval; semantic re-rank: 1 msg, 59 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (8662->2361 chars, -73%); 1 stashed for retrieval; semantic re-rank: 1 msg, 59 lines embedded"
     ]
   },
   {

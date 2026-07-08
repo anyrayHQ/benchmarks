@@ -6,15 +6,15 @@
     "knob": "keepChars=3000, roles=user",
     "tier": "accounting",
     "beforeChars": 104612,
-    "afterChars": 4310,
+    "afterChars": 4297,
     "beforeTok": 26153,
-    "afterTok": 1078,
+    "afterTok": 1074,
     "savedPct": 96,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (104612->4310 chars, -96%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (104612->4297 chars, -96%); 1 stashed for retrieval"
     ]
   },
   {
@@ -24,15 +24,15 @@
     "knob": "keepChars=12000, roles=user",
     "tier": "accounting",
     "beforeChars": 105541,
-    "afterChars": 17304,
+    "afterChars": 17234,
     "beforeTok": 26385,
-    "afterTok": 4326,
+    "afterTok": 4309,
     "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (105541->17304 chars, -84%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (105541->17234 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +42,15 @@
     "knob": "keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
     "beforeChars": 11850,
-    "afterChars": 4740,
+    "afterChars": 4718,
     "beforeTok": 2963,
-    "afterTok": 1185,
+    "afterTok": 1180,
     "savedPct": 60,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (11850->4740 chars, -60%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (11850->4718 chars, -60%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
     ]
   },
   {
@@ -60,15 +60,15 @@
     "knob": "roles=user",
     "tier": "accounting",
     "beforeChars": 297840,
-    "afterChars": 64051,
+    "afterChars": 64049,
     "beforeTok": 74460,
-    "afterTok": 16013,
+    "afterTok": 16012,
     "savedPct": 78,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 text) 297840->64051 chars (-78%); 1 stashed for retrieval"
+      "compressed 1 tool output(s) (1 text) 297840->64049 chars (-78%); 1 stashed for retrieval"
     ]
   },
   {
@@ -77,10 +77,10 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "beforeChars": 71759,
-    "afterChars": 41743,
-    "beforeTok": 17940,
-    "afterTok": 10436,
+    "beforeChars": 71957,
+    "afterChars": 41941,
+    "beforeTok": 17989,
+    "afterTok": 10485,
     "savedPct": 42,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
@@ -95,10 +95,10 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "beforeChars": 48363,
-    "afterChars": 28187,
-    "beforeTok": 12091,
-    "afterTok": 7047,
+    "beforeChars": 48562,
+    "afterChars": 28386,
+    "beforeTok": 12141,
+    "afterTok": 7097,
     "savedPct": 42,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,

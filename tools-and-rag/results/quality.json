@@ -12,14 +12,14 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present including tools and PAY P0 bug search.",
+      "note": "All facts present in context and tool defs",
       "by": "claude-opus-4-8"
     }
   },
   {
     "id": "12-rag-overfetch",
     "strategy": "relevance_filter",
-    "savedPct": 67,
+    "savedPct": 68,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -36,7 +36,7 @@
   {
     "id": "32-vocab-mismatch-rag",
     "strategy": "relevance_filter",
-    "savedPct": 71,
+    "savedPct": 69,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -46,7 +46,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present in context.",
+      "note": "All four key facts present verbatim in context",
       "by": "claude-opus-4-8"
     }
   },
@@ -63,7 +63,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All five tickets present in context",
+      "note": "All five tickets present in context.",
       "by": "claude-opus-4-8"
     }
   },
@@ -80,7 +80,7 @@
     "judge": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All tool names and task preserved in context",
+      "note": "All tools and task present in context",
       "by": "claude-opus-4-8"
     }
   }
