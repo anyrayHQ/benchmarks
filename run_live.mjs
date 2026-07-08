@@ -70,6 +70,8 @@ function qualityLabel({ checkKind, judged, check }) {
 
 /** Apply the deterministic temperature override so baseline/optimized are comparable. */
 function withTemp(req, live) {
+  // Anthropic rejects temperature overrides when extended thinking is enabled.
+  if (req.thinking) return req;
   return live.temperature != null ? { ...req, temperature: live.temperature } : req;
 }
 
@@ -81,13 +83,20 @@ function withTemp(req, live) {
  *            since the gateway's optimize:off path emits no decisions header.
  */
 async function evalOptimized({ gw, live, original, transformed, optimizeMode, wl, keyFacts, optMetric = null }) {
-  const baseline = await gw.execute(withTemp(original, live), { optimize: 'off', model: live.model });
+  const endpoint = wl.endpoint;
+  const baseline = await gw.execute(withTemp(original, live), { optimize: 'off', model: live.model, endpoint });
   const optimized =
     optimizeMode === 'on'
-      ? await gw.execute(withTemp(original, live), { optimize: 'on', model: live.model })
-      : await gw.execute(withTemp(transformed, live), { optimize: 'off', model: live.model });
+      ? await gw.execute(withTemp(original, live), { optimize: 'on', model: live.model, endpoint })
+      : await gw.execute(withTemp(transformed, live), { optimize: 'off', model: live.model, endpoint });
 
   const realSaved = savedPct(baseline.usage.prompt_tokens ?? 0, optimized.usage.prompt_tokens ?? 0);
+  // Output-side basis for the guardrail strategies (reasoning_budget, output_shaping):
+  // completion tokens include provider-billed thinking tokens on the messages route.
+  const outputSaved =
+    baseline.usage.completion_tokens != null && optimized.usage.completion_tokens != null
+      ? savedPct(baseline.usage.completion_tokens, optimized.usage.completion_tokens)
+      : null;
   const checkKind = wl.qualityCheck || 'answer_judge';
 
   let judged = null;
@@ -118,6 +127,9 @@ async function evalOptimized({ gw, live, original, transformed, optimizeMode, wl
     baselineTokens: baseline.usage.prompt_tokens ?? null,
     optimizedTokens: optimized.usage.prompt_tokens ?? null,
     realSavedPct: realSaved,
+    baselineOutputTokens: baseline.usage.completion_tokens ?? null,
+    optimizedOutputTokens: optimized.usage.completion_tokens ?? null,
+    outputSavedPct: outputSaved,
     quality,
     judge: judged
       ? {
@@ -219,6 +231,21 @@ async function runPerStrategy(cfg, opt, gw, live, suite, only, limit) {
       out.push({ id: wl.id, strategy: wl.strategy, error: e.message });
     }
     writeResults(cfg.root, suite, 'live.json', out);
+    // Committed, redacted twin of live.json: the provider-usage basis the guardrail
+    // strategies are judged on (no answer text — that stays in the private file).
+    writeResults(cfg.root, suite, 'live-basis.json', out.map((r) =>
+      r.error
+        ? { id: r.id, strategy: r.strategy, error: r.error }
+        : {
+            id: r.id, strategy: r.strategy,
+            baselineTokens: r.baselineTokens, optimizedTokens: r.optimizedTokens,
+            realSavedPct: r.realSavedPct,
+            baselineOutputTokens: r.baselineOutputTokens,
+            optimizedOutputTokens: r.optimizedOutputTokens,
+            outputSavedPct: r.outputSavedPct,
+            quality: r.quality?.verdict ?? r.quality ?? null,
+          }
+    ));
     logRow(`${suite}/${wl.id}`, out.at(-1));
   }
 }

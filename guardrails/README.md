@@ -29,8 +29,8 @@ save on the *output/provider* side, two must prove they change *nothing*.
 | Workload | Strategy | Knob | Basis | Result |
 |---|---|---|---|---|
 | Provider context trim — Anthropic `clear_tool_uses` annotation | `provider_context_trim` | `triggerTokens=4000`, `/v1/messages` | provider-side clearing | `context_management` edit injected (est. 6,395 input tok, trigger 4,000); message bytes untouched, 100% key-fact survival |
-| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking/output tokens | `reasoning_effort=low` added on the resume turn; content untouched (100% key-fact survival) |
-| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | one `[anyray:output-guidance]` tail note appended (−9% request bytes); nothing else moved, judge PASS |
+| Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking/output tokens | `thinking.budget_tokens` capped 24576 → 8192 on the resume turn; content untouched (100% key-fact survival); live output delta pending (first attempt hit the subscription rate limit — rerun `run_live.mjs`) |
+| Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | one `[anyray:output-guidance]` tail note appended (−7% request bytes); live: output tokens 265 → 201 (**−24%**), judge-PASS answer parity (`results/live-basis.json`) |
 | Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; 9 fresh tool outputs censused (json_array 35%, base64 15%, source_code ×2 13%, …) |
 
 ## Why these are special
@@ -86,10 +86,11 @@ save on the *output/provider* side, two must prove they change *nothing*.
 
 - **`reasoning_budget` — the saving is thinking tokens on the *next* response.**
   On a routine tool-resume turn (≥2 assistant turns, ends on a clean tool result,
-  no new user question) it downshifts reasoning effort — here the OpenAI lane adds
-  `reasoning_effort: low` to a `gpt-5-codex` request. Request bytes *grow* slightly;
-  the saving is the reasoning the model no longer burns re-deriving context it
-  already has. Needs a session key in the optimize metadata (the workload sets one).
+  no new user question) it downshifts reasoning effort — here the Anthropic lane
+  caps a client-wide `thinking.budget_tokens` of 24576 to the default 8192 on a
+  `claude-opus-4-8` request. Message bytes are untouched; the saving is the
+  thinking the model no longer burns re-deriving context it already has. Needs a
+  session key in the optimize metadata (the workload sets one).
 
 - **`output_shaping` — a nudge, not a transform.** On the same routine-resume
   shape it appends one sentinel-guarded advisory steering the model away from

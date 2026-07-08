@@ -38,7 +38,11 @@ live:
   # claude-opus-4-8 is the real production hero — ~74% of deployed traffic.
   model: "claude-opus-4-8"
   judge_model: "claude-opus-4-8"
-  temperature: 0
+  # temperature is deliberately unset: claude-opus-4-8 rejects the param outright
+  # ("deprecated for this model"); set live.temperature only for models that take it.
+  # Live model calls get their own ceiling — an extended-thinking baseline (workload
+  # 39 carries budget_tokens=24576) can legitimately run minutes, unlike the hook.
+  timeout_ms: 300000
 
 # Verdict thresholds (lib/verdict.mjs): a strategy is WORKING if median real saved >=
 # minSavedPct with no quality FAIL (MARGINAL within allowMarginal); TUNE if a sweep knob
@@ -317,9 +321,12 @@ benchmarks:
       - id: "39-reasoning-downshift"
         title: 'Reasoning downshift — routine tool-resume turn on a reasoning model'
         strategy: "reasoning_budget"
-        # OpenAI lane: a gpt-5-codex resume turn (2 assistant turns, ends on a clean tool
-        # result) gains reasoning_effort=low. Needs a session key in metadata to fire.
-        # Savings are output-side (thinking tokens), invisible to request-byte accounting.
+        # Anthropic lane: a Claude resume turn (2 assistant turns, ends on a clean tool
+        # result) carrying a client-wide thinking budget of 24576 gets capped to the
+        # default anthropicBudgetCap (8192). Needs a session key in metadata to fire.
+        # Savings are output-side (thinking tokens), invisible to request-byte
+        # accounting — measured live via run_live.mjs (guardrails/results/live.json).
+        endpoint: "/v1/messages"
         metadata: { sessionId: "bench-39-reasoning-downshift" }
         params: {}
         tier: "guardrail"
@@ -328,7 +335,9 @@ benchmarks:
         title: 'Output shaping — concise-output advisory appended on a resume turn'
         strategy: "output_shaping"
         # Tail-append only: the "[anyray:output-guidance]" keyfact asserts the advisory
-        # fired; the content keyfacts assert nothing else moved. Output-side savings.
+        # fired; the content keyfacts assert nothing else moved. The payload creates
+        # re-print pressure (a 114-line config with a 1-line change) so the advisory has
+        # real output to save — measured live via run_live.mjs (guardrails/results/live.json).
         params: {}
         tier: "guardrail"
         qualityCheck: answer_judge

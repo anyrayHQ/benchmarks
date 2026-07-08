@@ -1,39 +1,5 @@
 [
   {
-    "id": "39-reasoning-downshift",
-    "strategy": "reasoning_budget",
-    "savedPct": 0,
-    "keyFacts": 4,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All key facts present in context.",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
-    "id": "40-output-shaping",
-    "strategy": "output_shaping",
-    "savedPct": -9,
-    "keyFacts": 4,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present including guidance tag, file count, HoverPreview path, and clean tsc.",
-      "by": "claude-opus-4-8"
-    }
-  },
-  {
     "id": "38-anthropic-context-trim",
     "strategy": "provider_context_trim",
     "savedPct": 0,
@@ -47,6 +13,40 @@
       "coverage": 100,
       "verdict": "PASS",
       "note": "All facts present verbatim in context.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "39-reasoning-downshift",
+    "strategy": "reasoning_budget",
+    "savedPct": 0,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All facts present in tool result.",
+      "by": "claude-opus-4-8"
+    }
+  },
+  {
+    "id": "40-output-shaping",
+    "strategy": "output_shaping",
+    "savedPct": -7,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    },
+    "judge": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "note": "All facts present in context including guidance tag and diff details",
       "by": "claude-opus-4-8"
     }
   }

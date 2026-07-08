@@ -63,10 +63,13 @@ MiniLM embedder warmed — so neither self-gated on the 2026-07-08 first run.)
 ## Per-workload `endpoint` / `metadata` overrides
 
 Workload entries in `config.yaml` may set `endpoint` (`/v1/messages` for the
-Claude-shaped payloads 36 and 38; 38's `provider_context_trim` only fires on
-Anthropic's messages endpoint with a bare `claude-*` model) and `metadata` (e.g.
-a `sessionId` for 39 — `reasoning_budget` keys its per-session downshift state
-off it). Both are passed
+Claude-shaped payloads 36, 38 and 39; 38's `provider_context_trim` only fires on
+Anthropic's messages endpoint with a bare `claude-*` model, and 39's extended
+`thinking` field only exists on that route) and `metadata` (e.g. a `sessionId`
+for 39 — `reasoning_budget` keys its per-session downshift state off it). The
+endpoint also drives live execution: `run_live.mjs` runs those workloads through
+the gateway's native messages route and records **output tokens** per arm, which
+is the basis the output-side guardrail strategies (39, 40) are judged on. Both are passed
 through by `run_benchmark.mjs` / `run_quality.mjs` / `run_live.mjs` on the
 `/v1/optimize` call and default to the shared endpoint / `{}` when absent.
 

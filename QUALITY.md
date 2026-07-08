@@ -74,7 +74,7 @@ strict substring survival; `judge` is the committed Claude Opus 4.8 semantic ver
 | `37-durable-blob` | `output_externalize` | 99% | 100% ✅ | 85% ⚠️² |
 | `38-anthropic-context-trim` | `provider_context_trim` | 0%³ | 100% ✅ | 100% ✅ |
 | `39-reasoning-downshift` | `reasoning_budget` | 0%³ | 100% ✅ | 100% ✅ |
-| `40-output-shaping` | `output_shaping` | −9%³ | 100% ✅ | 100% ✅ |
+| `40-output-shaping` | `output_shaping` | −7%³ | 100% ✅ | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
 `16-test-run`'s key facts are written in the digest's reformatted shape — its 100%
@@ -89,8 +89,9 @@ suggestions that were never in the context — baseline included — so it flags
 not content loss.
 
 ³ Guardrail basis: 38 annotates for provider-side clearing without touching message
-bytes, 39's saving is output-side (thinking tokens), and 40 *spends* +9% request
-bytes on an advisory that pays back downstream — see the
+bytes, 39's saving is output-side (thinking tokens), and 40 *spends* +7% request
+bytes on an advisory that pays back downstream — measured live for 40 at −24%
+output tokens with judge-PASS answer parity. See the
 [guardrails suite README](guardrails/README.md).
 
 ## How it's measured

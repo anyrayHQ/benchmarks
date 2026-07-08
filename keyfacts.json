@@ -287,23 +287,23 @@
     ]
   },
   "39-reasoning-downshift": {
-    "question": "Confirm the array.js migration is complete and behavior-preserving: which lodash calls were replaced with what, and which guarantees were preserved?",
-    "_note": "reasoning_budget only touches the reasoning-effort knob; message content is untouched, so 100% survival is the do-no-harm assertion.",
+    "question": "Where does the orders-api canary rollout stand and what protections are active?",
+    "_note": "reasoning_budget only caps the thinking budget knob; message content is untouched, so 100% survival is the do-no-harm assertion. The saving is output-side (thinking tokens), measured live in guardrails/results/live-basis.json.",
     "keyFacts": [
-      "SameValueZero",
-      "Array.prototype.flat(Infinity)",
-      "Object.groupBy",
-      "6 hunks."
+      "orders-api 5% -> 25%",
+      "ro_8842",
+      "auto-rollback on p99>350ms or 5xx>0.8%",
+      "next checkpoint in 30m"
     ]
   },
   "40-output-shaping": {
-    "question": "Report the ProfileCard to UserCard rename outcome: scope covered, files changed, and anything left to verify.",
-    "_note": "The '[anyray:output-guidance]' fact is ABSENT from the raw payload by design — it asserts the advisory actually fired; the other facts assert nothing else moved.",
+    "question": "What changed in the checkout service config, and was anything else touched?",
+    "_note": "The '[anyray:output-guidance]' fact is ABSENT from the raw payload by design — it asserts the advisory actually fired; the other facts assert nothing else moved. The payload deliberately tempts the model to re-print the 114-line config; the win is output-side, measured live in guardrails/results/live-basis.json.",
     "keyFacts": [
       "[anyray:output-guidance]",
-      "Applied. 14 files changed.",
-      "web/src/features/mentions/HoverPreview.tsx",
-      "tsc --noEmit: clean"
+      "services/checkout/config.yaml",
+      "max_retries: 3 -> 5",
+      "1 line changed"
     ]
   },
   "42-semantic-rerank-rag": {

@@ -35,20 +35,6 @@
     "max_tokens": 1024
   },
   {
-    "id": "39-reasoning-downshift",
-    "title": "Reasoning downshift — routine tool-resume turn on a reasoning model",
-    "chars": 1763,
-    "tokens": 441,
-    "max_tokens": 2048
-  },
-  {
-    "id": "40-output-shaping",
-    "title": "Output shaping — concise-output advisory appended on a resume turn",
-    "chars": 2185,
-    "tokens": 546,
-    "max_tokens": 2048
-  },
-  {
     "id": "41-mixed-content-census",
     "title": "Content census — nine shape classes through a read-only pass",
     "chars": 7874,
@@ -61,5 +47,19 @@
     "chars": 21155,
     "tokens": 5289,
     "max_tokens": 1024
+  },
+  {
+    "id": "39-reasoning-downshift",
+    "title": "Reasoning downshift — routine tool-resume turn on a reasoning model",
+    "chars": 2056,
+    "tokens": 514,
+    "max_tokens": 32000
+  },
+  {
+    "id": "40-output-shaping",
+    "title": "Output shaping — concise-output advisory appended on a resume turn",
+    "chars": 2542,
+    "tokens": 636,
+    "max_tokens": 4096
   }
 ]

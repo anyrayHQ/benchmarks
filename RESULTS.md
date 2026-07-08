@@ -84,8 +84,8 @@ Reported on their own basis — see [`guardrails/README.md`](guardrails/README.m
 | 4 | Claude prompt-cache prefix | `cache_optimizer` | tools sorted + `cache_control` breakpoints injected on tools+system (cached-read reuse on `claude-*`) |
 | 5 | Bloated, over-fetched context | `context_quality` | read-only health score **69/100** (6 bloated, 2 duplicate tool outputs) |
 | 6 | Provider context trim (Anthropic) | `provider_context_trim` | native `context_management` edit injected for provider-side tool-result clearing (est. 6,395 input tokens, trigger 4,000) — message bytes unchanged, 100% key-fact survival |
-| 7 | Reasoning downshift | `reasoning_budget` | `reasoning_effort=low` set on a routine tool-resume turn — the saving is output-side (thinking tokens), invisible to request-byte accounting |
-| 8 | Output shaping | `output_shaping` | one `[anyray:output-guidance]` advisory appended (−9% on request bytes by design) — the win is measured downstream via the regression guard |
+| 7 | Reasoning downshift | `reasoning_budget` | `thinking.budget_tokens` capped 24576 → 8192 on a routine tool-resume turn — the saving is output-side (thinking tokens); live delta lands in `guardrails/results/live-basis.json` |
+| 8 | Output shaping | `output_shaping` | one `[anyray:output-guidance]` advisory appended (−7% request bytes by design) — measured live: output tokens 265 → 201 (**−24%**) with judge-PASS answer parity |
 | 9 | Mixed-content census | `content_census` | read-only census of the 9 fresh tool outputs (~2,290 tok): json_array 35%, base64 15%, source_code ×2 13%, … — request byte-identical |
 
 ## Live-bill cross-check
@@ -150,7 +150,7 @@ guardrail-tier rows are in the guardrails table.
 | 37-durable-blob | memory-recall | `output_externalize` | 99% | 100% PASS / judge 85% MARGINAL¹ |
 | 38-anthropic-context-trim | guardrails | `provider_context_trim` | 0% by design² | 100% PASS / PASS |
 | 39-reasoning-downshift | guardrails | `reasoning_budget` | 0% by design² | 100% PASS / PASS |
-| 40-output-shaping | guardrails | `output_shaping` | −9% by design² | 100% PASS / PASS |
+| 40-output-shaping | guardrails | `output_shaping` | −7% by design² | 100% PASS / PASS |
 | 41-mixed-content-census | guardrails | `content_census` | read-only | byte-identical (no keyfacts) |
 | 42-semantic-rerank-rag | tools-and-rag | `relevance_filter` + `semanticRerank` | 33% | 100% PASS / PASS |
 
@@ -158,8 +158,12 @@ guardrail-tier rows are in the guardrails table.
 suggestions that were never in the context (baseline included) — all five key
 facts are present; not content loss.
 ² Guardrail basis: 38 annotates for provider-side clearing without touching
-message bytes, 39 saves output-side thinking tokens, 40 spends +9% request bytes
-on an advisory that pays back downstream. See the guardrails table above.
+message bytes, 39 saves output-side thinking tokens, 40 spends +7% request bytes
+on an advisory that pays back downstream — measured live for 40 at **−24% output
+tokens** (265 → 201, judge-PASS answer parity; `guardrails/results/live-basis.json`).
+38/39's live deltas (billed input tokens / thinking tokens) rerun via
+`run_live.mjs --mode per-strategy` — the first attempt hit the Claude
+subscription rate limit.
 
 Two registry entries stay intentionally uncovered: `audited_holdout` (a read-only
 holdout-arm marker driven by the top-level holdout config, not the strategy

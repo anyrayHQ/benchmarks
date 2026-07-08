@@ -1,0 +1,13 @@
+[
+  {
+    "id": "40-output-shaping",
+    "strategy": "output_shaping",
+    "baselineTokens": 1396,
+    "optimizedTokens": 1462,
+    "realSavedPct": -5,
+    "baselineOutputTokens": 265,
+    "optimizedOutputTokens": 201,
+    "outputSavedPct": 24,
+    "quality": "PASS"
+  }
+]
