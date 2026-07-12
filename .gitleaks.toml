@@ -1,0 +1,24 @@
+# Anyray secret-scan configuration (gitleaks).
+#
+# The gate is diff-aware and blocking on pull requests; the full-history scan on
+# push/schedule is informational (see .github/workflows/gitleaks.yml).
+#
+# This allowlist is deliberately NARROW. It excuses only values that are benign by
+# construction — synthetic fixtures (which literally contain "synthetic" or
+# "placeholder"). It does NOT keyword-match "test"/"dev"/"example", because a real
+# secret can contain those substrings; suppressing it would be a false negative (a
+# leak), which is worse than noise. `regexTarget = "secret"` matches the captured
+# secret value only, never the surrounding code.
+
+title = "Anyray secret-scan config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic fixtures and placeholders"
+regexTarget = "secret"
+regexes = [
+  '''(?i)synthetic''',
+  '''(?i)placeholder''',
+]

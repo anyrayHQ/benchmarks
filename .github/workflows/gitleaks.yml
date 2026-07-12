@@ -1,0 +1,57 @@
+name: Secret scan (gitleaks)
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  schedule:
+    - cron: '30 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitleaks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    # PR runs are diff-aware and blocking; push/schedule full-history scans are
+    # informational while any pre-existing synthetic-fixture backlog is present
+    # (mirrors semgrep.yml). Tighten to blocking once the full scan is green.
+    continue-on-error: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tgz
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan for secrets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # --redact keeps any detected value out of the CI logs (privacy invariant).
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # Diff-aware: scan only the commits this PR introduces (blocking).
+            gitleaks git --no-banner --redact --config .gitleaks.toml \
+              --log-opts="--no-merges ${PR_BASE_SHA}..${PR_HEAD_SHA}"
+          else
+            # Full-history scan (informational; this job is continue-on-error here).
+            gitleaks git --no-banner --redact --config .gitleaks.toml
+          fi
