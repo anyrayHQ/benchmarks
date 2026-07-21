@@ -5,27 +5,10 @@
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
 [![answer: kept](https://img.shields.io/badge/answer-kept%2032%2F32-1a7f5a)](QUALITY.md)
 
-[Anyray](https://anyray.ai) cuts the **input tokens** your LLM requests carry — and
-this repo proves it, reproducibly, on the workloads developers and coding agents
-actually produce day-to-day, with the answer kept intact.
-
-> **Headline: 77% fewer input tokens across 29 real-world workloads (339k → 77k),
-> answer preserved in all 32 quality-checked workloads — every number reproducible
-> against a running optimizer.**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/savings-by-strategy.dark.svg" />
-    <img alt="Token savings by Anyray optimizer strategy — 77% overall across 29 workloads" src="assets/savings-by-strategy.light.svg" width="720" />
-  </picture>
-  <br />
-  <sub>Regenerated from <code>results/</code> with <code>npm run charts</code> — no hand-edited numbers.</sub>
-</p>
-
-Each workload is a wasteful thing real devs and agents do every day — pasting a
+Each workload is a token-waste pattern real devs and agents produce every day — pasting a
 whole log and asking one question, an agent re-reading entire files, MCP tool-schema
 bloat, RAG over-fetching, resending the full session every turn. These aren't inputs
-cherry-picked to flatter an algorithm: the mix is **weighted to real coding-agent
+cherry-picked to flatter the optimizer: the mix is **weighted to real coding-agent
 traffic** (see [Why these workloads](#why-these-workloads)). Anyray fixes them **on
 the request path, without touching the app**.
 
@@ -88,7 +71,7 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
     <img alt="Token savings vs answer kept — all 24 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
-  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Opus-4.8 judge; every workload keeps 100% of the answer, scored openly.</sub>
+  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Claude Opus 4.8 judge; every workload keeps 100% of the answer, scored openly.</sub>
 </p>
 
 ## Quality — does the answer survive?
@@ -154,8 +137,8 @@ request.
 | [`memory-recall/`](memory-recall/) | 1 | `relevance_filter` | A large recalled store + a "remember this for me" question |
 | [`guardrails/`](guardrails/) | 5 | `semantic_cache`, `vision_ocr`, `param_tuning`, `cache_optimizer`, `context_quality` | Repeated calls, pasted screenshots, runaway ceilings, Claude cache-prefix, context health |
 
-The optimizer is **reversible**: every elided span is stashed behind a
-content-free retrieval handle (CCR `POST /v1/retrieve`), so the model can pull
+The optimizer is **reversible**: every elided span is stashed behind a retrieval
+handle (`POST /v1/retrieve`), so the model can pull
 back anything it turns out to need. Most strategies re-rank and elide rather than
 paraphrase — so the saving comes from dropping what the live question doesn't
 touch, not from lossy rewriting; a few (`command_digest`, `tool_schema_compression`)
@@ -251,7 +234,7 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 
 ## Does it preserve the answer?
 
-Yes — measured, not asserted. The [**quality benchmark**](QUALITY.md) defines the
+Yes. The [**quality benchmark**](QUALITY.md) defines the
 answer-bearing key facts for each workload and checks how many survive: **32 of 32
 by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
 **31 PASS / 1 MARGINAL / 0 FAIL**. Anyray's strategies are also reversible — every
@@ -263,8 +246,8 @@ semantic pass.
 
 ## What this does and doesn't measure
 
-- **Does:** input-token reduction per workload, per strategy, reproducibly, on a
-  content-free basis — **and** answer-quality (key-fact survival) per workload.
+- **Does:** input-token reduction per workload, per strategy, reproducibly — **and**
+  answer-quality (key-fact survival) per workload.
 - **Doesn't (yet):** latency added by the hook (the optimizer fails open past
   `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
   guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
