@@ -5,12 +5,12 @@
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
 [![answer: kept](https://img.shields.io/badge/answer-kept%2032%2F32-1a7f5a)](QUALITY.md)
 
-Each workload is a token-waste pattern real devs and agents produce every day — pasting a
-whole log and asking one question, an agent re-reading entire files, MCP tool-schema
-bloat, RAG over-fetching, resending the full session every turn. These aren't inputs
-cherry-picked to flatter the optimizer: the mix is **weighted to real coding-agent
-traffic** (see [Why these workloads](#why-these-workloads)). Anyray fixes them **on
-the request path, without touching the app**.
+Each of the 29 real-world workloads here is a token-waste pattern real devs and agents
+produce every day — pasting a whole log and asking one question, an agent re-reading
+entire files, MCP tool-schema bloat, RAG over-fetching, resending the full session every
+turn. These aren't inputs cherry-picked to flatter the optimizer: the mix is **weighted
+to real coding-agent traffic** (see [Why these workloads](#why-these-workloads)). Anyray
+fixes them **on the request path, without touching the app**.
 
 Every number is produced by running the **real optimizer** (the before-request
 hook that sits on the gateway's hot path) over these workloads and measuring the
