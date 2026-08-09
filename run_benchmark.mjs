@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { OptimizerClient } from './lib/optimizerClient.mjs';
 import { sizeOf, estTokens, savedPct } from './lib/tokens.mjs';
+import { withRetrieveTool, stripSyntheticRetrieve } from './lib/retrieveTool.mjs';
 
 function parseArgs(argv) {
   const args = { limit: null, suite: null, workload: null, all: false };
@@ -71,11 +72,15 @@ const SYNTHETIC_CACHE_RESPONSE = {
 async function measureOptimized(client, w, payload, cfg) {
   if (w.strategy === 'semantic_cache') return measureSemanticCacheHit(client, payload, cfg);
   await client.setStrategy(w.strategy, w.params ?? {});
-  const res = await client.optimize(payload, [w.strategy], {
+  // Offer a retrieve tool if the fixture declares none, else the optimizer
+  // suppresses every eliding strategy as `no_retrieve` and this measures 0%.
+  // Stripped again before sizing, so the signal never inflates the accounting.
+  const { request: sent, injected } = withRetrieveTool(payload);
+  const res = await client.optimize(sent, [w.strategy], {
     endpoint: w.endpoint,
     metadata: w.metadata,
   });
-  const afterReq = res.request ?? payload;
+  const afterReq = stripSyntheticRetrieve(res.request ?? sent, injected);
   const afterChars = sizeOf(afterReq);
   const decisions = (res.decisions ?? []).map((d) => d.summary ?? d.kind ?? String(d));
   return {
