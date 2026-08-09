@@ -28,6 +28,7 @@ import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { OptimizerClient } from './lib/optimizerClient.mjs';
 import { sizeOf, savedPct } from './lib/tokens.mjs';
 import { keyFactSurvival, fullText, judgePrompt, verdictFor } from './lib/quality.mjs';
+import { withRetrieveTool, stripSyntheticRetrieve } from './lib/retrieveTool.mjs';
 import { extractJsonObject } from './lib/judge.mjs';
 import { resolveLiveConfig } from './lib/env.mjs';
 import { authHeaders, withClaudeIdentity } from './lib/auth.mjs';
@@ -130,11 +131,15 @@ async function runSuite(cfg, client, suite, only, opts, judgeCfg, keyFactsMap) {
       let optimizedReq = stashed[w.id];
       if (!optimizedReq) {
         await client.setStrategy(w.strategy, w.params ?? {});
-        const res = await client.optimize(payload, [w.strategy], {
+        // Same retrieve-capability signal run_benchmark.mjs sends: without it a
+        // toolless fixture has every eliding strategy suppressed (`no_retrieve`)
+        // and quality would score an untransformed request as if it had passed.
+        const { request: sent, injected } = withRetrieveTool(payload);
+        const res = await client.optimize(sent, [w.strategy], {
           endpoint: w.endpoint,
           metadata: w.metadata,
         });
-        optimizedReq = res.request ?? payload;
+        optimizedReq = stripSyntheticRetrieve(res.request ?? sent, injected);
       }
       const context = fullText(optimizedReq);
 
