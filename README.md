@@ -3,13 +3,13 @@
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
-[![answer: kept](https://img.shields.io/badge/answer-kept%2032%2F32-1a7f5a)](QUALITY.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2033%2F33-1a7f5a)](QUALITY.md)
 
 Each of the 29 real-world workloads here is a token-waste pattern real devs and agents
 produce every day — pasting a whole log and asking one question, an agent re-reading
 entire files, MCP tool-schema bloat, RAG over-fetching, resending the full session every
-turn. These aren't inputs cherry-picked to flatter the optimizer: the mix is **weighted
-to real coding-agent traffic** (see [Why these workloads](#why-these-workloads)). Anyray
+turn. These aren't inputs cherry-picked to flatter the optimizer; each is a waste pattern
+the cost literature ranks as common and expensive (see [Why these workloads](#why-these-workloads)). Anyray
 fixes them **on the request path, without touching the app**.
 
 Every number is produced by running the **real optimizer** (the before-request
@@ -24,24 +24,27 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 159,992 | 40,085 | **75%** |
-| [`code-context/`](code-context/) | 7 | 23,369 | 13,099 | **44%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,723 | 6,251 | **65%** |
-| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 15,355 | **85%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,198 | 2,308 | **94%** |
-| **Total** | **29** | **338,562** | **77,098** | **77%** |
-| [`guardrails/`](guardrails/) | 9 | *special accounting* | | *see suite* |
+| [`logs-and-data/`](logs-and-data/) | 6 | 155,964 | 11,377 | **93%** |
+| [`code-context/`](code-context/) | 7 | 23,492 | 11,968 | **49%** |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,773 | 5,705 | **68%** |
+| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 12,064 | **88%** |
+| [`memory-recall/`](memory-recall/) | 3 | 37,238 | 2,349 | **94%** |
+| **Total** | **29** | **334,747** | **43,463** | **87%** |
+| [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
 
-The mix is **weighted to real coding-agent traffic** — the three largest strategies
-by token share, `context_compression`, `window_budget`, and `relevance_filter`
-(~33% / ~26% / ~22% of this benchmark's input, ~80% together), carry the suite. Token
-counts use a `chars / 4` estimate, so read the **percentage** as the headline (see
-[Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
-real-provider cross-check, are in [RESULTS.md](RESULTS.md).
+Three strategies carry most of this suite's input — `context_compression`,
+`window_budget`, and `relevance_filter`, together ~80% of the tokens measured here.
+That is a property of **these fixtures**, not a measurement of production traffic;
+treat the per-strategy rows as "what each strategy does to a representative payload",
+not as a weighted forecast of a given deployment's bill. Token counts use a
+`chars / 4` estimate, so read the **percentage** as the headline (see
+[Methodology](#methodology)). Full per-workload and per-strategy breakdowns are in
+[RESULTS.md](RESULTS.md).
 
 Which of the optimizer's registered strategies this suite measures, and which it does
-not, is [COVERAGE.md](COVERAGE.md) — 20 of the 23 registered kinds, with the reason and
-the value of each gap.
+not, is [COVERAGE.md](COVERAGE.md) — **22 of the 23** registered kinds. The one it does
+not is `audited_holdout`, which is not benchmarkable here by construction: it is the
+unoptimized control marker, so it transforms nothing and has no knob to pin.
 
 ### What it actually does
 
@@ -72,28 +75,30 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Token savings vs answer kept — all 24 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
+    <img alt="Token savings vs answer kept — all 33 workloads keep 100% of the answer at high savings, by strict key-fact survival" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
-  <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Claude Opus 4.8 judge; every workload keeps 100% of the answer, scored openly.</sub>
+  <sub>Savings buy nothing if the answer dies — so we check. Every workload keeps 100% of its answer-bearing key facts, scored openly.</sub>
 </p>
 
 ## Quality — does the answer survive?
 
 Savings are only worth it if the model can still answer. For every workload we
-define the **answer-bearing key facts** and check how many survive — two committed
-signals, side by side:
+define the **answer-bearing key facts** and check how many survive:
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| Key-fact survival (strict substring, model-free) | 32 | 32 | 0 | 0 |
-| Semantic judge (Claude Opus 4.8) | 32 | 31 | 1 | 0 |
+| Key-fact survival (strict substring, model-free) | 33 | 33 | 0 | 0 |
 
-**The answer survives on all 32 by the strict measure, and a Claude Opus 4.8 judge
-confirms 31 PASS / 1 MARGINAL / 0 FAIL** (the one MARGINAL is a judge scope note on
-`37-durable-blob`, not content loss — see [QUALITY.md](QUALITY.md)) — each workload's
-strategy is matched to its content and tuned for strong savings while keeping every
-answer-bearing fact, with every judge verdict shown in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on all 33.** Each workload's strategy is matched to its content
+and tuned for strong savings while keeping every answer-bearing fact; the per-workload
+table is in **[QUALITY.md](QUALITY.md)**.
+
+The strict check is the floor, and it is the one that needs no model: `run_quality.mjs`
+scores it against the optimizer alone, so anyone can reproduce it. The optional
+semantic-judge lane (`--judge`) has **not** been re-run against the current optimizer,
+so no judge verdicts are committed — an old verdict describes a differently-trimmed
+context and would be worse than none.
 
 ## Why these workloads
 
@@ -134,12 +139,12 @@ request.
 
 | Suite | Workloads | Hero strategies | What it measures |
 |---|---|---|---|
-| [`logs-and-data/`](logs-and-data/) | 5 | `context_compression`, `relevance_filter` | A log/data/JSON blob (often a tool result) + a narrow question → minify, array-cap, keep the lines that answer it |
+| [`logs-and-data/`](logs-and-data/) | 6 | `context_compression`, `relevance_filter` | A log/data/JSON blob (often a tool result) + a narrow question → minify, array-cap, keep the lines that answer it |
 | [`code-context/`](code-context/) | 7 | `code_graph`, `relevance_filter`, `context_compression` | Source/diff/search read back (file reads via tool results) → keep the navigable reference graph, elide bodies |
-| [`tools-and-rag/`](tools-and-rag/) | 4 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
-| [`agent-ops/`](agent-ops/) | 5 | `window_budget`, `relevance_filter`, `command_digest` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output |
-| [`memory-recall/`](memory-recall/) | 1 | `relevance_filter` | A large recalled store + a "remember this for me" question |
-| [`guardrails/`](guardrails/) | 5 | `semantic_cache`, `vision_ocr`, `param_tuning`, `cache_optimizer`, `context_quality` | Repeated calls, pasted screenshots, runaway ceilings, Claude cache-prefix, context health |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
+| [`agent-ops/`](agent-ops/) | 8 | `window_budget`, `relevance_filter`, `command_digest`, `context_dedupe`, `thinking_trim` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output, re-read files, replayed reasoning |
+| [`memory-recall/`](memory-recall/) | 3 | `relevance_filter`, `observation_mask`, `output_externalize` | A large recalled store + a "remember this for me" question; stale trajectories; durable blobs |
+| [`guardrails/`](guardrails/) | 10 | `semantic_cache`, `vision_ocr`, `param_tuning`, `cache_optimizer`, `context_quality`, `content_census`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `cache_lint` | Repeated calls, pasted screenshots, runaway ceilings, cache-prefix stability, context health, content census, provider-side trim, reasoning downshift, output shaping, prefix churn |
 
 The optimizer is **reversible**: every elided span is stashed behind a retrieval
 handle (`POST /v1/retrieve`), so the model can pull
@@ -239,14 +244,13 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 ## Does it preserve the answer?
 
 Yes. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive: **32 of 32
-by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
-**31 PASS / 1 MARGINAL / 0 FAIL**. Anyray's strategies are also reversible — every
+answer-bearing key facts for each workload and checks how many survive: **33 of 33
+by strict substring**. Anyray's strategies are also reversible — every
 elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
 is recoverable.
 
-Run it with `node run_quality.mjs --all` (strict survival) and `--judge` for the
-semantic pass.
+Run it with `node run_quality.mjs --all` (strict survival, needs only the optimizer)
+and `--judge` for the optional semantic pass, which needs a model.
 
 ## What this does and doesn't measure
 

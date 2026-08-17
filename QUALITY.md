@@ -13,68 +13,65 @@ the answer on that workload, not that anything errored.
 
 ## Overview
 
-Two committed signals sit beside each saving. **Strict substring survival** is the
-reproducible-by-anyone floor — no model required. The **Claude Opus 4.8 judge** is a
-committed semantic overlay: it reads the same kept context and rules whether each key
-fact is still *answerable*, catching what the substring test is too blunt for in both
-directions — a miss that's really fine, and a verbatim "survivor" that doesn't carry
-the answer.
+**Strict substring survival** is the reproducible-by-anyone floor — it runs against
+the optimizer alone, so it needs no model and anyone can re-run it.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 32 | 32 | 0 | 0 |
-| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 32 | 31 | 1 | 0 |
+| **Key-fact survival** (substring, strict — committed) | 33 | 33 | 0 | 0 |
 
-**All 32 preserve the answer in full** on the strict floor, and the Claude Opus 4.8
-judge confirms **31 PASS · 1 MARGINAL · 0 FAIL** — the one MARGINAL is a scope note
-on `37-durable-blob` (see ² under the table), not content loss. Each workload runs
-against the deployed optimizer (v0.3.24; the 2026-07-08 coverage-expansion rows
-34–42 against v0.3.41) with its strategy matched to the content and settings tuned
-for strong savings while keeping every answer-bearing fact, then confirmed by the
-judge. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
+**All 33 preserve the answer in full.** Each workload runs against the deployed
+optimizer (**v0.3.124**, defaults revision 9) with its strategy matched to the
+content and settings tuned for strong savings while keeping every answer-bearing
+fact. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
 strategies that suit them (see [Matching strategy to content](#matching-strategy-to-content)).
 Verdict bands: **PASS** ≥ 90% of key facts survive · **MARGINAL** ≥ 75% · **FAIL** below.
 
 ## Per workload
 
 `saved` is the token reduction (from [RESULTS.md](RESULTS.md)); `key-facts` is the
-strict substring survival; `judge` is the committed Claude Opus 4.8 semantic verdict
-(each row records the model in its `by` field).
+strict substring survival.
 
-| Workload | Strategy | Saved | Key-facts (strict) | Judge (Opus 4.8) |
-|---|---|--:|--:|--:|
-| `1-access-log` | `relevance_filter` | 96% | 100% ✅ | 100% ✅ |
-| `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
-| `33-synonym-gap-logs` | `relevance_filter` | 60% | 100% ✅ | 100% ✅ |
-| `4-json-array` | `context_compression` | 78% | 100% ✅ | 100% ✅ |
-| `29-orders-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
-| `30-metrics-json` | `context_compression` | 42% | 100% ✅ | 100% ✅ |
-| `5-code-search` | `relevance_filter` | 55% | 100% ✅ | 100% ✅ |
-| `6-git-diff` | `context_compression` | 44% | 100% ✅ | 100% ✅ |
-| `7-codebase-explore` | `code_graph` | 18% | 100% ✅ | 100% ✅ |
-| `15-multifile-graph` | `code_graph` | 31% | 100% ✅ | 100% ✅ |
-| `17-python-multifile` | `code_graph` | 33% | 100% ✅ | 100% ✅ |
-| `27-read-service-ts` | `code_graph` | 66% | 100% ✅ | 100% ✅ |
-| `28-read-module-py` | `code_graph` | 71% | 100% ✅ | 100% ✅ |
-| `11-mcp-tools` | `tool_pruning` | 63% | 100% ✅ | 100% ✅ |
-| `12-rag-overfetch` | `relevance_filter` | 67% | 100% ✅ | 100% ✅ |
-| `32-vocab-mismatch-rag` | `relevance_filter` | 71% | 100% ✅ | 100% ✅ |
-| `42-semantic-rerank-rag` | `relevance_filter` | 33% | 100% ✅ | 100% ✅ |
-| `13-prompt-boilerplate` | `prompt_compression` | 84% | 100% ✅ | 100% ✅ |
-| `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ | 100% ✅ |
-| `3-github-triage` | `relevance_filter` | 84% | 100% ✅ | 100% ✅ |
-| `8-long-session` | `window_budget` | 91% | 100% ✅ | 100% ✅ |
-| `16-test-run` | `command_digest` | 77% | 100%¹ ✅ | 100% ✅ |
-| `24-agent-toolcalls` | `window_budget` | 25% | 100% ✅ | 100% ✅ |
-| `31-long-toolsession` | `window_budget` | 37% | 100% ✅ | 100% ✅ |
-| `34-repeat-reads` | `context_dedupe` | 37% | 100% ✅ | 100% ✅ |
-| `35-flaky-test-rerun` | `context_dedupe` | 37% | 100% ✅ | 100% ✅ |
-| `18-session-recall` | `relevance_filter` | 85% | 100% ✅ | 100% ✅ |
-| `36-stale-observations` | `observation_mask` | 84% | 100% ✅ | 100% ✅ |
-| `37-durable-blob` | `output_externalize` | 99% | 100% ✅ | 85% ⚠️² |
-| `38-anthropic-context-trim` | `provider_context_trim` | 94% of input clearable³ | 100% ✅ | 100% ✅ |
-| `39-reasoning-downshift` | `reasoning_budget` | −67% thinking budget³ | 100% ✅ | 100% ✅ |
-| `40-output-shaping` | `output_shaping` | −24% output tokens (live)³ | 100% ✅ | 100% ✅ |
+An optional semantic-judge lane exists (`run_quality.mjs --judge`) but has **not**
+been re-run against the current optimizer, so no judge verdicts are committed. An
+old verdict describes a differently-trimmed context, which would be worse than
+none.
+
+| Workload | Strategy | Saved | Key-facts (strict) |
+|---|---|--:|--:|
+| `1-access-log` | `relevance_filter` | 96% | 100% ✅ |
+| `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ |
+| `33-synonym-gap-logs` | `relevance_filter` | 61% | 100% ✅ |
+| `4-json-array` | `context_compression` | 97% | 100% ✅ |
+| `29-orders-json` | `context_compression` | 89% | 100% ✅ |
+| `30-metrics-json` | `context_compression` | 90% | 100% ✅ |
+| `5-code-search` | `relevance_filter` | 56% | 100% ✅ |
+| `6-git-diff` | `context_compression` | 65% | 100% ✅ |
+| `7-codebase-explore` | `code_graph` | 18% | 100% ✅ |
+| `15-multifile-graph` | `code_graph` | 32% | 100% ✅ |
+| `17-python-multifile` | `code_graph` | 33% | 100% ✅ |
+| `27-read-service-ts` | `code_graph` | 66% | 100% ✅ |
+| `28-read-module-py` | `code_graph` | 70% | 100% ✅ |
+| `11-mcp-tools` | `tool_pruning` | 70% | 100% ✅ |
+| `12-rag-overfetch` | `relevance_filter` | 68% | 100% ✅ |
+| `32-vocab-mismatch-rag` | `relevance_filter` | 75% | 100% ✅ |
+| `13-prompt-boilerplate` | `prompt_compression` | 85% | 100% ✅ |
+| `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ |
+| `42-semantic-rerank-rag` | `relevance_filter` | 34% | 100% ✅ |
+| `3-github-triage` | `relevance_filter` | 84% | 100% ✅ |
+| `8-long-session` | `window_budget` | 95% | 100% ✅ |
+| `16-test-run` | `command_digest` | 77% | 100% ✅ |
+| `24-agent-toolcalls` | `window_budget` | 39% | 100% ✅ |
+| `31-long-toolsession` | `window_budget` | 46% | 100% ✅ |
+| `34-repeat-reads` | `context_dedupe` | 37% | 100% ✅ |
+| `35-flaky-test-rerun` | `context_dedupe` | 37% | 100% ✅ |
+| `43-thinking-replay` | `thinking_trim` | *guardrail* | 100% ✅ |
+| `18-session-recall` | `relevance_filter` | 85% | 100% ✅ |
+| `36-stale-observations` | `observation_mask` | 83% | 100% ✅ |
+| `37-durable-blob` | `output_externalize` | 99% | 100% ✅ |
+| `38-anthropic-context-trim` | `provider_context_trim` | *guardrail* | 100% ✅ |
+| `39-reasoning-downshift` | `reasoning_budget` | *guardrail* | 100% ✅ |
+| `40-output-shaping` | `output_shaping` | *guardrail* | 100% ✅ |
 
 ¹ `command_digest` **rewrites** the output (it digests, it doesn't just elide), so
 `16-test-run`'s key facts are written in the digest's reformatted shape — its 100%

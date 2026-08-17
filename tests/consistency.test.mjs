@@ -132,17 +132,35 @@ test('quality headline counts match README and QUALITY', () => {
     qmd.includes(`${rows.length} | ${strict.PASS} | ${strict.MARGINAL} | ${strict.FAIL}`),
     `QUALITY strict row must read ${rows.length} | ${strict.PASS} | ${strict.MARGINAL} | ${strict.FAIL}`
   );
-  assert.ok(
-    qmd.includes(`${rows.length} | ${judge.PASS} | ${judge.MARGINAL} | ${judge.FAIL}`),
-    `QUALITY judge row must read ${rows.length} | ${judge.PASS} | ${judge.MARGINAL} | ${judge.FAIL}`
-  );
+
+  // The judge lane is OPTIONAL (`run_quality.mjs --judge` needs a model), so the
+  // committed data may legitimately carry no judge verdicts. Assert whichever
+  // state the data is actually in, rather than assuming the lane ran: a doc
+  // claiming judge results that the JSON does not contain is exactly the drift
+  // this file exists to catch.
+  const judged = judge.PASS + judge.MARGINAL + judge.FAIL;
+  if (judged > 0) {
+    assert.ok(
+      qmd.includes(`${rows.length} | ${judge.PASS} | ${judge.MARGINAL} | ${judge.FAIL}`),
+      `QUALITY judge row must read ${rows.length} | ${judge.PASS} | ${judge.MARGINAL} | ${judge.FAIL}`
+    );
+  } else {
+    for (const md of [qmd, doc('README.md')]) {
+      assert.ok(
+        !/\d+ PASS \/ \d+ MARGINAL \/ \d+ FAIL/.test(md),
+        'no judge verdicts are committed, so no doc may quote a judge PASS/MARGINAL/FAIL tally'
+      );
+    }
+  }
 
   const md = doc('README.md');
   assert.ok(md.includes(`${strict.PASS} of ${rows.length}`), `README must say "${strict.PASS} of ${rows.length}"`);
-  assert.ok(
-    md.includes(`${judge.PASS} PASS / ${judge.MARGINAL} MARGINAL / ${judge.FAIL} FAIL`),
-    `README must say "${judge.PASS} PASS / ${judge.MARGINAL} MARGINAL / ${judge.FAIL} FAIL"`
-  );
+  if (judged > 0) {
+    assert.ok(
+      md.includes(`${judge.PASS} PASS / ${judge.MARGINAL} MARGINAL / ${judge.FAIL} FAIL`),
+      `README must say "${judge.PASS} PASS / ${judge.MARGINAL} MARGINAL / ${judge.FAIL} FAIL"`
+    );
+  }
   // The "answer kept N/total" badge embeds the count too — keep it from drifting.
   assert.ok(
     md.includes(`kept%20${strict.PASS}%2F${rows.length}`),

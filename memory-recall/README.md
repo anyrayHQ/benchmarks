@@ -15,13 +15,13 @@ billed unless it's filtered to what the question actually touches.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cross-session catch-up — "catch me up on this branch" | `relevance_filter` | `keepChars=2500` | 5,895 | 867 | **85%** |
+| Cross-session catch-up — "catch me up on this branch" | `relevance_filter` | `keepChars=2500` | 5,935 | 893 | **85%** |
 
 > Kept as a **single representative**. This "recall a big store" shape is handled by
 > `relevance_filter` and is rare in coding-agent traffic, so the suite was slimmed
 > from five near-identical workloads to one (see the README's traffic-weighting note).
 
-### New workloads (first run 2026-07-08, optimizer v0.3.41)
+### Added in the 2026-07 coverage wave
 
 These are **not** more of the slimmed shape. They cover the "trajectory diet"
 strategies (RFC 0004) where old context is *stashed behind a retrieval handle*
@@ -31,7 +31,7 @@ self-gated to a no-op.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | 6,722 | 1,100 | **84%** |
+| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | 6,722 | 1,115 | **83%** |
 | Durable externalization — a 100 KB manifest becomes a retrieval handle | `output_externalize` | needs the durable CCR tier | 24,581 | 341 | **99%** |
 
 ## How it works

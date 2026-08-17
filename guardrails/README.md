@@ -1,6 +1,6 @@
 # Guardrails (special accounting)
 
-Five workloads whose saving is **not** whole-request character reduction, so each
+Ten workloads whose saving is **not** whole-request character reduction, so each
 is reported on its own basis rather than rolled into the headline percentage. The
 committed results carry what the harness can measure plus the optimizer's own
 decision string; this README explains what each number means.
@@ -21,7 +21,7 @@ the `param_tuning` case.
 | Claude prompt-cache prefix — stabilize the system+tools prefix | `cache_optimizer` | `minPrefixChars=4096` | cached-read reuse | tools sorted + `cache_control` injected (tools, system) |
 | Context health — flag a bloated, over-fetched context | `context_quality` | `bloatedToolChars=1500` | health score (read-only) | 69/100 (6 bloated, 2 duplicate) |
 
-### New workloads (first run 2026-07-08, optimizer v0.3.41)
+### Added in the 2026-07 coverage wave
 
 Four more strategies whose value is invisible to request-byte accounting — two
 save on the *output/provider* side, two must prove they change *nothing*.
@@ -32,6 +32,19 @@ save on the *output/provider* side, two must prove they change *nothing*.
 | Reasoning downshift — routine tool-resume turn on a reasoning model | `reasoning_budget` | (defaults, session metadata) | thinking-token budget | capped **24,576 → 8,192 (−67%)** on the resume turn; content untouched, 100% key-fact survival |
 | Output shaping — concise-output advisory on a resume turn | `output_shaping` | (defaults) | output tokens | **−24% live** (265 → 201, judge-PASS answer parity, `results/live-basis.json`) for +7% request bytes |
 | Content census — nine shape classes through a read-only pass | `content_census` | (defaults) | census counters (read-only) | request byte-identical; 9 fresh tool outputs censused (json_array 35%, base64 15%, source_code ×2 13%, …) |
+
+### Added 2026-08 — the last measurable coverage gap
+
+| Workload | Strategy | Knob | Basis | Result |
+|---|---|---|---|---|
+| Prefix churn — the client rewrites its own cached prefix between two turns | `cache_lint` | (defaults) | churned prefix regions (read-only) | **3 regions churned** (tools, system, messagesHead) across two turns of one session; request byte-identical |
+
+`cache_lint` is the only workload here that needs **two** requests. It is a
+cross-turn sensor: turn 1 primes the session, then `44-prefix-churn.turn2.json`
+arrives with the tools reordered and a timestamp injected into the system prompt.
+Both changes are invisible to a user and both invalidate the provider's cached
+prefix, turning ~0.1x cache reads into ~1.25x cache writes. A single stateless
+request cannot exercise it, which is why it had no row until now.
 
 ## Why these are special
 
