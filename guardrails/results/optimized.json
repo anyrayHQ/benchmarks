@@ -5,6 +5,8 @@
     "strategy": "semantic_cache",
     "knob": "(defaults)",
     "tier": "cache",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 142,
     "afterChars": 0,
     "beforeTok": 36,
@@ -23,10 +25,12 @@
     "strategy": "vision_ocr",
     "knob": "imageTokenEstimate=1000",
     "tier": "vision",
-    "beforeChars": 54354,
-    "afterChars": 790,
-    "beforeTok": 13589,
-    "afterTok": 198,
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 54327,
+    "afterChars": 725,
+    "beforeTok": 13582,
+    "afterTok": 181,
     "savedPct": 99,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
@@ -41,6 +45,8 @@
     "strategy": "param_tuning",
     "knob": "maxTokensCap=4096",
     "tier": "guardrail",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 153,
     "afterChars": 153,
     "beforeTok": 38,
@@ -59,17 +65,19 @@
     "strategy": "cache_optimizer",
     "knob": "minPrefixChars=4096",
     "tier": "cache-prefix",
-    "beforeChars": 1405,
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 4937,
     "afterChars": 1442,
-    "beforeTok": 351,
+    "beforeTok": 1234,
     "afterTok": 361,
-    "savedPct": -3,
+    "savedPct": 71,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
       "reordered 3 tools by name for cache stability",
-      "injected 2 cache_control breakpoint(s): tools, system"
+      "injected 2 cache_control breakpoint(s): tools, system (model floor 1024 tok/sonnet-3-5)"
     ]
   },
   {
@@ -78,6 +86,8 @@
     "strategy": "context_quality",
     "knob": "bloatedToolChars=1500",
     "tier": "diagnostic",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 10821,
     "afterChars": 10821,
     "beforeTok": 2705,
@@ -87,25 +97,7 @@
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "context quality 69/100 (fill 2%, 8 msg, 6 bloated tool output(s), 2 duplicate)"
-    ]
-  },
-  {
-    "id": "41-mixed-content-census",
-    "title": "Content census — nine shape classes through a read-only pass",
-    "strategy": "content_census",
-    "knob": "(defaults)",
-    "tier": "diagnostic",
-    "beforeChars": 7874,
-    "afterChars": 7874,
-    "beforeTok": 1969,
-    "afterTok": 1969,
-    "savedPct": 0,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "content census: 9 tool output(s), ~2290 tok - json_array 35% (1), binary_base64 15% (1), source_code 13% (2)"
+      "context quality 68/100 (fill 3%, 8 msg, 6 bloated tool output(s), 2 duplicate)"
     ]
   },
   {
@@ -114,6 +106,8 @@
     "strategy": "provider_context_trim",
     "knob": "triggerTokens=4000, clearAtLeastTokens=500",
     "tier": "guardrail",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 21155,
     "afterChars": 21155,
     "beforeTok": 5289,
@@ -123,7 +117,7 @@
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "injected Anthropic context_management for provider-side tool-result clearing (est 6395 input tokens, trigger 4000)"
+      "injected Anthropic context_management for provider-side tool-result clearing (est 6420 input tokens, trigger 4000)"
     ],
     "basis": {
       "name": "provider_clearable_input_tokens",
@@ -138,6 +132,8 @@
     "strategy": "reasoning_budget",
     "knob": "(defaults)",
     "tier": "guardrail",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 2056,
     "afterChars": 2056,
     "beforeTok": 514,
@@ -162,6 +158,8 @@
     "strategy": "output_shaping",
     "knob": "(defaults)",
     "tier": "guardrail",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 2542,
     "afterChars": 2731,
     "beforeTok": 636,
@@ -173,5 +171,50 @@
     "decisions": [
       "appended concise-output guidance on tool-resume turn (2 assistant turn(s), 1 fresh tool segment(s))"
     ]
+  },
+  {
+    "id": "41-mixed-content-census",
+    "title": "Content census — nine shape classes through a read-only pass",
+    "strategy": "content_census",
+    "knob": "(defaults)",
+    "tier": "diagnostic",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 7874,
+    "afterChars": 7874,
+    "beforeTok": 1969,
+    "afterTok": 1969,
+    "savedPct": 0,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "content census: 9 tool output(s), ~2290 tok - json_array 35% (1), binary_base64 15% (1), source_code 13% (2)"
+    ]
+  },
+  {
+    "id": "44-prefix-churn",
+    "title": "Prefix churn — the client rewrites its own cached prefix between two turns",
+    "strategy": "cache_lint",
+    "knob": "(defaults)",
+    "tier": "guardrail",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 799,
+    "afterChars": 933,
+    "beforeTok": 200,
+    "afterTok": 233,
+    "savedPct": 0,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "cache lint: tools, system, messagesHead prefix churn (client_volatile)"
+    ],
+    "basis": {
+      "name": "churned_prefix_regions",
+      "regions": 3,
+      "ofPrefixTok": 200
+    }
   }
 ]

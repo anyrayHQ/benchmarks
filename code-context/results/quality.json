@@ -2,35 +2,23 @@
   {
     "id": "5-code-search",
     "strategy": "relevance_filter",
-    "savedPct": 55,
+    "savedPct": 56,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "retryPolicy.ts:67 defines RETRY_MAX=5 with the exact comment",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "6-git-diff",
     "strategy": "context_compression",
-    "savedPct": 44,
+    "savedPct": 65,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "auth/middleware.ts diff with requireAdmin loosening fully present",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -42,29 +30,17 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All key facts present in retryPolicy.ts and httpClient.ts blocks.",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "15-multifile-graph",
     "strategy": "code_graph",
-    "savedPct": 31,
+    "savedPct": 32,
     "keyFacts": 6,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Full call chain present in context",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -76,12 +52,6 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present in full in the context.",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -93,29 +63,17 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All signatures and idempotency keys present in context",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "28-read-module-py",
     "strategy": "code_graph",
-    "savedPct": 71,
+    "savedPct": 70,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Both capture and refund methods fully present with class definition",
-      "by": "claude-opus-4-8"
     }
   }
 ]

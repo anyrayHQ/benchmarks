@@ -2,15 +2,8 @@
   {
     "id": "18-session-recall",
     "title": "Cross-session catch-up — \"catch me up on this branch\"",
-    "chars": 23581,
-    "tokens": 5895,
-    "max_tokens": 1024
-  },
-  {
-    "id": "37-durable-blob",
-    "title": "Durable externalization — a 100 KB manifest becomes a retrieval handle",
-    "chars": 98322,
-    "tokens": 24581,
+    "chars": 23741,
+    "tokens": 5935,
     "max_tokens": 1024
   },
   {
@@ -18,6 +11,13 @@
     "title": "Stale trajectory — mask old bulky observations, keep errors and fresh turns",
     "chars": 26888,
     "tokens": 6722,
+    "max_tokens": 1024
+  },
+  {
+    "id": "37-durable-blob",
+    "title": "Durable externalization — a 100 KB manifest becomes a retrieval handle",
+    "chars": 98322,
+    "tokens": 24581,
     "max_tokens": 1024
   }
 ]

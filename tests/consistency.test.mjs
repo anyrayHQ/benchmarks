@@ -202,8 +202,7 @@ test('COVERAGE headline counts match the mirror and the results', async () => {
     md.includes(`**${workloads}** workloads`),
     `COVERAGE must say "**${workloads}** workloads"`
   );
-  assert.ok(
-    md.includes(`**${total - covered}** are not`),
-    `COVERAGE must say "**${total - covered}** are not"`
-  );
+  const missing = total - covered;
+  const missingPhrase = missing === 1 ? '**1** is not' : `**${missing}** are not`;
+  assert.ok(md.includes(missingPhrase), `COVERAGE must say "${missingPhrase}"`);
 });

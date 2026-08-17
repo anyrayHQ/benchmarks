@@ -2,7 +2,7 @@
 
 # Coverage
 
-Every strategy the optimizer registers, and whether this suite measures it. **20 of 23** registered kinds are covered by **38** workloads; **3** are not.
+Every strategy the optimizer registers, and whether this suite measures it. **22 of 23** registered kinds are covered by **40** workloads; **1** is not.
 
 The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/src/strategies/index.ts`), not this file, not the docs, and not the console. Where a doc and the registry disagree, the registry wins and the doc is a bug to file.
 
@@ -11,19 +11,19 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | Kind | Workload(s) | Measured saving | Cache flags | Default on? | Docs | Verdict |
 | --- | --- | --: | --- | --- | --- | --- |
 | `audited_holdout` | — | — | none (deterministic) | n/a — top-level `holdout` | human name only ("audited holdout", 7 pages); id only in the protocol page | UNCOVERED |
-| `prompt_compression` | `13-prompt-boilerplate` | 84% | none (deterministic) | yes | strategy page | covered |
+| `prompt_compression` | `13-prompt-boilerplate` | 85% | none (deterministic) | yes | strategy page | covered |
 | `context_dedupe` | `34-repeat-reads`, `35-flaky-test-rerun` | 37% (median of 2) | none (deterministic) | yes | strategy page | covered |
-| `observation_mask` | `36-stale-observations` | 84% | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
+| `observation_mask` | `36-stale-observations` | 83% | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
 | `command_digest` | `16-test-run` | 77% | `cacheBusting` | yes | strategy page | covered |
-| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 43% (median of 4) | `cacheBusting` | yes | strategy page | covered |
+| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 90% (median of 4) | `cacheBusting` | yes | strategy page | covered |
 | `code_graph` | `7-codebase-explore`, `15-multifile-graph`, `17-python-multifile`, `27-read-service-ts`, `28-read-module-py` | 33% (median of 5) | `cacheBusting` | yes | strategy page | covered |
-| `relevance_filter` | `1-access-log`, `2-sre-incident`, `33-synonym-gap-logs`, `5-code-search`, `12-rag-overfetch`, `32-vocab-mismatch-rag`, `42-semantic-rerank-rag`, `3-github-triage`, `18-session-recall` | 71% (median of 9) | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
-| `window_budget` | `8-long-session`, `24-agent-toolcalls`, `31-long-toolsession` | 37% (median of 3) | `cacheBusting` + `cacheSuffixSafe` | no | strategy page | covered |
-| `provider_context_trim` | `38-anthropic-context-trim` | n/a (guardrail) | none (deterministic) | yes | strategy page | covered |
+| `relevance_filter` | `1-access-log`, `2-sre-incident`, `33-synonym-gap-logs`, `5-code-search`, `12-rag-overfetch`, `32-vocab-mismatch-rag`, `42-semantic-rerank-rag`, `3-github-triage`, `18-session-recall` | 75% (median of 9) | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
+| `window_budget` | `8-long-session`, `24-agent-toolcalls`, `31-long-toolsession` | 46% (median of 3) | `cacheBusting` + `cacheSuffixSafe` | no | strategy page | covered |
+| `provider_context_trim` | `38-anthropic-context-trim` | 94% of input marked clearable | none (deterministic) | yes | strategy page | covered |
 | `output_shaping` | `40-output-shaping` | n/a (guardrail) | none (deterministic) | no | CHANGELOG ONLY — no reference page | covered |
-| `reasoning_budget` | `39-reasoning-downshift` | n/a (guardrail) | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
-| `thinking_trim` | — | — | `cacheBusting` | yes | strategy + guardrails + protocol | UNCOVERED |
-| `tool_pruning` | `11-mcp-tools` | 63% | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
+| `reasoning_budget` | `39-reasoning-downshift` | −67% thinking budget | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
+| `thinking_trim` | `43-thinking-replay` | 83% of replayed thinking (15% of request) | `cacheBusting` | yes | strategy + guardrails + protocol | covered |
+| `tool_pruning` | `11-mcp-tools` | 70% | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
 | `tool_schema_compression` | `23-mcp-schema` | 7% | none (deterministic) | yes | strategy page | covered |
 | `param_tuning` | `14-runaway-max-tokens` | n/a (guardrail) | none (deterministic) | no | strategy page | covered |
 | `vision_ocr` | `10-screenshot-ocr` | n/a (vision) | `cacheBusting` | no | strategy page | covered |
@@ -31,31 +31,13 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | `cache_optimizer` | `25-claude-cache-prefix` | n/a (cache-prefix) | none (deterministic) | yes | strategy page | covered |
 | `context_quality` | `26-context-quality` | n/a (diagnostic) | none (deterministic) | no | ABSENT — id and human name both | covered |
 | `content_census` | `41-mixed-content-census` | n/a (diagnostic) | none (deterministic) | yes | PROTOCOL ONLY (as "census") — no reference page | covered |
-| `cache_lint` | — | — | none (deterministic) | yes | CHANGELOG ONLY — no reference page | UNCOVERED |
+| `cache_lint` | `44-prefix-churn` | 3 churned prefix regions (read-only) | none (deterministic) | yes | CHANGELOG ONLY — no reference page | covered |
 | `output_externalize` | `37-durable-blob` | 99% | `cacheBusting` | no | strategy page | covered |
 
 ## The uncovered kinds, ranked by what covering them is worth
 
 Ranked highest-value first. "Uncovered" and "not benchmarkable" are different findings:
 a kind this suite structurally cannot measure is not a gap in the suite.
-
-### `thinking_trim` — uncovered — benchmarkable, and the gap that matters
-
-Default on? **yes**. Cache flags: `cacheBusting`. Docs: strategy + guardrails + protocol.
-
-**Why it is uncovered.** Nothing gates it — no workload in `config.yaml` names it. Note this is NOT a config-enablement question: the harness force-enables the hero per workload (`setStrategy` PUTs `enabled: true`, and `optimize()` is called with `enabledKinds: [strategy]`), so whatever a deployment has on by default is irrelevant to what this suite measures. The kind is simply absent from the workload list.
-
-**Measured, not assumed.** Verified directly against the strategy, not inferred. Driving a synthetic 8-tool-loop transcript through the real `optimize()` pipeline pinned to `thinking_trim` fires it for **12% whole-request reduction on BOTH `/v1/messages` and `/v1/chat/completions`** — there is no endpoint allowlist, the strategy gates on message SHAPE, so no new harness capability is needed. Two things a fixture must get right: the thinking blocks have to be **opaque** (empty `thinking` text plus a signature, which is what `thinking.display: "omitted"` makes every current Claude model replay, and the lane `cutOpaqueChain` serves); and tool results must differ per turn, or `context_dedupe` collapses them first and masks the row. A readable-reasoning transcript correctly yields 0% when its anchors are not externalized into the same assistant turn, so that shape measures the guard, not the saving.
-
-**What covering it is worth.** HIGHEST of the three. Its live share is first-order and volatile: it ran at ~32% of all optimizer token savings, collapsed to ~1.6% when Anthropic made `thinking.display: "omitted"` the default, and was restored by a defaults migration. A swing that large landed with no offline workload able to catch it. Cover this one first.
-
-### `cache_lint` — uncovered — measurable only as a signal, not as a saving
-
-Default on? **yes**. Cache flags: none (deterministic). Docs: CHANGELOG ONLY — no reference page.
-
-**Why it is uncovered.** A read-only prefix-churn SENSOR: it returns the request unchanged and emits hashes and counts, so a before/after token delta is 0 by construction. It also measures ACROSS turns (it compares this turn's incoming prefix against the previous one), and every workload here is a single stateless request.
-
-**What covering it is worth.** LOW as a savings row, real as a diagnostic row. The honest shape is the `26-context-quality` / `41-mixed-content-census` pattern — a `diagnostic` tier asserting on the emitted decision, not on a token delta — but it needs a two-turn fixture the harness cannot currently express.
 
 ### `audited_holdout` — not benchmarkable — by construction
 

@@ -8,29 +8,17 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All three issue numbers and their P0 auth labels present.",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "8-long-session",
     "strategy": "window_budget",
-    "savedPct": 91,
+    "savedPct": 95,
     "keyFacts": 2,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Final consolidation states both retryPolicy location and orders→billing→inventory order",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -42,46 +30,28 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All three failing tests and their root causes present.",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "24-agent-toolcalls",
     "strategy": "window_budget",
-    "savedPct": 25,
+    "savedPct": 39,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All key facts explicitly present in context.",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "31-long-toolsession",
     "strategy": "window_budget",
-    "savedPct": 37,
+    "savedPct": 46,
     "keyFacts": 2,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "Both root cause and fix explicit in cursor.ts comments and summary",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -93,12 +63,6 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All six key facts appear verbatim in the context.",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -110,12 +74,17 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
+    }
+  },
+  {
+    "id": "43-thinking-replay",
+    "strategy": "thinking_trim",
+    "savedPct": 13,
+    "keyFacts": 4,
+    "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
-      "note": "All facts present: conn reset, refund PASSED on rerun, 409/200 assertion, pool_max_size=4, reruns=2",
-      "by": "claude-opus-4-8"
+      "missing": []
     }
   }
 ]

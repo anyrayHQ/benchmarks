@@ -165,6 +165,14 @@
       "tool_call_id": "call_10",
       "name": "read_file",
       "content": "# ===== src/cache/session.py =====\nclass SessionCache:\n    def __init__(self, ttl_ms):\n        self.store = {}\n        self.ttl_ms = ttl_ms\n\n    def lookup_session(self, token):\n        hit = self.store.get(token)\n        if not hit or hit.exp < now_ms():\n            self.store.pop(token, None)\n            return None\n        return hit.value\n\n    def put_session(self, token, session):\n        self.store[token] = Entry(session, now_ms() + self.ttl_ms)\n\n    def evict_expired(self):\n        now = now_ms()\n        expired = [k for k, e in self.store.items() if e.exp < now]\n        for k in expired:\n            self.store.pop(k, None)\n        return len(expired)"
+    },
+    {
+      "role": "assistant",
+      "content": "I read those modules."
+    },
+    {
+      "role": "user",
+      "content": "Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment."
     }
   ]
 }

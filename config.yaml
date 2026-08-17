@@ -234,6 +234,26 @@ benchmarks:
         # seed/durations change): nearDupe keeps a unified delta against the run-1 anchor,
         # and the flipped PASSED line must survive inside that delta.
         params: {}
+      - id: "43-thinking-replay"
+        title: 'Replayed reasoning — a resumed agent turn re-sends six signed thinking blocks'
+        strategy: "thinking_trim"
+        # Anthropic-native: signed thinking blocks in assistant history that the
+        # client replays verbatim (and the provider re-bills) on every turn.
+        #
+        # The automatic cutoff keeps the loop's opening plan, then drops a block
+        # once EVERY anchor it names is externalized into that same assistant
+        # turn's text/tool_use — so each thinking block here names the file its
+        # own tool call reads. Reasoning that named something the turn never
+        # externalized would be kept, which is the guard, not a failure.
+        #
+        # tier=guardrail: scored on replayed thinking tokens (see guardrailBasis),
+        # NOT whole-request bytes. The strategy only touches thinking, so a
+        # whole-request percentage mostly measures how much unrelated file body
+        # the fixture happens to carry.
+        endpoint: "/v1/messages"
+        tier: "guardrail"
+        qualityCheck: answer_judge
+        params: {}
 
   memory-recall:
     title: "Cross-session memory recall"
@@ -350,4 +370,20 @@ benchmarks:
         # round. The request must pass through byte-identical.
         params: {}
         tier: "diagnostic"
+        qualityCheck: readonly
+      - id: "44-prefix-churn"
+        title: 'Prefix churn — the client rewrites its own cached prefix between two turns'
+        strategy: "cache_lint"
+        # Read-only CROSS-TURN sensor, so it needs two requests, not one: turn 1
+        # primes the session and turn 2 (44-prefix-churn.turn2.json) arrives with
+        # the tools reordered and a timestamp injected into the system prompt.
+        # Both are invisible to the user; both invalidate the provider's cached
+        # prefix, turning ~0.1x cache reads into ~1.25x cache writes.
+        #
+        # A single stateless request cannot exercise this (nothing to compare
+        # against) and it never rewrites bytes, so the token columns stay flat by
+        # construction and the finding rides `basis` — same shape as
+        # 26-context-quality / 41-mixed-content-census.
+        params: {}
+        tier: "guardrail"
         qualityCheck: readonly

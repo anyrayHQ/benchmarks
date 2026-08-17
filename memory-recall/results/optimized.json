@@ -5,16 +5,38 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2500, roles=tool|function|user",
     "tier": "accounting",
-    "beforeChars": 23581,
-    "afterChars": 3466,
-    "beforeTok": 5895,
-    "afterTok": 867,
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 23741,
+    "afterChars": 3571,
+    "beforeTok": 5935,
+    "afterTok": 893,
     "savedPct": 85,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (23413->3298 chars, -86%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (23413->3243 chars, -86%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "36-stale-observations",
+    "title": "Stale trajectory — mask old bulky observations, keep errors and fresh turns",
+    "strategy": "observation_mask",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
+    "beforeChars": 26888,
+    "afterChars": 4460,
+    "beforeTok": 6722,
+    "afterTok": 1115,
+    "savedPct": 83,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "masked 3 stale tool observation(s) (22709->281 chars, -99%); 3 stashed for retrieval"
     ]
   },
   {
@@ -23,6 +45,8 @@
     "strategy": "output_externalize",
     "knob": "(defaults)",
     "tier": "accounting",
+    "optimizerVersion": "0.3.124",
+    "defaultsRevision": 9,
     "beforeChars": 98322,
     "afterChars": 1364,
     "beforeTok": 24581,
@@ -33,24 +57,6 @@
     "fired": true,
     "decisions": [
       "externalized 1 tool output(s) 97025->67 chars (-100%); retrievable on demand"
-    ]
-  },
-  {
-    "id": "36-stale-observations",
-    "title": "Stale trajectory — mask old bulky observations, keep errors and fresh turns",
-    "strategy": "observation_mask",
-    "knob": "(defaults)",
-    "tier": "accounting",
-    "beforeChars": 26888,
-    "afterChars": 4401,
-    "beforeTok": 6722,
-    "afterTok": 1100,
-    "savedPct": 84,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "masked 3 stale tool observation(s) (22709->222 chars, -99%); 3 stashed for retrieval"
     ]
   }
 ]

@@ -9,8 +9,8 @@
   {
     "id": "10-screenshot-ocr",
     "title": "Pasted screenshot — \"what is this error and how do I fix it?\"",
-    "chars": 54354,
-    "tokens": 13589,
+    "chars": 54327,
+    "tokens": 13582,
     "max_tokens": 1024
   },
   {
@@ -23,8 +23,8 @@
   {
     "id": "25-claude-cache-prefix",
     "title": "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse",
-    "chars": 1405,
-    "tokens": 351,
+    "chars": 4937,
+    "tokens": 1234,
     "max_tokens": 1024
   },
   {
@@ -32,13 +32,6 @@
     "title": "Context health score — flag a bloated, over-fetched context",
     "chars": 10821,
     "tokens": 2705,
-    "max_tokens": 1024
-  },
-  {
-    "id": "41-mixed-content-census",
-    "title": "Content census — nine shape classes through a read-only pass",
-    "chars": 7874,
-    "tokens": 1969,
     "max_tokens": 1024
   },
   {
@@ -61,5 +54,19 @@
     "chars": 2542,
     "tokens": 636,
     "max_tokens": 4096
+  },
+  {
+    "id": "41-mixed-content-census",
+    "title": "Content census — nine shape classes through a read-only pass",
+    "chars": 7874,
+    "tokens": 1969,
+    "max_tokens": 1024
+  },
+  {
+    "id": "44-prefix-churn",
+    "title": "Prefix churn — the client rewrites its own cached prefix between two turns",
+    "chars": 799,
+    "tokens": 200,
+    "max_tokens": 1024
   }
 ]
