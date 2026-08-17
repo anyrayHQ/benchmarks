@@ -17,7 +17,8 @@
     "verdicts": "node -e \"import('./lib/writeVerdicts.mjs').then(m=>m.renderVerdicts())\"",
     "report": "node -e \"import('./lib/writePipelineSummary.mjs').then(m=>console.log(m.renderPipelineSummary()))\"",
     "validate": "node run_live.mjs --mode pipeline --all && npm run report && node run_live.mjs --mode per-strategy --all && npm run verdicts",
-    "charts": "node tools/make-charts.mjs"
+    "charts": "node tools/make-charts.mjs",
+    "coverage": "node -e \"import('./lib/writeCoverage.mjs').then(m=>{m.writeCoverage();console.log('Wrote COVERAGE.md')})\""
   },
   "engines": {
     "node": ">=20"

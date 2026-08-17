@@ -39,6 +39,10 @@ counts use a `chars / 4` estimate, so read the **percentage** as the headline (s
 [Methodology](#methodology)). Full per-workload and per-strategy breakdowns, plus a
 real-provider cross-check, are in [RESULTS.md](RESULTS.md).
 
+Which of the optimizer's registered strategies this suite measures, and which it does
+not, is [COVERAGE.md](COVERAGE.md) — 20 of the 23 registered kinds, with the reason and
+the value of each gap.
+
 ### What it actually does
 
 One real workload — [`logs-and-data/1-access-log`](logs-and-data/): paste a 500-line

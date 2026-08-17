@@ -149,3 +149,61 @@ test('quality headline counts match README and QUALITY', () => {
     `README badge must read "kept ${strict.PASS}/${rows.length}"`
   );
 });
+
+// --- COVERAGE.md ------------------------------------------------------------
+// COVERAGE.md answers "which registered strategies does this suite measure?".
+// Two halves, and only one of them is checkable from data in this repo:
+//   - which kinds have workloads, and what they scored — derived from
+//     config.yaml + optimized.json, so it is enforced exactly like the tables above;
+//   - the registry mirror itself (the 23 kinds, cache flags, shipped defaults) —
+//     hand-maintained, because the monorepo is not a dependency here. The
+//     monorepo owns the drift guard for its own lists (wasteCatalog.test.ts);
+//     what this repo can prove is that every strategy it BENCHMARKS is a kind
+//     the mirror knows about, which is what catches a renamed or retired id.
+
+test('COVERAGE lists every strategy the suite actually benchmarks', async () => {
+  const { REGISTRY_MIRROR, collectMeasured } = await import('../lib/writeCoverage.mjs');
+  const known = new Set(REGISTRY_MIRROR.map((r) => r.kind));
+  for (const kind of collectMeasured().keys()) {
+    assert.ok(
+      known.has(kind),
+      `config.yaml benchmarks "${kind}" but REGISTRY_MIRROR in lib/writeCoverage.mjs does not list it — ` +
+        `re-mirror it from the monorepo REGISTRY (optimizer/src/strategies/index.ts)`
+    );
+  }
+});
+
+test('COVERAGE.md matches the committed results', async () => {
+  const { renderCoverage } = await import('../lib/writeCoverage.mjs');
+  assert.equal(
+    doc('COVERAGE.md').trim(),
+    renderCoverage().trim(),
+    'COVERAGE.md is stale — regenerate with `npm run coverage`'
+  );
+});
+
+test('COVERAGE headline counts match the mirror and the results', async () => {
+  const { REGISTRY_MIRROR, collectMeasured } = await import('../lib/writeCoverage.mjs');
+  const measured = collectMeasured();
+  const covered = REGISTRY_MIRROR.filter((r) => measured.has(r.kind)).length;
+  const workloads = [...measured.values()].reduce((n, rs) => n + rs.length, 0);
+  const total = REGISTRY_MIRROR.length;
+
+  // Every configured workload must appear in the committed scores, or the
+  // matrix would claim coverage the data does not back.
+  assert.equal(workloads, rowsFrom('optimized.json').filter((r) => r.strategy).length);
+
+  const md = doc('COVERAGE.md');
+  assert.ok(
+    md.includes(`**${covered} of ${total}**`),
+    `COVERAGE must say "**${covered} of ${total}**"`
+  );
+  assert.ok(
+    md.includes(`**${workloads}** workloads`),
+    `COVERAGE must say "**${workloads}** workloads"`
+  );
+  assert.ok(
+    md.includes(`**${total - covered}** are not`),
+    `COVERAGE must say "**${total - covered}** are not"`
+  );
+});
