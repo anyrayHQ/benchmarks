@@ -43,7 +43,9 @@ a kind this suite structurally cannot measure is not a gap in the suite.
 
 Default on? **yes**. Cache flags: `cacheBusting`. Docs: strategy + guardrails + protocol.
 
-**Why it is uncovered.** On by default, `cacheBusting`, and a documented headline strategy, yet no workload pins it. It is measurable here: the harness already drives the Anthropic messages route (`lib/gatewayClient.mjs` exists precisely so `thinking` and `context_management` can ride along), which is the only thing a thinking-block payload needs. Nothing structural blocks a workload — it was simply never written.
+**Why it is uncovered.** Nothing gates it — no workload in `config.yaml` names it. Note this is NOT a config-enablement question: the harness force-enables the hero per workload (`setStrategy` PUTs `enabled: true`, and `optimize()` is called with `enabledKinds: [strategy]`), so whatever a deployment has on by default is irrelevant to what this suite measures. The kind is simply absent from the workload list.
+
+**Measured, not assumed.** Verified directly against the strategy, not inferred. Driving a synthetic 8-tool-loop transcript through the real `optimize()` pipeline pinned to `thinking_trim` fires it for **12% whole-request reduction on BOTH `/v1/messages` and `/v1/chat/completions`** — there is no endpoint allowlist, the strategy gates on message SHAPE, so no new harness capability is needed. Two things a fixture must get right: the thinking blocks have to be **opaque** (empty `thinking` text plus a signature, which is what `thinking.display: "omitted"` makes every current Claude model replay, and the lane `cutOpaqueChain` serves); and tool results must differ per turn, or `context_dedupe` collapses them first and masks the row. A readable-reasoning transcript correctly yields 0% when its anchors are not externalized into the same assistant turn, so that shape measures the guard, not the saving.
 
 **What covering it is worth.** HIGHEST of the three. Its live share is first-order and volatile: it ran at ~32% of all optimizer token savings, collapsed to ~1.6% when Anthropic made `thinking.display: "omitted"` the default, and was restored by a defaults migration. A swing that large landed with no offline workload able to catch it. Cover this one first.
 
@@ -78,6 +80,6 @@ Not drift, though an id-only search says otherwise: **`audited_holdout`** is doc
 
 ## Mentioned here but not registry kinds
 
-- **`code_skeleton`** — A RETIRED kind, superseded by `code_graph` as a strict superset (mutually exclusive; the optimizer rejects it). Retirement is recorded in QUALITY.md, RESULTS.md and config.yaml, so the mentions are history, not drift.
-- **`context_management`** — Anthropic's native request field, not a strategy id. `provider_context_trim` injects it; the harness asserts on it by name.
+- **`code_skeleton`** — A RETIRED kind (v0.3.24), superseded by `code_graph` as a strict superset and mutually exclusive with it — the optimizer rejects a config naming both. It was the original `7-codebase-explore` hero, and that workload now runs `code_graph`. Every surviving mention is dated retirement prose in QUALITY.md, RESULTS.md and config.yaml, plus two `tests/live.test.mjs` fixtures using it as an arbitrary label. History, not drift.
+- **`context_management`** — NOT a retired strategy id and NOT an old name for `context_compression` — it is Anthropic's own request field. `provider_context_trim` injects a `clear_tool_uses` edit into it so the provider clears aged tool results server-side, leaving message bytes untouched; `run_benchmark.mjs` asserts on `after.context_management` to score workload `38-anthropic-context-trim`. The two are unrelated: `context_compression` rewrites bytes we send, this one annotates a request so Anthropic drops bytes we keep. Renaming or removing these mentions would break a scored workload.
 
