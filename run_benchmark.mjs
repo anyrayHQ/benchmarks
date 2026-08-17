@@ -133,7 +133,7 @@ async function measureSemanticCacheHit(client, payload, cfg) {
   return hitResult();
 }
 
-async function runSuite(cfg, client, suite, only, limit) {
+async function runSuite(cfg, client, suite, only, limit, provenance) {
   let workloads = workloadsFor(cfg, suite, only);
   if (limit != null) workloads = workloads.slice(0, limit);
 
@@ -186,6 +186,13 @@ async function runSuite(cfg, client, suite, only, limit) {
         strategy: w.strategy,
         knob: formatKnob(w.params),
         tier: w.tier ?? 'accounting',
+        // Provenance is PER ROW, not per file, because this loop resumes: rows
+        // already in optimized.json are skipped, so a partial re-run appends new
+        // rows beside old ones. A file-level stamp would relabel untouched rows
+        // with a version that never measured them — exactly how v0.3.24 and
+        // v0.3.41 rows ended up sharing one table with nothing to tell them apart.
+        optimizerVersion: provenance?.optimizerVersion ?? null,
+        defaultsRevision: provenance?.defaultsRevision ?? null,
         beforeChars,
         afterChars: m.afterChars,
         beforeTok,
@@ -290,11 +297,18 @@ async function main() {
   // Pinning one strategy at a time rewrites the optimizer's config; snapshot it
   // first and restore on the way out so a shared optimizer is left as we found it.
   const snapshot = await client.getSettings().catch(() => null);
+  // Which optimizer is about to produce these numbers. Read once, before any
+  // strategy pinning, and stamped onto every row this run writes.
+  const provenance = await client.getProvenance().catch(() => null);
+  console.log(
+    `Optimizer: ${provenance?.optimizerVersion ?? 'unknown version'} ` +
+      `(defaults revision ${provenance?.defaultsRevision ?? '?'})`
+  );
   try {
     const suites = args.all ? suiteNames(cfg) : [args.suite];
     for (const suite of suites) {
       console.log(`\n== ${suite} ==`);
-      await runSuite(cfg, client, suite, args.workload, args.limit);
+      await runSuite(cfg, client, suite, args.workload, args.limit, provenance);
     }
     console.log('\nDone. Results in <suite>/results/{control,optimized}.json');
   } finally {
