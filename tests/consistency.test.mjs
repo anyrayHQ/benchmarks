@@ -86,6 +86,39 @@ test('RESULTS savings-by-strategy table matches the committed results', () => {
   }
 });
 
+// The table guard above only reads table CELLS, so the sentence introducing the
+// table drifted from it unnoticed: prose said "33% / 26% / 22%" while the column
+// below said 32% / 26% / 23%, and the mix was still described as "weighted to
+// real coding-agent traffic" after README.md had retracted exactly that claim
+// (ANY-116). A published share is a number like any other — recompute it.
+test('RESULTS top-three prose shares match the share-of-input column', () => {
+  const md = doc('RESULTS.md');
+  const rows = aggregate(accounting(), 'strategy');
+  const total = [...rows.values()].reduce((n, v) => n + v.before, 0);
+  const top3 = ['context_compression', 'window_budget', 'relevance_filter'];
+  const shares = top3.map((s) => Math.round((100 * rows.get(s).before) / total));
+  assert.ok(
+    md.includes(`(${shares.join('% / ')}%)`),
+    `RESULTS top-three prose drifted: expected "(${shares.join('% / ')}%)"`
+  );
+  const sum = top3.reduce((n, s) => n + rows.get(s).before, 0);
+  assert.ok(
+    Math.round((100 * sum) / total) >= 75,
+    'top three no longer hold ~80% of input — the prose claim needs rewriting'
+  );
+});
+
+// The suite measures its own fixtures, never production traffic. ANY-116 was
+// filed because the docs claimed otherwise; this keeps the claim from returning.
+test('no doc claims the fixture mix is weighted to production traffic', () => {
+  for (const name of ['README.md', 'RESULTS.md', 'SUMMARY.md', 'COVERAGE.md', 'QUALITY.md']) {
+    assert.ok(
+      !/weighted to (real|production)/i.test(doc(name)),
+      `${name} claims the mix is weighted to real traffic — this suite cannot support that`
+    );
+  }
+});
+
 test('RESULTS per-workload rows match each committed score', () => {
   const md = doc('RESULTS.md');
   for (const r of accounting()) {
