@@ -396,6 +396,30 @@ async function main() {
     process.exit(2);
   }
 
+  // Load the embedding model before the first measurement, or whichever
+  // semanticRerank workload happens to run first silently scores against lexical
+  // ranking only (see warmEmbedder). Warm with a real semanticRerank workload —
+  // synthetic filler gets served by BM25 and never loads the model. Advisory: a
+  // cold embedder still produces a number, just an order-dependent one.
+  const warmup = suiteNames(cfg)
+    .flatMap((s) => workloadsFor(cfg, s, null).map((w) => ({ suite: s, w })))
+    .find(({ w }) => w.strategy === 'relevance_filter' && w.params?.semanticRerank);
+  if (warmup) {
+    const payloadPath = join(cfg.root, warmup.suite, 'payloads', `${warmup.w.id}.json`);
+    // Must carry the retrieve tool, exactly like a measured run: without it the
+    // optimizer suppresses every eliding strategy as `no_retrieve`, so the warm-up
+    // never reaches the re-ranker and the model never loads.
+    const request = existsSync(payloadPath)
+      ? withRetrieveTool(JSON.parse(readFileSync(payloadPath, 'utf8'))).request
+      : null;
+    if (!(await client.warmEmbedder(request, warmup.w.params))) {
+      console.warn(
+        '  ! embedder did not confirm warm — semanticRerank rows may score low.\n' +
+          "    Run 'npm run fetch-model' in the optimizer package if this persists."
+      );
+    }
+  }
+
   // Pinning one strategy at a time rewrites the optimizer's config; snapshot it
   // first and restore on the way out so a shared optimizer is left as we found it.
   const snapshot = await client.getSettings().catch(() => null);
