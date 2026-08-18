@@ -6,15 +6,15 @@
     "knob": "keepChars=8000, roles=user",
     "tier": "accounting",
     "beforeChars": 17099,
-    "afterChars": 7701,
+    "afterChars": 7493,
     "beforeTok": 4275,
-    "afterTok": 1925,
-    "savedPct": 55,
+    "afterTok": 1873,
+    "savedPct": 56,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (17099->7701 chars, -55%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (17099->7493 chars, -56%); 1 stashed for retrieval"
     ]
   },
   {
@@ -24,15 +24,15 @@
     "knob": "roles=user",
     "tier": "accounting",
     "beforeChars": 22676,
-    "afterChars": 12641,
+    "afterChars": 8046,
     "beforeTok": 5669,
-    "afterTok": 3160,
-    "savedPct": 44,
+    "afterTok": 2012,
+    "savedPct": 65,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 gitdiff) 22676->12641 chars (-44%); 1 stashed for retrieval"
+      "compressed 1 tool output(s) (1 gitdiff) 22676->8046 chars (-65%); 1 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +42,15 @@
     "knob": "minChars=200, minBodyLines=2, roles=user",
     "tier": "accounting",
     "beforeChars": 18714,
-    "afterChars": 15330,
+    "afterChars": 15280,
     "beforeTok": 4679,
-    "afterTok": 3833,
+    "afterTok": 3820,
     "savedPct": 18,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 1 file(s): kept 10 working-set symbol(s) (1 from intent, 8 central), elided 81 body line(s) 18714->15330 chars (-18%); 1 stashed for retrieval"
+      "graph-outlined 1 file(s): kept 10 working-set symbol(s) (1 from intent, 8 central), elided 81 body line(s) 18714->15280 chars (-18%); 1 stashed for retrieval"
     ]
   },
   {
@@ -59,16 +59,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 8367,
-    "afterChars": 5783,
-    "beforeTok": 2092,
-    "afterTok": 1446,
-    "savedPct": 31,
+    "beforeChars": 8511,
+    "afterChars": 5805,
+    "beforeTok": 2128,
+    "afterTok": 1451,
+    "savedPct": 32,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 70 body line(s) 6424->3840 chars (-40%); 8 stashed for retrieval"
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3718 chars (-42%); 8 stashed for retrieval"
     ]
   },
   {
@@ -77,16 +77,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 7147,
-    "afterChars": 4763,
-    "beforeTok": 1787,
-    "afterTok": 1191,
+    "beforeChars": 7295,
+    "afterChars": 4877,
+    "beforeTok": 1824,
+    "afterTok": 1219,
     "savedPct": 33,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4110 chars (-37%); 10 stashed for retrieval"
+      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4076 chars (-37%); 10 stashed for retrieval"
     ]
   },
   {
@@ -95,16 +95,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 10597,
-    "afterChars": 3561,
-    "beforeTok": 2649,
-    "afterTok": 890,
+    "beforeChars": 10697,
+    "afterChars": 3647,
+    "beforeTok": 2674,
+    "afterTok": 912,
     "savedPct": 66,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 1 file(s): kept 3 working-set symbol(s) (2 from intent, 0 central), elided 140 body line(s) 10484->3448 chars (-67%); 1 stashed for retrieval"
+      "graph-outlined 1 file(s): kept 3 working-set symbol(s) (2 from intent, 0 central), elided 140 body line(s) 10484->3434 chars (-67%); 1 stashed for retrieval"
     ]
   },
   {
@@ -113,16 +113,16 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "beforeChars": 8872,
-    "afterChars": 2617,
-    "beforeTok": 2218,
-    "afterTok": 654,
-    "savedPct": 71,
+    "beforeChars": 8966,
+    "afterChars": 2698,
+    "beforeTok": 2242,
+    "afterTok": 675,
+    "savedPct": 70,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 1 file(s): kept 2 working-set symbol(s) (2 from intent, 0 central), elided 113 body line(s) 8780->2525 chars (-71%); 1 stashed for retrieval"
+      "graph-outlined 1 file(s): kept 2 working-set symbol(s) (2 from intent, 0 central), elided 113 body line(s) 8780->2512 chars (-71%); 1 stashed for retrieval"
     ]
   }
 ]

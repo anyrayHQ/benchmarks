@@ -14,12 +14,11 @@ input:output. The session only grows, so the bill compounds.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| GitHub triage — "which open issues are P0 auth bugs?" | `relevance_filter` | `keepChars=2000, roles=user` | 5,583 | 902 | **84%** |
-| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=8000` | 82,110 | 7,042 | **91%** |
-| Test-suite output — "which tests failed and why?" | `command_digest` | `maxFailures=10, contextLines=12, roles=user` | 1,515 | 351 | **77%** |
-| Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 587 | **25%** |
-| Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,509 | 2,207 | **37%** |
-
+| GitHub triage — "which open issues are P0 auth bugs?" | `relevance_filter` | `keepChars=2000, roles=user` | 5,583 | 883 | **84%** |
+| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=8000` | 82,110 | 82,110 | **0%** |
+| Test-suite output — "which tests failed and why?" | `command_digest` | `maxFailures=10, contextLines=12, roles=user` | 1,515 | 350 | **77%** |
+| Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 781 | **0%** |
+| Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,509 | 3,509 | **0%** |
 ### New workloads (first run 2026-07-08, optimizer v0.3.41)
 
 Two `context_dedupe` workloads cover the most common agent-loop waste of all —
@@ -29,7 +28,6 @@ re-reading what was already read.
 |---|---|---|--:|--:|--:|
 | Repeated reads — the agent re-reads a file and re-runs `git status` | `context_dedupe` | (defaults) | 1,793 | 1,123 | **37%** |
 | Flaky-suite re-run — near-duplicate pytest output collapses to a delta | `context_dedupe` | (defaults, `nearDupe`) | 4,989 | 3,143 | **37%** |
-
 ## How it works
 
 - **`relevance_filter`** keeps the issues matching the triage query (the P0 auth

@@ -30,15 +30,15 @@
   {
     "id": "29-orders-json",
     "title": "Orders dump (tool result) — \"which orders failed and why?\"",
-    "chars": 71759,
-    "tokens": 17940,
+    "chars": 71882,
+    "tokens": 17971,
     "max_tokens": 1024
   },
   {
     "id": "30-metrics-json",
     "title": "Metrics series (tool result) — \"find the latency spike\"",
-    "chars": 48363,
-    "tokens": 12091,
+    "chars": 48465,
+    "tokens": 12116,
     "max_tokens": 1024
   }
 ]

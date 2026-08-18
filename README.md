@@ -3,7 +3,7 @@
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
-[![answer: kept](https://img.shields.io/badge/answer-kept%2032%2F32-1a7f5a)](QUALITY.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2031%2F32-1a7f5a)](QUALITY.md)
 
 Each of the 29 real-world workloads here is a token-waste pattern real devs and agents
 produce every day — pasting a whole log and asking one question, an agent re-reading
@@ -24,12 +24,12 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 159,992 | 40,085 | **75%** |
-| [`code-context/`](code-context/) | 7 | 23,369 | 13,099 | **44%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,723 | 6,251 | **65%** |
-| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 15,355 | **85%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,198 | 2,308 | **94%** |
-| **Total** | **29** | **338,562** | **77,098** | **77%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 11,380 | **93%** |
+| [`code-context/`](code-context/) | 7 | 23,491 | 11,962 | **49%** |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 9,642 | **46%** |
+| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 91,899 | **8%** |
+| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 26,592 | **29%** |
+| **Total** | **29** | **338,833** | **151,475** | **55%** |
 | [`guardrails/`](guardrails/) | 9 | *special accounting* | | *see suite* |
 
 The mix is **weighted to real coding-agent traffic** — the three largest strategies
@@ -68,7 +68,7 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Token savings vs answer kept — all 24 workloads keep 100% of the answer at high savings, scored by the Claude Opus 4.8 judge" src="assets/quality-vs-savings.light.svg" width="720" />
+    <img alt="Token savings vs answer kept — 31 of 32 workloads keep 100% of the answer at high savings" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
   <sub>Savings buy nothing if the answer dies — so we check. Dots colored by the Claude Opus 4.8 judge; every workload keeps 100% of the answer, scored openly.</sub>
@@ -85,11 +85,14 @@ signals, side by side:
 | Key-fact survival (strict substring, model-free) | 32 | 32 | 0 | 0 |
 | Semantic judge (Claude Opus 4.8) | 32 | 31 | 1 | 0 |
 
-**The answer survives on all 32 by the strict measure, and a Claude Opus 4.8 judge
-confirms 31 PASS / 1 MARGINAL / 0 FAIL** (the one MARGINAL is a judge scope note on
-`37-durable-blob`, not content loss — see [QUALITY.md](QUALITY.md)) — each workload's
-strategy is matched to its content and tuned for strong savings while keeping every
-answer-bearing fact, with every judge verdict shown in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on 31 of 32 by the strict measure.** The exception is
+`30-metrics-json`, where `context_compression` drops the numeric values the question
+asks for; it is a known defect (ANY-133), reported here rather than tuned away. Each
+other workload's strategy is matched to its content and tuned for strong savings while
+keeping every answer-bearing fact. The Claude Opus 4.8 judge currently reads
+**23 PASS / 0 MARGINAL / 0 FAIL**: it covers the 23 workloads whose result is
+unchanged since the last judged run, and the 9 that moved are awaiting a re-judge
+(`npm run quality -- --all --judge`). Full verdicts in **[QUALITY.md](QUALITY.md)**.
 
 ## Why these workloads
 
@@ -235,9 +238,9 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 ## Does it preserve the answer?
 
 Yes. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive: **32 of 32
-by strict substring**, and a **Claude Opus 4.8 judge** (committed alongside) confirms
-**31 PASS / 1 MARGINAL / 0 FAIL**. Anyray's strategies are also reversible — every
+answer-bearing key facts for each workload and checks how many survive: **31 of 32
+by strict substring**, with the one failure (`30-metrics-json`) tracked as ANY-133
+rather than hidden. Anyray's strategies are also reversible — every
 elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
 is recoverable.
 

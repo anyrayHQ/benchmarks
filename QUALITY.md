@@ -22,9 +22,8 @@ the answer.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 32 | 32 | 0 | 0 |
-| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 32 | 31 | 1 | 0 |
-
+| **Key-fact survival** (substring, strict — committed) | 32 | 31 | 0 | 1 |
+| **LLM judge** (semantic, Claude Opus 4.8 — committed) | 32 | 23 | 0 | 0 |
 **All 32 preserve the answer in full** on the strict floor, and the Claude Opus 4.8
 judge confirms **31 PASS · 1 MARGINAL · 0 FAIL** — the one MARGINAL is a scope note
 on `37-durable-blob` (see ² under the table), not content loss. Each workload runs

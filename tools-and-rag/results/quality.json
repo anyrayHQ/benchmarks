@@ -2,24 +2,18 @@
   {
     "id": "11-mcp-tools",
     "strategy": "tool_pruning",
-    "savedPct": 63,
+    "savedPct": 0,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present including tools and PAY P0 bug search.",
-      "by": "claude-opus-4-8"
     }
   },
   {
     "id": "12-rag-overfetch",
     "strategy": "relevance_filter",
-    "savedPct": 67,
+    "savedPct": 68,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -36,7 +30,7 @@
   {
     "id": "32-vocab-mismatch-rag",
     "strategy": "relevance_filter",
-    "savedPct": 71,
+    "savedPct": 75,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -53,7 +47,7 @@
   {
     "id": "13-prompt-boilerplate",
     "strategy": "prompt_compression",
-    "savedPct": 84,
+    "savedPct": 85,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
@@ -87,7 +81,7 @@
   {
     "id": "42-semantic-rerank-rag",
     "strategy": "relevance_filter",
-    "savedPct": 33,
+    "savedPct": 34,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,

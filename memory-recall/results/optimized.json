@@ -5,34 +5,16 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2500, roles=tool|function|user",
     "tier": "accounting",
-    "beforeChars": 23581,
-    "afterChars": 3466,
-    "beforeTok": 5895,
-    "afterTok": 867,
+    "beforeChars": 23744,
+    "afterChars": 3585,
+    "beforeTok": 5936,
+    "afterTok": 896,
     "savedPct": 85,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (23413->3298 chars, -86%); 1 stashed for retrieval"
-    ]
-  },
-  {
-    "id": "37-durable-blob",
-    "title": "Durable externalization — a 100 KB manifest becomes a retrieval handle",
-    "strategy": "output_externalize",
-    "knob": "(defaults)",
-    "tier": "accounting",
-    "beforeChars": 98322,
-    "afterChars": 1364,
-    "beforeTok": 24581,
-    "afterTok": 341,
-    "savedPct": 99,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "externalized 1 tool output(s) 97025->67 chars (-100%); retrievable on demand"
+      "relevance-filtered 1 message(s) against the live turn (23413->3254 chars, -86%); 1 stashed for retrieval"
     ]
   },
   {
@@ -42,15 +24,31 @@
     "knob": "(defaults)",
     "tier": "accounting",
     "beforeChars": 26888,
-    "afterChars": 4401,
+    "afterChars": 4461,
     "beforeTok": 6722,
-    "afterTok": 1100,
-    "savedPct": 84,
+    "afterTok": 1115,
+    "savedPct": 83,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "masked 3 stale tool observation(s) (22709->222 chars, -99%); 3 stashed for retrieval"
+      "masked 3 stale tool observation(s) (22709->282 chars, -99%); 3 stashed for retrieval"
     ]
+  },
+  {
+    "id": "37-durable-blob",
+    "title": "Durable externalization — a 100 KB manifest becomes a retrieval handle",
+    "strategy": "output_externalize",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "beforeChars": 98322,
+    "afterChars": 98322,
+    "beforeTok": 24581,
+    "afterTok": 24581,
+    "savedPct": 0,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": false,
+    "decisions": []
   }
 ]

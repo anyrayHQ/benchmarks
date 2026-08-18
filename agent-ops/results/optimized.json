@@ -6,15 +6,15 @@
     "knob": "keepChars=2000, roles=user",
     "tier": "accounting",
     "beforeChars": 22333,
-    "afterChars": 3607,
+    "afterChars": 3531,
     "beforeTok": 5583,
-    "afterTok": 902,
+    "afterTok": 883,
     "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (22333->3607 chars, -84%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (22333->3531 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -24,16 +24,14 @@
     "knob": "maxTokens=8000",
     "tier": "accounting",
     "beforeChars": 328438,
-    "afterChars": 28168,
+    "afterChars": 328438,
     "beforeTok": 82110,
-    "afterTok": 7042,
-    "savedPct": 91,
+    "afterTok": 82110,
+    "savedPct": 0,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "cropped 28 message(s) to fit ~8000-token budget (est 82375->7305 tokens, -91%); 28 stashed for retrieval"
-    ]
+    "fired": false,
+    "decisions": []
   },
   {
     "id": "16-test-run",
@@ -42,15 +40,15 @@
     "knob": "maxFailures=10, contextLines=12, roles=user",
     "tier": "accounting",
     "beforeChars": 6060,
-    "afterChars": 1402,
+    "afterChars": 1401,
     "beforeTok": 1515,
-    "afterTok": 351,
+    "afterTok": 350,
     "savedPct": 77,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "digested test-run tool output — test run (3 failed, 77 passed): kept 3 failure block(s); 6060->1402 chars (-77%); stashed for retrieval"
+      "digested test-run tool output — test run (3 failed, 77 passed): kept 3 failure block(s); 6060->1401 chars (-77%); stashed for retrieval"
     ]
   },
   {
@@ -60,16 +58,14 @@
     "knob": "maxTokens=700",
     "tier": "accounting",
     "beforeChars": 3122,
-    "afterChars": 2349,
+    "afterChars": 3122,
     "beforeTok": 781,
-    "afterTok": 587,
-    "savedPct": 25,
+    "afterTok": 781,
+    "savedPct": 0,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "cropped 2 message(s) to fit ~700-token budget (est 836->642 tokens, -23%); 2 stashed for retrieval"
-    ]
+    "fired": false,
+    "decisions": []
   },
   {
     "id": "31-long-toolsession",
@@ -78,16 +74,14 @@
     "knob": "maxTokens=2500",
     "tier": "accounting",
     "beforeChars": 14036,
-    "afterChars": 8829,
+    "afterChars": 14036,
     "beforeTok": 3509,
-    "afterTok": 2207,
-    "savedPct": 37,
+    "afterTok": 3509,
+    "savedPct": 0,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "cropped 4 message(s) to fit ~2500-token budget (est 3602->2299 tokens, -36%); 4 stashed for retrieval"
-    ]
+    "fired": false,
+    "decisions": []
   },
   {
     "id": "34-repeat-reads",

@@ -2,7 +2,7 @@
   {
     "id": "5-code-search",
     "strategy": "relevance_filter",
-    "savedPct": 55,
+    "savedPct": 56,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
@@ -19,18 +19,12 @@
   {
     "id": "6-git-diff",
     "strategy": "context_compression",
-    "savedPct": 44,
+    "savedPct": 65,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "auth/middleware.ts diff with requireAdmin loosening fully present",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -53,7 +47,7 @@
   {
     "id": "15-multifile-graph",
     "strategy": "code_graph",
-    "savedPct": 31,
+    "savedPct": 32,
     "keyFacts": 6,
     "deterministic": {
       "coverage": 100,
@@ -104,7 +98,7 @@
   {
     "id": "28-read-module-py",
     "strategy": "code_graph",
-    "savedPct": 71,
+    "savedPct": 70,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
