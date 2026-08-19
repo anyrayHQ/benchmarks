@@ -30,8 +30,8 @@
   {
     "id": "26-context-quality",
     "title": "Context health score — flag a bloated, over-fetched context",
-    "chars": 10821,
-    "tokens": 2705,
+    "chars": 10891,
+    "tokens": 2723,
     "max_tokens": 1024
   },
   {
@@ -58,8 +58,8 @@
   {
     "id": "41-mixed-content-census",
     "title": "Content census — nine shape classes through a read-only pass",
-    "chars": 7874,
-    "tokens": 1969,
+    "chars": 7940,
+    "tokens": 1985,
     "max_tokens": 1024
   },
   {

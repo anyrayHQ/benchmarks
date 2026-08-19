@@ -15,7 +15,7 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | `context_dedupe` | `34-repeat-reads`, `35-flaky-test-rerun` | 37% (median of 2) | none (deterministic) | yes | strategy page | covered |
 | `observation_mask` | `36-stale-observations` | 83% | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
 | `command_digest` | `16-test-run` | 77% | `cacheBusting` | yes | strategy page | covered |
-| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 90% (median of 4) | `cacheBusting` | yes | strategy page | covered |
+| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 91% (median of 4) | `cacheBusting` | yes | strategy page | covered |
 | `code_graph` | `7-codebase-explore`, `15-multifile-graph`, `17-python-multifile`, `27-read-service-ts`, `28-read-module-py` | 33% (median of 5) | `cacheBusting` | yes | strategy page | covered |
 | `relevance_filter` | `1-access-log`, `2-sre-incident`, `33-synonym-gap-logs`, `5-code-search`, `12-rag-overfetch`, `32-vocab-mismatch-rag`, `42-semantic-rerank-rag`, `3-github-triage`, `18-session-recall` | 75% (median of 9) | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
 | `window_budget` | `8-long-session`, `24-agent-toolcalls`, `31-long-toolsession` | 46% (median of 3) | `cacheBusting` + `cacheSuffixSafe` | no | strategy page | covered |

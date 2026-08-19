@@ -46,7 +46,7 @@
   {
     "id": "29-orders-json",
     "strategy": "context_compression",
-    "savedPct": 89,
+    "savedPct": 88,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -57,12 +57,15 @@
   {
     "id": "30-metrics-json",
     "strategy": "context_compression",
-    "savedPct": 90,
+    "savedPct": 93,
     "keyFacts": 2,
     "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
+      "coverage": 0,
+      "verdict": "FAIL",
+      "missing": [
+        "4200",
+        "512"
+      ]
     }
   }
 ]

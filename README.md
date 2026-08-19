@@ -3,7 +3,7 @@
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
-[![answer: kept](https://img.shields.io/badge/answer-kept%2033%2F33-1a7f5a)](QUALITY.md)
+[![answer: kept](https://img.shields.io/badge/answer-kept%2032%2F33-1a7f5a)](QUALITY.md)
 
 Each of the 29 real-world workloads here is a token-waste pattern real devs and agents
 produce every day — pasting a whole log and asking one question, an agent re-reading
@@ -24,12 +24,12 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 155,964 | 11,377 | **93%** |
-| [`code-context/`](code-context/) | 7 | 23,492 | 11,968 | **49%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,773 | 5,705 | **68%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 11,377 | **93%** |
+| [`code-context/`](code-context/) | 7 | 23,491 | 11,969 | **49%** |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,706 | **68%** |
 | [`agent-ops/`](agent-ops/) | 7 | 100,280 | 12,064 | **88%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,238 | 2,349 | **94%** |
-| **Total** | **29** | **334,747** | **43,463** | **87%** |
+| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 2,350 | **94%** |
+| **Total** | **29** | **338,833** | **43,466** | **87%** |
 | [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
 
 Three strategies carry most of this suite's input — `context_compression`,
@@ -40,6 +40,22 @@ not as a weighted forecast of a given deployment's bill. Token counts use a
 `chars / 4` estimate, so read the **percentage** as the headline (see
 [Methodology](#methodology)). Full per-workload and per-strategy breakdowns are in
 [RESULTS.md](RESULTS.md).
+
+### What a default install gets
+
+**The harness enables each workload's strategy before measuring it**, whatever the
+optimizer ships as its default. That is the right way to measure one strategy in
+isolation, and it means the total above is *not* what a stock deployment produces:
+
+| | Share of measured savings |
+|---|--:|
+| strategies **on** by default | **63%** |
+| strategies **off** by default (`window_budget` 27%, `output_externalize` 8%, `tool_pruning` 1%) | **37%** |
+
+On the default-on subset alone the suite reads 222,238 → 34,884 tok, **84%**. The
+opt-in strategies are off for reasons, not by oversight — `window_budget` crops whole
+messages against a client-supplied ceiling, so it stays operator-enabled — and each
+one is annotated in [`config.yaml`](config.yaml).
 
 Which of the optimizer's registered strategies this suite measures, and which it does
 not, is [COVERAGE.md](COVERAGE.md) — **22 of the 23** registered kinds. The one it does
@@ -75,10 +91,10 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Token savings vs answer kept — all 33 workloads keep 100% of the answer at high savings, by strict key-fact survival" src="assets/quality-vs-savings.light.svg" width="720" />
+    <img alt="Token savings vs answer kept — 32 of 33 workloads keep 100% of the answer at high savings; 30-metrics-json is the known ANY-133 failure, by strict key-fact survival" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
-  <sub>Savings buy nothing if the answer dies — so we check. Every workload keeps 100% of its answer-bearing key facts, scored openly.</sub>
+  <sub>Savings buy nothing if the answer dies — so we check. 32 of 33 workloads keep 100% of their answer-bearing key facts; the one that does not is a tracked optimizer bug, left failing.</sub>
 </p>
 
 ## Quality — does the answer survive?
@@ -88,11 +104,12 @@ define the **answer-bearing key facts** and check how many survive:
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| Key-fact survival (strict substring, model-free) | 33 | 33 | 0 | 0 |
+| Key-fact survival (strict substring, model-free) | 33 | 32 | 0 | 1 |
 
-**The answer survives on all 33.** Each workload's strategy is matched to its content
-and tuned for strong savings while keeping every answer-bearing fact; the per-workload
-table is in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on 32 of 33.** The exception is `30-metrics-json`, where the
+answering row sits past the 50-item head `context_compression` retains — a real
+optimizer bug (ANY-133), kept as a failing row rather than tuned away. The
+per-workload table is in **[QUALITY.md](QUALITY.md)**.
 
 The strict check is the floor, and it is the one that needs no model: `run_quality.mjs`
 scores it against the optimizer alone, so anyone can reproduce it. The optional
@@ -243,11 +260,19 @@ are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
 
 ## Does it preserve the answer?
 
-Yes. The [**quality benchmark**](QUALITY.md) defines the
-answer-bearing key facts for each workload and checks how many survive: **33 of 33
-by strict substring**. Anyray's strategies are also reversible — every
-elided span is retrievable on demand (`POST /v1/retrieve`) — so even a partial trim
-is recoverable.
+Usually, and the suite is built to show where it does not. The
+[**quality benchmark**](QUALITY.md) defines the answer-bearing key facts for each
+workload and checks how many survive: **32 of 33 by strict substring**.
+
+The one failure is real and deliberately kept. [`30-metrics-json`](logs-and-data/)
+asks which timestamp shows a p99 spike; the answering row sits at array index 305.
+`context_compression` retains the first 50 items of a JSON array, so the model gets
+50 unremarkable rows plus an elision marker, and answers confidently from data that
+no longer contains the answer. Moving the incident into the retained head would
+score 100% and measure nothing. Tracked as ANY-133.
+
+Anyray's strategies are also reversible — every elided span is retrievable on demand
+(`POST /v1/retrieve`) — so even a partial trim is recoverable.
 
 Run it with `node run_quality.mjs --all` (strict survival, needs only the optimizer)
 and `--judge` for the optional semantic pass, which needs a model.

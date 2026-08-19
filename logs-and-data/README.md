@@ -17,8 +17,8 @@ entirely off-topic to the question being asked.
 | SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=12000, roles=user` | 26,385 | 4,256 | **84%** |
 | Synonym-gap logs — "find the resource-exhaustion event" (OOM/cgroup) | `relevance_filter` | `keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7` | 2,963 | 1,163 | **61%** |
 | JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 2,013 | **97%** |
-| Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,970 | 2,067 | **89%** |
-| Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 8,033 | 817 | **90%** |
+| Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,971 | 2,067 | **88%** |
+| Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,116 | 817 | **93%** |
 
 ## How it works
 

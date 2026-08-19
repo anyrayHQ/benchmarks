@@ -23,29 +23,29 @@
   {
     "id": "15-multifile-graph",
     "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
-    "chars": 8510,
+    "chars": 8511,
     "tokens": 2128,
     "max_tokens": 1024
   },
   {
     "id": "17-python-multifile",
     "title": "Multi-file trace (Python) — \"how does Checkout.submit_order capture payment?\"",
-    "chars": 7294,
+    "chars": 7295,
     "tokens": 1824,
     "max_tokens": 1024
   },
   {
     "id": "27-read-service-ts",
     "title": "Read a large TS service file (tool result) — keep the on-path bodies",
-    "chars": 10702,
-    "tokens": 2676,
+    "chars": 10697,
+    "tokens": 2674,
     "max_tokens": 1024
   },
   {
     "id": "28-read-module-py",
     "title": "Read a Python module (tool result) — keep the on-path bodies",
-    "chars": 8963,
-    "tokens": 2241,
+    "chars": 8966,
+    "tokens": 2242,
     "max_tokens": 1024
   }
 ]

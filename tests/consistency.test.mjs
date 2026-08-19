@@ -86,6 +86,46 @@ test('RESULTS savings-by-strategy table matches the committed results', () => {
   }
 });
 
+// The harness force-enables each workload's strategy (setStrategy PUTs
+// `enabled: true`), so the headline sums rows a stock deployment would never
+// produce — 37% of measured savings come from strategies that ship OFF. The
+// README states that split; this keeps it true. OFF_BY_DEFAULT mirrors
+// DEFAULT_CONFIG in the monorepo (optimizer/src/config.ts) and is checked
+// against it by optimizer/experiments/benchmarkSavedShare.py --check-defaults,
+// which is the half this repo cannot see.
+const OFF_BY_DEFAULT = new Set([
+  'window_budget', 'output_externalize', 'tool_pruning', 'param_tuning',
+  'vision_ocr', 'reasoning_budget', 'output_shaping', 'context_quality',
+]);
+
+test('README default-state split matches the committed results', () => {
+  const md = doc('README.md');
+  const rows = accounting();
+  const savedOf = (r) => r.beforeTok - r.afterTok;
+  const total = rows.reduce((n, r) => n + savedOf(r), 0);
+  const off = rows.filter((r) => OFF_BY_DEFAULT.has(r.strategy));
+  const offPct = Math.round((100 * off.reduce((n, r) => n + savedOf(r), 0)) / total);
+  assert.ok(
+    md.includes(`| **${offPct}%** |`),
+    `README off-by-default share drifted: expected ${offPct}%`
+  );
+  assert.ok(
+    md.includes(`| **${100 - offPct}%** |`),
+    `README on-by-default share drifted: expected ${100 - offPct}%`
+  );
+
+  // The default-on subtotal is a second, independent statement of the same
+  // thing — a reader who trusts it deserves it to be recomputed too.
+  const on = rows.filter((r) => !OFF_BY_DEFAULT.has(r.strategy));
+  const b = on.reduce((n, r) => n + r.beforeTok, 0);
+  const a = on.reduce((n, r) => n + r.afterTok, 0);
+  assert.ok(
+    md.includes(`${fmt(b)} → ${fmt(a)} tok, **${savedPct(b, a)}%**`),
+    `README default-on subtotal drifted: expected "${fmt(b)} → ${fmt(a)} tok, `
+      + `**${savedPct(b, a)}%**"`
+  );
+});
+
 // The table guard above only reads table CELLS, so the sentence introducing the
 // table drifted from it unnoticed: prose said "33% / 26% / 22%" while the column
 // below said 32% / 26% / 23%, and the mix was still described as "weighted to
