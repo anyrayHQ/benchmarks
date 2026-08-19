@@ -57,10 +57,30 @@ opt-in strategies are off for reasons, not by oversight — `window_budget` crop
 messages against a client-supplied ceiling, so it stays operator-enabled — and each
 one is annotated in [`config.yaml`](config.yaml).
 
-Which of the optimizer's registered strategies this suite measures, and which it does
-not, is [COVERAGE.md](COVERAGE.md) — **22 of the 23** registered kinds. The one it does
-not is `audited_holdout`, which is not benchmarkable here by construction: it is the
-unoptimized control marker, so it transforms nothing and has no knob to pin.
+### What the headline does and doesn't sum
+
+[COVERAGE.md](COVERAGE.md) shows this suite measures **22 of the 23** registered
+strategies. The headline above is **not** the sum of those 22 — it sums the **11**
+scored on whole-request bytes. The other 11 are measured on their own bases,
+because a whole-request percentage would be meaningless or misleading for them:
+
+| Scored how | Strategies | In the headline? |
+|---|---|:-:|
+| whole-request bytes (accounting) | `context_compression`, `window_budget`, `relevance_filter`, `output_externalize`, `code_graph`, `observation_mask`, `prompt_compression`, `tool_pruning`, `context_dedupe`, `command_digest`, `tool_schema_compression` | yes |
+| own basis (guardrail / cache / diagnostic / vision) | `thinking_trim`, `cache_lint`, `cache_optimizer`, `semantic_cache`, `vision_ocr`, `param_tuning`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `content_census`, `context_quality` | no |
+
+`thinking_trim` is the one to know about. It only touches replayed reasoning, so a
+whole-request figure would mostly measure how much unrelated file body a fixture
+carries; it is scored on replayed thinking tokens instead (**83%**, 719 → 121 tok in
+[`43-thinking-replay`](agent-ops/)). On Anyray's own fleet it is currently the
+**largest single source of optimizer savings** — so the headline omits the strategy
+that, in production, saves the most. That is a property of the accounting basis, not
+a gap in coverage, and it is the clearest reason to read this suite as *"what each
+strategy does to a representative payload"* rather than as a forecast of a bill.
+
+The one strategy with no workload at all is `audited_holdout`, which is not
+benchmarkable here by construction: it is the unoptimized control marker, so it
+transforms nothing and has no knob to pin.
 
 ### What it actually does
 

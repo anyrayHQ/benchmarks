@@ -126,6 +126,36 @@ test('README default-state split matches the committed results', () => {
   );
 });
 
+// COVERAGE.md counts strategies with a WORKLOAD; the headline sums only the ones
+// scored on whole-request bytes. Those are different numbers (22 vs 11) and the
+// README states both, because reading "22 of 23 covered" next to a headline
+// invites the assumption that the headline sums all 22. It does not — most
+// notably it omits thinking_trim, currently the fleet's largest single source of
+// optimizer savings (ANY-116). If a strategy moves between tiers, this fails.
+test('README accounting/own-basis split matches the committed results', () => {
+  const md = doc('README.md');
+  const all = rowsFrom('optimized.json');
+  const inHeadline = [...new Set(all.filter((r) => r.tier === 'accounting')
+    .map((r) => r.strategy))];
+  const ownBasis = [...new Set(all.filter((r) => r.tier !== 'accounting')
+    .map((r) => r.strategy))].filter((s) => !inHeadline.includes(s));
+
+  assert.ok(
+    md.includes(`sums the **${inHeadline.length}**`),
+    `README headline-strategy count drifted: expected ${inHeadline.length}`
+  );
+  assert.ok(
+    md.includes(`The other ${ownBasis.length} are measured`),
+    `README own-basis count drifted: expected ${ownBasis.length}`
+  );
+  for (const s of [...inHeadline, ...ownBasis]) {
+    assert.ok(
+      md.includes(`\`${s}\``),
+      `README tier table is missing \`${s}\``
+    );
+  }
+});
+
 // The table guard above only reads table CELLS, so the sentence introducing the
 // table drifted from it unnoticed: prose said "33% / 26% / 22%" while the column
 // below said 32% / 26% / 23%, and the mix was still described as "weighted to
