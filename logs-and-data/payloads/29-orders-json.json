@@ -28,7 +28,7 @@
     },
     {
       "role": "assistant",
-      "content": "I pulled the orders dump."
+      "content": "I've pulled the orders dump."
     },
     {
       "role": "user",

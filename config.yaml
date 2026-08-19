@@ -156,6 +156,9 @@ benchmarks:
       - id: "11-mcp-tools"
         title: "MCP tool bloat — 41 tool schemas ride along, 2 are needed"
         strategy: "tool_pruning"
+        # NOTE: tool_pruning ships OFF by default since #1874 — measured on the dogfood
+        # deployment as 34 fires / ZERO prunes across 1,822 agentic turns, while holding
+        # both cacheBusting and prefixCacheBusting. 0% on a stock deployment.
         params: { keepUnnamed: true }
         qualityCheck: tool_safety
       - id: "12-rag-overfetch"
@@ -206,6 +209,10 @@ benchmarks:
       - id: "8-long-session"
         title: "Long agent session — keep a 60-message session inside the window"
         strategy: "window_budget"
+        # NOTE: window_budget ships OFF by default since 2026-07-26 — the coding client
+        # keeps ownership of its native transcript compaction, and the strategy is opt-in
+        # (Settings -> Optimizer). The harness force-enables it, but on a stock deployment
+        # this workload saves 0%. The 91% below was swept on v0.3.24.
         # maxTokens=8000 keeps the leading turn + the recent turns that hold the final
         # recommendation; swept to 91% with both answer facts intact on v0.3.24.
         params: { maxTokens: 8000 }
@@ -216,10 +223,12 @@ benchmarks:
       - id: "24-agent-toolcalls"
         title: "Agentic tool-call session — fit a multi-step investigation in budget"
         strategy: "window_budget"
+        # NOTE: window_budget is opt-in (see 8-long-session) — 0% on a stock deployment.
         params: { maxTokens: 700 }
       - id: "31-long-toolsession"
         title: "Long tool-call session — fit a 10-file investigation in budget"
         strategy: "window_budget"
+        # NOTE: window_budget is opt-in (see 8-long-session) — 0% on a stock deployment.
         params: { maxTokens: 2500 }
       - id: "34-repeat-reads"
         title: 'Repeated reads — the agent re-reads a file and re-runs git status'
@@ -281,6 +290,8 @@ benchmarks:
       - id: "37-durable-blob"
         title: 'Durable externalization — a 100 KB manifest becomes a retrieval handle'
         strategy: "output_externalize"
+        # NOTE: output_externalize ships OFF by default — it needs the durable content
+        # store, so it is opt-in. 0% on a stock deployment.
         # Requires the durable CCR tier (content key + content mode != off + spend DB) —
         # the strategy self-gates and no-ops without it (see VALIDATION.md). Key facts live
         # OUTSIDE the blob (scan output + assistant summary), which is the point: the blob

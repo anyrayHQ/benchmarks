@@ -4,7 +4,7 @@
   "messages": [
     {
       "role": "user",
-      "content": "I am tracing one flow across these Python service files. Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment. I only care about that path; skip the rest."
+      "content": "I am tracing one flow across these Python service files. Walk me through what happens when Checkout.submit_order runs \u2014 specifically how it captures the payment via capture_payment. I only care about that path; skip the rest."
     },
     {
       "role": "assistant",
@@ -168,11 +168,11 @@
     },
     {
       "role": "assistant",
-      "content": "I read those modules."
+      "content": "I've read the modules."
     },
     {
       "role": "user",
-      "content": "Walk me through what happens when Checkout.submit_order runs — specifically how it captures the payment via capture_payment."
+      "content": "Walk me through what happens when Checkout.submit_order runs \u2014 specifically how it captures the payment via capture_payment."
     }
   ]
 }

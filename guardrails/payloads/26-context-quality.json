@@ -95,6 +95,14 @@
       "tool_call_id": "call_05",
       "name": "fetch_doc",
       "content": "# pgvector\n\nA Postgres extension adding a vector type and ANN indexes; reuses the database you already run.\n\nPricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. Pricing scales with stored vectors and queries per second; the managed tier bundles backups, replication, and a dashboard. Latency at p95 stays under 50ms for the recommended index settings. SDKs are available for Python and TypeScript. "
+    },
+    {
+      "role": "assistant",
+      "content": "I've loaded the context."
+    },
+    {
+      "role": "user",
+      "content": "Given all that, what should I look at first?"
     }
   ]
 }
