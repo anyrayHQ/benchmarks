@@ -47,15 +47,45 @@ const rows = [...agg.entries()]
   .sort((x, y) => y.saved - x.saved);
 const overall = Math.round((1 - totAfter / totBefore) * 100);
 
+// Plot the STRICT lane, not the judge lane.
+//
+// This used to read `r.judge`, and when the judge verdicts were dropped (they
+// described differently-trimmed contexts, so carrying them forward beside
+// fresh savings would have been worse than none), every point silently
+// vanished. The chart still rendered — axes, a legend, and the caption "each
+// dot = one of 0 workloads" — and that figure shipped in the README. An empty
+// plot is worse than no plot: it reads as "we measured and found nothing".
+//
+// Strict substring survival is the better series regardless: it is the floor
+// the README quotes, it needs no model, and it exists for every workload. If
+// the judge lane is re-run, add it as a second series rather than replacing
+// this one.
 const pts = [];
 for (const suite of SUITES) {
   const qp = join(ROOT, suite, 'results', 'quality.json');
   if (!existsSync(qp)) continue;
   for (const r of JSON.parse(readFileSync(qp, 'utf8'))) {
     const x = savedById.get(r.id);
-    if (x == null || !r.judge) continue;
-    pts.push({ id: r.id, x, y: r.judge.coverage, verdict: r.judge.verdict });
+    if (x == null || !r.deterministic) continue;
+    pts.push({
+      id: r.id,
+      x,
+      y: r.deterministic.coverage,
+      verdict: r.deterministic.verdict,
+    });
   }
+}
+
+// No points is a BUG, not an empty result — `savedById` holds accounting-tier
+// rows only, so a basis change upstream could empty this again. Fail loudly
+// rather than writing a blank figure into the README.
+if (pts.length === 0) {
+  console.error(
+    'make-charts: no quality points — every row was dropped, so the scatter ' +
+      'would render empty. Refusing to write it. Check that quality.json ' +
+      'carries `deterministic` verdicts and that ids match optimized.json.'
+  );
+  process.exit(1);
 }
 
 // ---- chart 1: savings by strategy (horizontal bars) ------------------------
@@ -121,7 +151,7 @@ function scatter(theme) {
   }
   let head =
     `<text x="16" y="26" fill="${c.text}" font-size="16" font-weight="500">Cut the tokens, keep the answer</text>` +
-    `<text x="16" y="44" fill="${c.sub}" font-size="12">each dot = one of ${pts.length} workloads · y = Claude Opus 4.8 judge</text>`;
+    `<text x="16" y="44" fill="${c.sub}" font-size="12">each dot = one of ${pts.length} workloads · y = key facts kept (strict substring)</text>`;
   for (const [k, lab, x] of [['PASS', 'pass', 22], ['MARGINAL', 'marginal', 92], ['FAIL', 'fail', 196]]) {
     head += `<circle cx="${x}" cy="56" r="5" fill="${c[k]}"/><text x="${x + 10}" y="60" fill="${c.sub}" font-size="12">${lab}</text>`;
   }

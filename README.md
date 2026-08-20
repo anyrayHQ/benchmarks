@@ -111,10 +111,10 @@ client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Token savings vs answer kept — 32 of 33 workloads keep 100% of the answer at high savings; 30-metrics-json is the known ANY-133 failure, by strict key-fact survival" src="assets/quality-vs-savings.light.svg" width="720" />
+    <img alt="Scatter of token savings against key facts kept, for the 29 accounting-tier workloads; 28 keep 100% of the answer, one (30-metrics-json) does not" src="assets/quality-vs-savings.light.svg" width="720" />
   </picture>
   <br />
-  <sub>Savings buy nothing if the answer dies — so we check. 32 of 33 workloads keep 100% of their answer-bearing key facts; the one that does not is a tracked optimizer bug, left failing.</sub>
+  <sub>Savings buy nothing if the answer dies — so we check. Plotted: the 29 accounting-tier workloads, scored by strict key-fact survival. 28 keep 100%; the red dot is <code>30-metrics-json</code>, a tracked optimizer bug left failing rather than tuned away. The other four quality rows are guardrail-basis and have no whole-request savings figure to plot against.</sub>
 </p>
 
 ## Quality — does the answer survive?
