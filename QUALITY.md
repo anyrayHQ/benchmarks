@@ -18,7 +18,7 @@ the optimizer alone, so it needs no model and anyone can re-run it.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 33 | 32 | 0 | 1 |
+| **Key-fact survival** (substring, strict — committed) | 33 | 33 | 0 | 0 |
 
 **All 33 preserve the answer in full.** Each workload runs against the deployed
 optimizer (**v0.3.124**, defaults revision 9) with its strategy matched to the
