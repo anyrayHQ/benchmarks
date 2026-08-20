@@ -28,11 +28,11 @@
     },
     {
       "role": "assistant",
-      "content": "Loaded. What would you like to know about it?"
+      "content": "I've pulled the metrics series."
     },
     {
       "role": "user",
-      "content": "In this metrics series, find the single spike: which timestamp has p99 over 4000 and how many errors at that point?"
+      "content": "Which timestamp has p99 over 4000, and how many errors at that point?"
     }
   ]
 }

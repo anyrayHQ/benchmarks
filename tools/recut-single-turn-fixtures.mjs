@@ -64,12 +64,27 @@ const detectIndent = (source) => {
   return leading && leading.length > 0 ? leading.length : 2;
 };
 
-/** True when the last message is a user turn preceded by an assistant reply. */
+/**
+ * True when the last message is a user turn preceded by an assistant reply.
+ *
+ * Tests the SHAPE, not the ack wording. The recut is defined by where the tool
+ * output sits — history rather than the live turn — and every fixture reaching
+ * that shape satisfies it regardless of which ack text carried it there. Pinning
+ * the literal ACK made this report a hand-written, per-fixture ack as stale, and
+ * a re-run then appended a SECOND ack/question pair on top of a fixture that was
+ * already correct — silently changing the payload every committed number was
+ * measured against.
+ */
 const alreadyRecut = (messages) => {
   if (messages.length < 2) return false;
   const last = messages[messages.length - 1];
   const prev = messages[messages.length - 2];
-  return last.role === 'user' && prev.role === 'assistant' && prev.content === ACK;
+  return (
+    last.role === 'user' &&
+    prev.role === 'assistant' &&
+    typeof prev.content === 'string' &&
+    prev.content.length > 0
+  );
 };
 
 let changed = 0;

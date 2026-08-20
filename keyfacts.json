@@ -315,5 +315,15 @@
       "committed-use discounts",
       "14,200 USD monthly"
     ]
+  },
+  "43-thinking-replay": {
+    "question": "Which file causes the auth-suite flake, and what is the fix?",
+    "keyFacts": [
+      "src/auth/replayCache.ts",
+      "the nonce window is in-process, so a second replica never sees it",
+      "src/auth/renewLease.ts",
+      "renewal debounces on a timer that resets on every failed attempt"
+    ],
+    "_note": "thinking_trim removes REPLAYED REASONING from assistant history, never tool results or the live turn. The key facts are therefore the evidence the answer rests on (the file paths and their NOTE lines inside the tool outputs), which must survive untouched — that is exactly what this row proves: the reasoning about a file can go, the file's contents cannot."
   }
 }

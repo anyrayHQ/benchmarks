@@ -5,16 +5,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=3000, roles=user",
     "tier": "accounting",
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
     "beforeChars": 104612,
-    "afterChars": 4310,
+    "afterChars": 4245,
     "beforeTok": 26153,
-    "afterTok": 1078,
+    "afterTok": 1061,
     "savedPct": 96,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (104612->4310 chars, -96%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (104612->4245 chars, -96%); 1 stashed for retrieval"
     ]
   },
   {
@@ -23,16 +25,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=12000, roles=user",
     "tier": "accounting",
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
     "beforeChars": 105541,
-    "afterChars": 17304,
+    "afterChars": 17024,
     "beforeTok": 26385,
-    "afterTok": 4326,
+    "afterTok": 4256,
     "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (105541->17304 chars, -84%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (105541->17024 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -41,16 +45,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
     "beforeChars": 11850,
-    "afterChars": 4740,
+    "afterChars": 4652,
     "beforeTok": 2963,
-    "afterTok": 1185,
-    "savedPct": 60,
+    "afterTok": 1163,
+    "savedPct": 61,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (11850->4740 chars, -60%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (11850->4652 chars, -61%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
     ]
   },
   {
@@ -59,16 +65,18 @@
     "strategy": "context_compression",
     "knob": "roles=user",
     "tier": "accounting",
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
     "beforeChars": 297840,
-    "afterChars": 64051,
+    "afterChars": 8050,
     "beforeTok": 74460,
-    "afterTok": 16013,
-    "savedPct": 78,
+    "afterTok": 2013,
+    "savedPct": 97,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 text) 297840->64051 chars (-78%); 1 stashed for retrieval"
+      "compressed 1 tool output(s) (1 text) 297840->8050 chars (-97%); 1 stashed for retrieval"
     ]
   },
   {
@@ -77,16 +85,18 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "beforeChars": 71759,
-    "afterChars": 41743,
-    "beforeTok": 17940,
-    "afterTok": 10436,
-    "savedPct": 42,
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
+    "beforeChars": 71882,
+    "afterChars": 8269,
+    "beforeTok": 17971,
+    "afterTok": 2067,
+    "savedPct": 88,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 json) 71660->41644 chars (-42%)"
+      "compressed 1 tool output(s) (1 json) 71660->8047 chars (-89%); 1 stashed for retrieval"
     ]
   },
   {
@@ -95,16 +105,18 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "beforeChars": 48363,
-    "afterChars": 28187,
-    "beforeTok": 12091,
-    "afterTok": 7047,
-    "savedPct": 42,
+    "optimizerVersion": "0.3.126",
+    "defaultsRevision": 9,
+    "beforeChars": 48465,
+    "afterChars": 3266,
+    "beforeTok": 12116,
+    "afterTok": 817,
+    "savedPct": 93,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 1 tool output(s) (1 json) 48244->28068 chars (-42%)"
+      "compressed 1 tool output(s) (1 json) 48244->3045 chars (-94%); 1 stashed for retrieval"
     ]
   }
 ]

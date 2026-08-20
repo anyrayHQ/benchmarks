@@ -28,11 +28,11 @@
     },
     {
       "role": "assistant",
-      "content": "Loaded. What would you like to know about it?"
+      "content": "I've read the module."
     },
     {
       "role": "user",
-      "content": "Read this module and explain how capture and refund work and the idempotency key format."
+      "content": "How do capture and refund work, and what is the idempotency key format?"
     }
   ]
 }

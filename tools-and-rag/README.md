@@ -14,17 +14,17 @@ instruction block once per item — all billed every call.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| MCP tool bloat — 41 tool schemas ride along, 2 are needed | `tool_pruning` | `keepUnnamed=true` | 5,614 | 2,076 | **63%** |
-| RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer | `relevance_filter` | `keepChars=1200, roles=user` | 1,498 | 487 | **67%** |
-| Vocab-mismatch RAG (20 chunks) — "what revokes their credential?" | `relevance_filter` | `keepChars=1500, roles=tool\|function\|user, semanticRerank=true, semanticWeight=0.7` | 2,216 | 643 | **71%** |
-| Templated boilerplate — the same instructions re-pasted 40x | `prompt_compression` | `minChars=400` | 5,841 | 914 | **84%** |
+| MCP tool bloat — 41 tool schemas ride along, 2 are needed | `tool_pruning` | `keepUnnamed=true` | 5,614 | 1,676 | **70%** |
+| RAG over-retrieval — top-20 chunks stuffed, 2 hold the answer | `relevance_filter` | `keepChars=1200, roles=user` | 1,498 | 480 | **68%** |
+| Vocab-mismatch RAG (20 chunks) — "what revokes their credential?" | `relevance_filter` | `keepChars=1500, roles=tool\|function\|user, semanticRerank=true, semanticWeight=0.7` | 2,268 | 567 | **75%** |
+| Templated boilerplate — the same instructions re-pasted 40x | `prompt_compression` | `minChars=400` | 5,841 | 859 | **85%** |
 | MCP tool schemas — 41 verbose schemas, compress the prose not the set | `tool_schema_compression` | `collapseWhitespace=true, stripBoilerplate=true` | 1,612 | 1,504 | **7%** |
 
-### New workloads (first run 2026-07-08, optimizer v0.3.41)
+### Added in the 2026-07 coverage wave
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999` | 942 | 627 | **33%** |
+| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999` | 942 | 620 | **34%** |
 
 A third vocabulary-mismatch scenario, this one with a deliberate **lexical trap**:
 a distractor doc titled "Cloud bill anomaly alerts" matches the question's wording

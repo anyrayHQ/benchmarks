@@ -28,11 +28,11 @@
     },
     {
       "role": "assistant",
-      "content": "Loaded. What would you like to know about it?"
+      "content": "I've pulled the orders dump."
     },
     {
       "role": "user",
-      "content": "From this orders dump, which orders failed and what is each failure_code? Ignore the paid ones."
+      "content": "Which orders failed, and what failure_code does each failed order show? Ignore the paid ones."
     }
   ]
 }

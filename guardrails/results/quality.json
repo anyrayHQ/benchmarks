@@ -8,12 +8,6 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present verbatim in context.",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -25,12 +19,6 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present in tool result.",
-      "by": "claude-opus-4-8"
     }
   },
   {
@@ -42,12 +30,6 @@
       "coverage": 100,
       "verdict": "PASS",
       "missing": []
-    },
-    "judge": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "note": "All facts present in context including guidance tag and diff details",
-      "by": "claude-opus-4-8"
     }
   }
 ]

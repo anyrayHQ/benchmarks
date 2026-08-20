@@ -69,8 +69,9 @@ const SYNTHETIC_CACHE_RESPONSE = {
 // Measure one optimized run. Most strategies transform the request in a single
 // /v1/optimize call; semantic_cache is special — its saving is a *hit*, which only
 // shows on a second identical call, so it gets a 3-step miss -> write -> hit probe.
-async function measureOptimized(client, w, payload, cfg) {
+async function measureOptimized(client, w, payload, cfg, suite) {
   if (w.strategy === 'semantic_cache') return measureSemanticCacheHit(client, payload, cfg);
+  if (w.strategy === 'cache_lint') return measureCacheLint(client, suite, w, payload, cfg);
   await client.setStrategy(w.strategy, w.params ?? {});
   // Offer a retrieve tool if the fixture declares none, else the optimizer
   // suppresses every eliding strategy as `no_retrieve` and this measures 0%.
@@ -133,7 +134,57 @@ async function measureSemanticCacheHit(client, payload, cfg) {
   return hitResult();
 }
 
-async function runSuite(cfg, client, suite, only, limit) {
+// cache_lint is a read-only CROSS-TURN sensor: it compares this turn's incoming
+// prefix against the previous turn's in the same session and reports which
+// regions the CLIENT churned. A single stateless request cannot exercise it (no
+// previous turn to compare against) and it never transforms bytes, so a plain
+// before/after delta is 0 by construction — the same reason semantic_cache gets
+// its own two-call probe above.
+//
+// So: send turn 1 to prime the session, then turn 2 with a prefix the client has
+// rewritten (tools reordered, a timestamp injected into the system prompt — both
+// invisible to the user, both fatal to the provider's cached prefix), and score
+// the churn report. Scoring the DECISION, not a token delta, is what
+// 26-context-quality and 41-mixed-content-census already do.
+async function measureCacheLint(client, suite, w, payload, cfg) {
+  const before = sizeOf(payload);
+  const unchanged = (note) => ({
+    afterReq: payload,
+    afterChars: before,
+    afterTok: estTokens(before, cfg.charsPerToken),
+    decisions: [note],
+    fired: false,
+    savedPct: 0,
+  });
+  const turn2Path = join(cfg.root, suite, 'payloads', `${w.id}.turn2.json`);
+  if (!existsSync(turn2Path)) {
+    return unchanged(`cache lint needs ${w.id}.turn2.json — not found`);
+  }
+  const turn2 = JSON.parse(readFileSync(turn2Path, 'utf8'));
+  // One sessionId across both calls: that is what makes them the same session's
+  // consecutive turns rather than two unrelated requests.
+  const metadata = { sessionId: `bench-${w.id}` };
+  await client.setStrategy('cache_lint', w.params ?? {});
+  await client.optimize(payload, ['cache_lint'], { endpoint: w.endpoint, metadata });
+  const second = await client.optimize(turn2, ['cache_lint'], { endpoint: w.endpoint, metadata });
+  const lint = (second.decisions ?? []).find((d) => d.kind === 'cache_lint');
+  if (!lint) {
+    return unchanged('cache lint reported no churn on the second turn');
+  }
+  return {
+    afterReq: turn2,
+    // Read-only sensor: the request it returns is byte-identical, so the row's
+    // token columns must show no change. The finding lives in `basis`.
+    afterChars: sizeOf(turn2),
+    afterTok: estTokens(sizeOf(turn2), cfg.charsPerToken),
+    decisions: [lint.summary].filter(Boolean),
+    fired: true,
+    savedPct: 0,
+    lintMetric: lint.metric ?? null,
+  };
+}
+
+async function runSuite(cfg, client, suite, only, limit, provenance) {
   let workloads = workloadsFor(cfg, suite, only);
   if (limit != null) workloads = workloads.slice(0, limit);
 
@@ -178,7 +229,7 @@ async function runSuite(cfg, client, suite, only, limit) {
       }
 
       // optimized: pin the hero strategy at its knob, run the hook, measure.
-      const m = await measureOptimized(client, w, payload, cfg);
+      const m = await measureOptimized(client, w, payload, cfg, suite);
 
       const row = {
         id: w.id,
@@ -186,6 +237,13 @@ async function runSuite(cfg, client, suite, only, limit) {
         strategy: w.strategy,
         knob: formatKnob(w.params),
         tier: w.tier ?? 'accounting',
+        // Provenance is PER ROW, not per file, because this loop resumes: rows
+        // already in optimized.json are skipped, so a partial re-run appends new
+        // rows beside old ones. A file-level stamp would relabel untouched rows
+        // with a version that never measured them — exactly how v0.3.24 and
+        // v0.3.41 rows ended up sharing one table with nothing to tell them apart.
+        optimizerVersion: provenance?.optimizerVersion ?? null,
+        defaultsRevision: provenance?.defaultsRevision ?? null,
         beforeChars,
         afterChars: m.afterChars,
         beforeTok,
@@ -196,7 +254,10 @@ async function runSuite(cfg, client, suite, only, limit) {
         fired: m.fired,
         decisions: m.decisions,
       };
-      const basis = w.tier === 'guardrail' ? guardrailBasis(w, payload, m.afterReq, cfg.charsPerToken) : null;
+      const basis =
+        w.tier === 'guardrail'
+          ? guardrailBasis(w, payload, m.afterReq, cfg.charsPerToken, m)
+          : null;
       if (basis) row.basis = basis;
       optimized.push(row);
       save(optimizedPath, optimized);
@@ -224,7 +285,55 @@ function formatKnob(params) {
 
 // Guardrail strategies don't save request bytes — measure each on its own basis
 // so the row carries a real number instead of a misleading 0%.
-function guardrailBasis(w, before, after, charsPerToken) {
+function guardrailBasis(w, before, after, charsPerToken, extra) {
+  if (w.strategy === 'cache_lint') {
+    // Read-only sensor: the basis is WHAT IT DETECTED, not bytes it removed.
+    // Churned prefix regions are what cost money — a rewritten prefix forces the
+    // provider to re-write the cache (~1.25x a fresh input token) instead of
+    // reading it (~0.1x), so the number worth publishing is how many regions the
+    // client churned between two turns of one session.
+    if (!extra?.lintMetric) return null;
+    return {
+      name: 'churned_prefix_regions',
+      regions: extra.lintMetric.value ?? null,
+      ofPrefixTok: estTokens(sizeOf(before), charsPerToken),
+    };
+  }
+  if (w.strategy === 'thinking_trim') {
+    // Basis: REPLAYED THINKING TOKENS, not whole-request bytes.
+    //
+    // The strategy only ever removes thinking blocks from history, so scoring it
+    // against the whole request measures the fixture's file bodies far more than
+    // the strategy — the same payload reads 12% or 60% depending on how much
+    // non-thinking content happens to ride along, which says nothing about
+    // thinking_trim. The share of replayed thinking it removes is the number
+    // that stays honest as the fixture changes.
+    //
+    // Counted ONCE per block, not per replay. The provider bills these on every
+    // turn that resends them, so the per-session saving is this figure times the
+    // remaining turns; the row deliberately reports the conservative single-turn
+    // number rather than assuming a session length.
+    const thinkingChars = (req) =>
+      (Array.isArray(req?.messages) ? req.messages : []).reduce((sum, m) => {
+        if (!Array.isArray(m?.content)) return sum;
+        return (
+          sum +
+          m.content
+            .filter((b) => b?.type === 'thinking' || b?.type === 'redacted_thinking')
+            .reduce((s, b) => s + JSON.stringify(b).length, 0)
+        );
+      }, 0);
+    const b = thinkingChars(before);
+    const a = thinkingChars(after);
+    if (!(b > 0)) return null;
+    return {
+      name: 'replayed_thinking_tokens',
+      before: estTokens(b, charsPerToken),
+      after: estTokens(a, charsPerToken),
+      savedPct: Math.round((1 - a / b) * 100),
+      ofRequestPct: Math.round((b / sizeOf(before)) * 100),
+    };
+  }
   if (w.strategy === 'reasoning_budget') {
     const b = before?.thinking?.budget_tokens;
     const a = after?.thinking?.budget_tokens;
@@ -314,11 +423,18 @@ async function main() {
   // Pinning one strategy at a time rewrites the optimizer's config; snapshot it
   // first and restore on the way out so a shared optimizer is left as we found it.
   const snapshot = await client.getSettings().catch(() => null);
+  // Which optimizer is about to produce these numbers. Read once, before any
+  // strategy pinning, and stamped onto every row this run writes.
+  const provenance = await client.getProvenance().catch(() => null);
+  console.log(
+    `Optimizer: ${provenance?.optimizerVersion ?? 'unknown version'} ` +
+      `(defaults revision ${provenance?.defaultsRevision ?? '?'})`
+  );
   try {
     const suites = args.all ? suiteNames(cfg) : [args.suite];
     for (const suite of suites) {
       console.log(`\n== ${suite} ==`);
-      await runSuite(cfg, client, suite, args.workload, args.limit);
+      await runSuite(cfg, client, suite, args.workload, args.limit, provenance);
     }
     console.log('\nDone. Results in <suite>/results/{control,optimized}.json');
   } finally {

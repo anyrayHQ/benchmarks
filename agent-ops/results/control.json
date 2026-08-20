@@ -47,5 +47,12 @@
     "chars": 19956,
     "tokens": 4989,
     "max_tokens": 1024
+  },
+  {
+    "id": "43-thinking-replay",
+    "title": "Replayed reasoning — a resumed agent turn re-sends six signed thinking blocks",
+    "chars": 18922,
+    "tokens": 4731,
+    "max_tokens": 4096
   }
 ]

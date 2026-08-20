@@ -28,11 +28,11 @@
     },
     {
       "role": "assistant",
-      "content": "Loaded. What would you like to know about it?"
+      "content": "I've read the service."
     },
     {
       "role": "user",
-      "content": "Read the payment service and tell me how capture and refund are structured and what idempotency key they use."
+      "content": "How are capture and refund structured, and what idempotency key do they use?"
     }
   ]
 }

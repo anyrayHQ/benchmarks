@@ -28,11 +28,11 @@
     },
     {
       "role": "assistant",
-      "content": "Loaded. What would you like to know about it?"
+      "content": "I've pulled up the session history."
     },
     {
       "role": "user",
-      "content": "Catch me up on the payments-retry branch: where does it stand, what changed and why, and what was the next step I had planned? Pull it from my past coding sessions."
+      "content": "Catch me up on the payments-retry branch: where does it stand, what changed and why, and what was the next step I had planned?"
     }
   ]
 }

@@ -1,0 +1,211 @@
+{
+  "model": "claude-opus-4-8",
+  "max_tokens": 4096,
+  "thinking": {
+    "type": "enabled",
+    "budget_tokens": 8192
+  },
+  "system": "You are a coding agent working in a TypeScript monorepo. Read files before proposing a fix.",
+  "messages": [
+    {
+      "role": "user",
+      "content": "The auth suite has been flaky since Tuesday. Walk the refresh path and tell me which file actually causes it."
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/tokenStore.ts next. the refresh path writes the new token before the old one is revoked. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/tokenStore.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/tokenStore.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_00",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/tokenStore.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_00",
+          "content": "// src/auth/tokenStore.ts\n// integration test: tests/auth/tokenStore.test.ts\n  const step0 = resolve(ctx.session, 0); // the refresh path writes the new token before\n  const step1 = resolve(ctx.session, 1); // the refresh path writes the new token before\n  const step2 = resolve(ctx.session, 2); // the refresh path writes the new token before\n  const step3 = resolve(ctx.session, 3); // the refresh path writes the new token before\n  const step4 = resolve(ctx.session, 4); // the refresh path writes the new token before\n  const step5 = resolve(ctx.session, 5); // the refresh path writes the new token before\n  const step6 = resolve(ctx.session, 6); // the refresh path writes the new token before\n  const step7 = resolve(ctx.session, 7); // the refresh path writes the new token before\n  const step8 = resolve(ctx.session, 8); // the refresh path writes the new token before\n  const step9 = resolve(ctx.session, 9); // the refresh path writes the new token before\n  const step10 = resolve(ctx.session, 10); // the refresh path writes the new token before\n  const step11 = resolve(ctx.session, 11); // the refresh path writes the new token before\n  const step12 = resolve(ctx.session, 12); // the refresh path writes the new token before\n  const step13 = resolve(ctx.session, 13); // the refresh path writes the new token before\n  const step14 = resolve(ctx.session, 14); // the refresh path writes the new token before\n  const step15 = resolve(ctx.session, 15); // the refresh path writes the new token before\n  const step16 = resolve(ctx.session, 16); // the refresh path writes the new token before\n  const step17 = resolve(ctx.session, 17); // the refresh path writes the new token before\n  const step18 = resolve(ctx.session, 18); // the refresh path writes the new token before\n  const step19 = resolve(ctx.session, 19); // the refresh path writes the new token before\n  const step20 = resolve(ctx.session, 20); // the refresh path writes the new token before\n  const step21 = resolve(ctx.session, 21); // the refresh path writes the new token before\n  const step22 = resolve(ctx.session, 22); // the refresh path writes the new token before\n  const step23 = resolve(ctx.session, 23); // the refresh path writes the new token before\n  const step24 = resolve(ctx.session, 24); // the refresh path writes the new token before\n  const step25 = resolve(ctx.session, 25); // the refresh path writes the new token before\n  // NOTE: the refresh path writes the new token before the old one is revoked\n"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/sessionGuard.ts next. the guard reads the session cookie and rejects an expired stamp. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/sessionGuard.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/sessionGuard.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/sessionGuard.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01",
+          "content": "// src/auth/sessionGuard.ts\n// integration test: tests/auth/sessionGuard.test.ts\n  const step0 = resolve(ctx.session, 1); // the guard reads the session cookie and rejec\n  const step1 = resolve(ctx.session, 2); // the guard reads the session cookie and rejec\n  const step2 = resolve(ctx.session, 3); // the guard reads the session cookie and rejec\n  const step3 = resolve(ctx.session, 4); // the guard reads the session cookie and rejec\n  const step4 = resolve(ctx.session, 5); // the guard reads the session cookie and rejec\n  const step5 = resolve(ctx.session, 6); // the guard reads the session cookie and rejec\n  const step6 = resolve(ctx.session, 7); // the guard reads the session cookie and rejec\n  const step7 = resolve(ctx.session, 8); // the guard reads the session cookie and rejec\n  const step8 = resolve(ctx.session, 9); // the guard reads the session cookie and rejec\n  const step9 = resolve(ctx.session, 10); // the guard reads the session cookie and rejec\n  const step10 = resolve(ctx.session, 11); // the guard reads the session cookie and rejec\n  const step11 = resolve(ctx.session, 12); // the guard reads the session cookie and rejec\n  const step12 = resolve(ctx.session, 13); // the guard reads the session cookie and rejec\n  const step13 = resolve(ctx.session, 14); // the guard reads the session cookie and rejec\n  const step14 = resolve(ctx.session, 15); // the guard reads the session cookie and rejec\n  const step15 = resolve(ctx.session, 16); // the guard reads the session cookie and rejec\n  const step16 = resolve(ctx.session, 17); // the guard reads the session cookie and rejec\n  const step17 = resolve(ctx.session, 18); // the guard reads the session cookie and rejec\n  const step18 = resolve(ctx.session, 19); // the guard reads the session cookie and rejec\n  const step19 = resolve(ctx.session, 20); // the guard reads the session cookie and rejec\n  const step20 = resolve(ctx.session, 21); // the guard reads the session cookie and rejec\n  const step21 = resolve(ctx.session, 22); // the guard reads the session cookie and rejec\n  const step22 = resolve(ctx.session, 23); // the guard reads the session cookie and rejec\n  const step23 = resolve(ctx.session, 24); // the guard reads the session cookie and rejec\n  const step24 = resolve(ctx.session, 25); // the guard reads the session cookie and rejec\n  const step25 = resolve(ctx.session, 26); // the guard reads the session cookie and rejec\n  // NOTE: the guard reads the session cookie and rejects an expired stamp\n"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/replayCache.ts next. the nonce window is in-process, so a second replica never sees it. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/replayCache.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/replayCache.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_02",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/replayCache.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_02",
+          "content": "// src/auth/replayCache.ts\n// integration test: tests/auth/replayCache.test.ts\n  const step0 = resolve(ctx.session, 2); // the nonce window is in-process, so a second \n  const step1 = resolve(ctx.session, 3); // the nonce window is in-process, so a second \n  const step2 = resolve(ctx.session, 4); // the nonce window is in-process, so a second \n  const step3 = resolve(ctx.session, 5); // the nonce window is in-process, so a second \n  const step4 = resolve(ctx.session, 6); // the nonce window is in-process, so a second \n  const step5 = resolve(ctx.session, 7); // the nonce window is in-process, so a second \n  const step6 = resolve(ctx.session, 8); // the nonce window is in-process, so a second \n  const step7 = resolve(ctx.session, 9); // the nonce window is in-process, so a second \n  const step8 = resolve(ctx.session, 10); // the nonce window is in-process, so a second \n  const step9 = resolve(ctx.session, 11); // the nonce window is in-process, so a second \n  const step10 = resolve(ctx.session, 12); // the nonce window is in-process, so a second \n  const step11 = resolve(ctx.session, 13); // the nonce window is in-process, so a second \n  const step12 = resolve(ctx.session, 14); // the nonce window is in-process, so a second \n  const step13 = resolve(ctx.session, 15); // the nonce window is in-process, so a second \n  const step14 = resolve(ctx.session, 16); // the nonce window is in-process, so a second \n  const step15 = resolve(ctx.session, 17); // the nonce window is in-process, so a second \n  const step16 = resolve(ctx.session, 18); // the nonce window is in-process, so a second \n  const step17 = resolve(ctx.session, 19); // the nonce window is in-process, so a second \n  const step18 = resolve(ctx.session, 20); // the nonce window is in-process, so a second \n  const step19 = resolve(ctx.session, 21); // the nonce window is in-process, so a second \n  const step20 = resolve(ctx.session, 22); // the nonce window is in-process, so a second \n  const step21 = resolve(ctx.session, 23); // the nonce window is in-process, so a second \n  const step22 = resolve(ctx.session, 24); // the nonce window is in-process, so a second \n  const step23 = resolve(ctx.session, 25); // the nonce window is in-process, so a second \n  const step24 = resolve(ctx.session, 26); // the nonce window is in-process, so a second \n  const step25 = resolve(ctx.session, 27); // the nonce window is in-process, so a second \n  // NOTE: the nonce window is in-process, so a second replica never sees it\n"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/clockSkew.ts next. the skew allowance is applied twice on the renewal path. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/clockSkew.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/clockSkew.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_03",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/clockSkew.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_03",
+          "content": "// src/auth/clockSkew.ts\n// integration test: tests/auth/clockSkew.test.ts\n  const step0 = resolve(ctx.session, 3); // the skew allowance is applied twice on the r\n  const step1 = resolve(ctx.session, 4); // the skew allowance is applied twice on the r\n  const step2 = resolve(ctx.session, 5); // the skew allowance is applied twice on the r\n  const step3 = resolve(ctx.session, 6); // the skew allowance is applied twice on the r\n  const step4 = resolve(ctx.session, 7); // the skew allowance is applied twice on the r\n  const step5 = resolve(ctx.session, 8); // the skew allowance is applied twice on the r\n  const step6 = resolve(ctx.session, 9); // the skew allowance is applied twice on the r\n  const step7 = resolve(ctx.session, 10); // the skew allowance is applied twice on the r\n  const step8 = resolve(ctx.session, 11); // the skew allowance is applied twice on the r\n  const step9 = resolve(ctx.session, 12); // the skew allowance is applied twice on the r\n  const step10 = resolve(ctx.session, 13); // the skew allowance is applied twice on the r\n  const step11 = resolve(ctx.session, 14); // the skew allowance is applied twice on the r\n  const step12 = resolve(ctx.session, 15); // the skew allowance is applied twice on the r\n  const step13 = resolve(ctx.session, 16); // the skew allowance is applied twice on the r\n  const step14 = resolve(ctx.session, 17); // the skew allowance is applied twice on the r\n  const step15 = resolve(ctx.session, 18); // the skew allowance is applied twice on the r\n  const step16 = resolve(ctx.session, 19); // the skew allowance is applied twice on the r\n  const step17 = resolve(ctx.session, 20); // the skew allowance is applied twice on the r\n  const step18 = resolve(ctx.session, 21); // the skew allowance is applied twice on the r\n  const step19 = resolve(ctx.session, 22); // the skew allowance is applied twice on the r\n  const step20 = resolve(ctx.session, 23); // the skew allowance is applied twice on the r\n  const step21 = resolve(ctx.session, 24); // the skew allowance is applied twice on the r\n  const step22 = resolve(ctx.session, 25); // the skew allowance is applied twice on the r\n  const step23 = resolve(ctx.session, 26); // the skew allowance is applied twice on the r\n  const step24 = resolve(ctx.session, 27); // the skew allowance is applied twice on the r\n  const step25 = resolve(ctx.session, 28); // the skew allowance is applied twice on the r\n  // NOTE: the skew allowance is applied twice on the renewal path\n"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/renewLease.ts next. renewal debounces on a timer that resets on every failed attempt. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/renewLease.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/renewLease.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_04",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/renewLease.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_04",
+          "content": "// src/auth/renewLease.ts\n// integration test: tests/auth/renewLease.test.ts\n  const step0 = resolve(ctx.session, 4); // renewal debounces on a timer that resets on \n  const step1 = resolve(ctx.session, 5); // renewal debounces on a timer that resets on \n  const step2 = resolve(ctx.session, 6); // renewal debounces on a timer that resets on \n  const step3 = resolve(ctx.session, 7); // renewal debounces on a timer that resets on \n  const step4 = resolve(ctx.session, 8); // renewal debounces on a timer that resets on \n  const step5 = resolve(ctx.session, 9); // renewal debounces on a timer that resets on \n  const step6 = resolve(ctx.session, 10); // renewal debounces on a timer that resets on \n  const step7 = resolve(ctx.session, 11); // renewal debounces on a timer that resets on \n  const step8 = resolve(ctx.session, 12); // renewal debounces on a timer that resets on \n  const step9 = resolve(ctx.session, 13); // renewal debounces on a timer that resets on \n  const step10 = resolve(ctx.session, 14); // renewal debounces on a timer that resets on \n  const step11 = resolve(ctx.session, 15); // renewal debounces on a timer that resets on \n  const step12 = resolve(ctx.session, 16); // renewal debounces on a timer that resets on \n  const step13 = resolve(ctx.session, 17); // renewal debounces on a timer that resets on \n  const step14 = resolve(ctx.session, 18); // renewal debounces on a timer that resets on \n  const step15 = resolve(ctx.session, 19); // renewal debounces on a timer that resets on \n  const step16 = resolve(ctx.session, 20); // renewal debounces on a timer that resets on \n  const step17 = resolve(ctx.session, 21); // renewal debounces on a timer that resets on \n  const step18 = resolve(ctx.session, 22); // renewal debounces on a timer that resets on \n  const step19 = resolve(ctx.session, 23); // renewal debounces on a timer that resets on \n  const step20 = resolve(ctx.session, 24); // renewal debounces on a timer that resets on \n  const step21 = resolve(ctx.session, 25); // renewal debounces on a timer that resets on \n  const step22 = resolve(ctx.session, 26); // renewal debounces on a timer that resets on \n  const step23 = resolve(ctx.session, 27); // renewal debounces on a timer that resets on \n  const step24 = resolve(ctx.session, 28); // renewal debounces on a timer that resets on \n  const step25 = resolve(ctx.session, 29); // renewal debounces on a timer that resets on \n  // NOTE: renewal debounces on a timer that resets on every failed attempt\n"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "signature": "c2lnbmF0dXJlLXN5bnRoZXRpYy1iZW5jaG1hcmstZml4dHVyZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "thinking": "I should read src/auth/keyRotation.ts next. rotation publishes the new key before peers have fetched it. Working the refresh path one file at a time so I can rule each one out before moving on. If src/auth/keyRotation.ts looks clean I will keep going down the list rather than guessing at the cause."
+        },
+        {
+          "type": "text",
+          "text": "Reading src/auth/keyRotation.ts."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_05",
+          "name": "read_file",
+          "input": {
+            "path": "src/auth/keyRotation.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_05",
+          "content": "// src/auth/keyRotation.ts\n// integration test: tests/auth/keyRotation.test.ts\n  const step0 = resolve(ctx.session, 5); // rotation publishes the new key before peers \n  const step1 = resolve(ctx.session, 6); // rotation publishes the new key before peers \n  const step2 = resolve(ctx.session, 7); // rotation publishes the new key before peers \n  const step3 = resolve(ctx.session, 8); // rotation publishes the new key before peers \n  const step4 = resolve(ctx.session, 9); // rotation publishes the new key before peers \n  const step5 = resolve(ctx.session, 10); // rotation publishes the new key before peers \n  const step6 = resolve(ctx.session, 11); // rotation publishes the new key before peers \n  const step7 = resolve(ctx.session, 12); // rotation publishes the new key before peers \n  const step8 = resolve(ctx.session, 13); // rotation publishes the new key before peers \n  const step9 = resolve(ctx.session, 14); // rotation publishes the new key before peers \n  const step10 = resolve(ctx.session, 15); // rotation publishes the new key before peers \n  const step11 = resolve(ctx.session, 16); // rotation publishes the new key before peers \n  const step12 = resolve(ctx.session, 17); // rotation publishes the new key before peers \n  const step13 = resolve(ctx.session, 18); // rotation publishes the new key before peers \n  const step14 = resolve(ctx.session, 19); // rotation publishes the new key before peers \n  const step15 = resolve(ctx.session, 20); // rotation publishes the new key before peers \n  const step16 = resolve(ctx.session, 21); // rotation publishes the new key before peers \n  const step17 = resolve(ctx.session, 22); // rotation publishes the new key before peers \n  const step18 = resolve(ctx.session, 23); // rotation publishes the new key before peers \n  const step19 = resolve(ctx.session, 24); // rotation publishes the new key before peers \n  const step20 = resolve(ctx.session, 25); // rotation publishes the new key before peers \n  const step21 = resolve(ctx.session, 26); // rotation publishes the new key before peers \n  const step22 = resolve(ctx.session, 27); // rotation publishes the new key before peers \n  const step23 = resolve(ctx.session, 28); // rotation publishes the new key before peers \n  const step24 = resolve(ctx.session, 29); // rotation publishes the new key before peers \n  const step25 = resolve(ctx.session, 30); // rotation publishes the new key before peers \n  // NOTE: rotation publishes the new key before peers have fetched it\n"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Which file causes the flake, and what is the fix?"
+    }
+  ]
+}
