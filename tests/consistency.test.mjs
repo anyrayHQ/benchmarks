@@ -89,10 +89,19 @@ test('RESULTS savings-by-strategy table matches the committed results', () => {
 // The harness force-enables each workload's strategy (setStrategy PUTs
 // `enabled: true`), so the headline sums rows a stock deployment would never
 // produce — 37% of measured savings come from strategies that ship OFF. The
-// README states that split; this keeps it true. OFF_BY_DEFAULT mirrors
-// DEFAULT_CONFIG in the monorepo (optimizer/src/config.ts) and is checked
-// against it by optimizer/experiments/benchmarkSavedShare.py --check-defaults,
-// which is the half this repo cannot see.
+// README states that split; this keeps it true.
+//
+// UNVERIFIED MIRROR. OFF_BY_DEFAULT copies DEFAULT_CONFIG from the monorepo
+// (optimizer/src/config.ts), and NOTHING checks the two still agree — this repo
+// cannot see that file, and the monorepo-side test that would have closed the
+// loop was not landed (ANY-116). So a default flipped there makes the published
+// 37% wrong here, silently, and this guard will keep passing.
+//
+// Re-check by hand when a strategy's shipped default changes; the list below is
+// every `enabled: false` entry in DEFAULT_CONFIG. Closing this properly needs a
+// source-scan test in the monorepo reading THIS file (CLAUDE.md #1041) — a
+// "must match" comment, which is what this now is, is explicitly the weaker
+// option.
 const OFF_BY_DEFAULT = new Set([
   'window_budget', 'output_externalize', 'tool_pruning', 'param_tuning',
   'vision_ocr', 'reasoning_budget', 'output_shaping', 'context_quality',
