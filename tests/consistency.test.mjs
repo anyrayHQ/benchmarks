@@ -198,6 +198,43 @@ test('no doc claims the fixture mix is weighted to production traffic', () => {
   }
 });
 
+// The README's figures are committed SVGs and nothing checked them. The quality
+// scatter plotted `r.judge`; when the judge verdicts were dropped, every point
+// vanished. It kept rendering — axes, legend, and the caption "each dot = one of
+// 0 workloads" — and shipped in the README that way. An empty figure reads as
+// "we measured and found nothing", which is worse than showing no figure.
+test('the committed quality scatter actually contains its data', () => {
+  const svg = readFileSync(
+    join(ROOT, 'assets', 'quality-vs-savings.light.svg'),
+    'utf8'
+  );
+  const expected = accounting().length;
+
+  // Legend circles are r="5"; data points are r="5.5".
+  const plotted = [...svg.matchAll(/<circle[^>]*r="5\.5"/g)].length;
+  assert.equal(
+    plotted,
+    expected,
+    `quality scatter plots ${plotted} points, expected ${expected} (one per ` +
+      'accounting workload). Zero means the series was silently dropped, not ' +
+      'that quality went unmeasured.'
+  );
+  assert.ok(
+    svg.includes(`each dot = one of ${expected} workloads`),
+    `scatter caption disagrees with its own point count (expected ${expected})`
+  );
+});
+
+test('the committed strategy bar chart lists every scored strategy', () => {
+  const svg = readFileSync(
+    join(ROOT, 'assets', 'savings-by-strategy.light.svg'),
+    'utf8'
+  );
+  for (const [strategy] of aggregate(accounting(), 'strategy')) {
+    assert.ok(svg.includes(strategy), `bar chart is missing ${strategy}`);
+  }
+});
+
 test('RESULTS per-workload rows match each committed score', () => {
   const md = doc('RESULTS.md');
   for (const r of accounting()) {
