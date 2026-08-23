@@ -1,6 +1,13 @@
-# Reproduction of the published headline — findings (ANY-114)
+# Reproduction of the published headline — findings
 
-Run date **2026-08-17**. Optimizer built from `anyrayHQ/monorepo` at `cd8c045e`
+> **Historical.** This is a dated record of one reproduction run, kept as-is.
+> Finding 4 below describes an optimizer defect that has since been **fixed**:
+> `context_compression` no longer truncates JSON arrays by default, and
+> `30-metrics-json` passes at 42% saved. The current numbers are in
+> [RESULTS.md](RESULTS.md) and [QUALITY.md](QUALITY.md); nothing on this page has
+> been restated to match them.
+
+Run date **2026-08-17**. Optimizer built from the optimizer source at the time
 (`optimizer` 0.3.124, defaults revision 9). Benchmarks repo from `711b4df`.
 
 ## Result
@@ -60,7 +67,7 @@ legitimate for per-strategy attribution, but the published table should say so.
 `isFreshToolSegment` (`optimizer/src/strategies/freshInput.ts`) makes every
 strategy skip tool output sitting after the last assistant message — output the
 model has not read yet. Trimming it would destroy the current turn's input, so
-the guard is correct. It shipped in **#536 / `8e6718c9`, 2026-07-02**.
+the guard is correct. It shipped **2026-07-02**.
 
 The committed results were generated **2026-07-01** (`7ba9a94`) — *one day
 earlier*. Eight fixtures are shaped:
@@ -130,7 +137,8 @@ cannot be confirmed, and restores the pre-warm-up config either way.
 
 ## Finding 4 — a real product regression: `context_compression` drops the answer
 
-**Not fixed here — this is a product bug and wants its own ticket.**
+**Not fixed here — this is a product bug and wants its own fix.** (Since fixed;
+see the note at the top of this page.)
 
 `logs-and-data/30-metrics-json` is the one quality FAIL, and it is the most
 important thing in this run. It loses **both** its key facts (`4200`, `512`).
@@ -149,8 +157,8 @@ Every other point has p99 between 80 and 99. The spike is the entire answer.
 
 ### What went wrong
 
-**`1758cc46` ("fix optimizer token savings pipeline", #1118, 2026-07-17) lowered
-`context_compression`'s default `maxArrayItems` from 500 to 50.**
+**A 2026-07-17 change lowered `context_compression`'s default `maxArrayItems`
+from 500 to 50.**
 
 `crushValue` keeps the **first** N items and elides the tail
 (`contextCompression.ts`: `v.slice(0, p.maxArrayItems)`), then appends one
@@ -246,9 +254,9 @@ much I'd trust them:
 3. **Raise the default back and take the savings loss**, treating 50 as too
    aggressive for a default. Simplest, least clever, immediately correct.
 
-Options 1 and 2 keep #1118's savings win; option 3 abandons it. Either way, the
-regression test is `30-metrics-json` — it is now a committed FAIL, so whichever
-fix lands will flip it green.
+Options 1 and 2 keep the 2026-07-17 savings win; option 3 abandons it. Either
+way, the regression test is `30-metrics-json` — it is a committed FAIL as of this
+run, so whichever fix lands will flip it green.
 
 `maxArrayItems` is not documented on any `docs/docs/` page, so no docs update
 rides along.

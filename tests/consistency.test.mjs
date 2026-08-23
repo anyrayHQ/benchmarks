@@ -88,20 +88,19 @@ test('RESULTS savings-by-strategy table matches the committed results', () => {
 
 // The harness force-enables each workload's strategy (setStrategy PUTs
 // `enabled: true`), so the headline sums rows a stock deployment would never
-// produce — 37% of measured savings come from strategies that ship OFF. The
+// produce — a large share of measured savings comes from strategies that ship OFF. The
 // README states that split; this keeps it true.
 //
 // UNVERIFIED MIRROR. OFF_BY_DEFAULT copies DEFAULT_CONFIG from the monorepo
 // (optimizer/src/config.ts), and NOTHING checks the two still agree — this repo
-// cannot see that file, and the monorepo-side test that would have closed the
-// loop was not landed (ANY-116). So a default flipped there makes the published
-// 37% wrong here, silently, and this guard will keep passing.
+// cannot see that file, and the upstream test that would have closed the loop
+// was never landed. So a default flipped there makes the published share wrong
+// here, silently, and this guard will keep passing.
 //
 // Re-check by hand when a strategy's shipped default changes; the list below is
 // every `enabled: false` entry in DEFAULT_CONFIG. Closing this properly needs a
-// source-scan test in the monorepo reading THIS file (CLAUDE.md #1041) — a
-// "must match" comment, which is what this now is, is explicitly the weaker
-// option.
+// source-scan test upstream reading THIS file — a "must match" comment, which is
+// what this now is, is explicitly the weaker option.
 const OFF_BY_DEFAULT = new Set([
   'window_budget', 'output_externalize', 'tool_pruning', 'param_tuning',
   'vision_ocr', 'reasoning_budget', 'output_shaping', 'context_quality',
@@ -139,8 +138,8 @@ test('README default-state split matches the committed results', () => {
 // scored on whole-request bytes. Those are different numbers (22 vs 11) and the
 // README states both, because reading "22 of 23 covered" next to a headline
 // invites the assumption that the headline sums all 22. It does not — most
-// notably it omits thinking_trim, currently the fleet's largest single source of
-// optimizer savings (ANY-116). If a strategy moves between tiers, this fails.
+// notably it omits thinking_trim, currently the largest single source of
+// optimizer savings in production. If a strategy moves between tiers, this fails.
 test('README accounting/own-basis split matches the committed results', () => {
   const md = doc('README.md');
   const all = rowsFrom('optimized.json');
@@ -168,8 +167,8 @@ test('README accounting/own-basis split matches the committed results', () => {
 // The table guard above only reads table CELLS, so the sentence introducing the
 // table drifted from it unnoticed: prose said "33% / 26% / 22%" while the column
 // below said 32% / 26% / 23%, and the mix was still described as "weighted to
-// real coding-agent traffic" after README.md had retracted exactly that claim
-// (ANY-116). A published share is a number like any other — recompute it.
+// real coding-agent traffic" after README.md had retracted exactly that claim.
+// A published share is a number like any other — recompute it.
 test('RESULTS top-three prose shares match the share-of-input column', () => {
   const md = doc('RESULTS.md');
   const rows = aggregate(accounting(), 'strategy');
@@ -187,8 +186,8 @@ test('RESULTS top-three prose shares match the share-of-input column', () => {
   );
 });
 
-// The suite measures its own fixtures, never production traffic. ANY-116 was
-// filed because the docs claimed otherwise; this keeps the claim from returning.
+// The suite measures its own fixtures, never production traffic. The docs once
+// claimed otherwise; this keeps that claim from returning.
 test('no doc claims the fixture mix is weighted to production traffic', () => {
   for (const name of ['README.md', 'RESULTS.md', 'SUMMARY.md', 'COVERAGE.md', 'QUALITY.md']) {
     assert.ok(

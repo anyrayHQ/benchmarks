@@ -1,17 +1,17 @@
 # Anyray optimizer — results summary
 
-Across 29 synthetic agent/coding workloads, the Anyray optimizer cut input tokens by **87% overall** (median 70% per workload) while preserving the answer-bearing key facts in **100%** of cases (0% confirmed by an LLM judge).
+Across 29 synthetic agent/coding workloads, the Anyray optimizer cut input tokens by **83% overall** (median 66% per workload) while preserving the answer-bearing key facts in **100%** of cases (0% confirmed by an LLM judge).
 
 ## Token savings by workload type
 
 | Workload type | Workloads | Median input-token reduction |
 |---|---:|---:|
-| Logs & structured data | 6 | 90% |
+| Logs & structured data | 6 | 73% |
 | Code context | 7 | 56% |
 | Tools & retrieval | 6 | 69% |
 | Agent operations | 7 | 46% |
 | Cross-session memory recall | 3 | 85% |
-| **All** | **29** | **87% overall** |
+| **All** | **29** | **83% overall** |
 
 ## Quality preservation
 

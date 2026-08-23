@@ -15,7 +15,7 @@ input:output. The session only grows, so the bill compounds.
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
 | GitHub triage — "which open issues are P0 auth bugs?" | `relevance_filter` | `keepChars=2000, roles=user` | 5,583 | 883 | **84%** |
-| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=8000` | 82,110 | 4,206 | **95%** |
+| Long agent session — keep a 60-message session inside the window | `window_budget` | `maxTokens=8000` | 82,110 | 4,205 | **95%** |
 | Test-suite output — "which tests failed and why?" | `command_digest` | `maxFailures=10, contextLines=12, roles=user` | 1,515 | 350 | **77%** |
 | Agentic tool-call session — fit a multi-step investigation in budget | `window_budget` | `maxTokens=700` | 781 | 480 | **39%** |
 | Long tool-call session — fit a 10-file investigation in budget | `window_budget` | `maxTokens=2500` | 3,509 | 1,879 | **46%** |

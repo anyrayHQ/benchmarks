@@ -13,12 +13,12 @@ entirely off-topic to the question being asked.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=3000, roles=user` | 26,153 | 1,061 | **96%** |
+| Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=3000, roles=user` | 26,153 | 1,065 | **96%** |
 | SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=12000, roles=user` | 26,385 | 4,256 | **84%** |
 | Synonym-gap logs — "find the resource-exhaustion event" (OOM/cgroup) | `relevance_filter` | `keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7` | 2,963 | 1,163 | **61%** |
-| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 2,013 | **97%** |
-| Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,971 | 2,067 | **88%** |
-| Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,116 | 817 | **93%** |
+| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 2,012 | **97%** |
+| Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,971 | 10,467 | **42%** |
+| Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,116 | 7,072 | **42%** |
 
 ## How it works
 
@@ -28,10 +28,12 @@ entirely off-topic to the question being asked.
   rank to the top while the boilerplate every line shares is ignored by IDF. The
   elided lines are stashed for retrieval (`/v1/retrieve`).
 - **`context_compression`** routes a tool/data message to a structure-aware
-  compressor. On a large embedded array (row 4) it caps to `maxArrayItems`
-  (default 50) and stashes the remainder for retrieval; on already-structured JSON
-  tool results (rows 29–30) it minifies in place. The committed `decisions` field
-  shows which path each row took.
+  compressor. On a large embedded array (row 4) the text compressor elides the bulk
+  and stashes it for retrieval; on already-structured JSON tool results (rows 29–30)
+  it minifies in place, losslessly. Arrays are **not** truncated by default
+  (`maxArrayItems: 0`) — a head slice reads as a complete list, so an answer further
+  down the array would vanish with nothing marking its absence. The committed
+  `decisions` field shows which path each row took.
 
 ## Measurement
 
