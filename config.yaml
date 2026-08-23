@@ -156,7 +156,7 @@ benchmarks:
       - id: "11-mcp-tools"
         title: "MCP tool bloat — 41 tool schemas ride along, 2 are needed"
         strategy: "tool_pruning"
-        # NOTE: tool_pruning ships OFF by default since #1874 — measured on the dogfood
+        # NOTE: tool_pruning ships OFF by default — measured on the dogfood
         # deployment as 34 fires / ZERO prunes across 1,822 agentic turns, while holding
         # both cacheBusting and prefixCacheBusting. 0% on a stock deployment.
         params: { keepUnnamed: true }
@@ -377,7 +377,7 @@ benchmarks:
         strategy: "content_census"
         # Pure measurement: json_array, unified_diff, grep, build log, py/ts source, HTML,
         # base64, prose. The census counts only FRESH tool outputs (after the last
-        # assistant turn, monorepo #776), so all nine reads land in one parallel tool
+        # assistant turn), so all nine reads land in one parallel tool
         # round. The request must pass through byte-identical.
         params: {}
         tier: "diagnostic"

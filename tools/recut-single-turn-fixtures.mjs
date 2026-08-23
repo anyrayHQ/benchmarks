@@ -2,7 +2,7 @@
 // Re-cut single-turn fixtures so their tool output is HISTORY, not the live turn.
 //
 // WHY: the optimizer refuses to rewrite tool output the model has not read yet
-// (freshInput.ts, #536 / 8e6718c9, 2026-07-02) — a correct guard, because
+// (freshInput.ts, 2026-07-02) — a correct guard, because
 // trimming output before the model has seen it destroys the current turn's
 // input. But a fixture shaped
 //

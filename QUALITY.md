@@ -18,10 +18,10 @@ the optimizer alone, so it needs no model and anyone can re-run it.
 
 | | Workloads | PASS | MARGINAL | FAIL |
 |---|--:|--:|--:|--:|
-| **Key-fact survival** (substring, strict — committed) | 33 | 32 | 0 | 1 |
+| **Key-fact survival** (substring, strict — committed) | 33 | 33 | 0 | 0 |
 
 **All 33 preserve the answer in full.** Each workload runs against the deployed
-optimizer (**v0.3.124**, defaults revision 9) with its strategy matched to the
+optimizer (**v0.3.128**, defaults revision 10) with its strategy matched to the
 content and settings tuned for strong savings while keeping every answer-bearing
 fact. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
 strategies that suit them (see [Matching strategy to content](#matching-strategy-to-content)).
@@ -43,8 +43,8 @@ none.
 | `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ |
 | `33-synonym-gap-logs` | `relevance_filter` | 61% | 100% ✅ |
 | `4-json-array` | `context_compression` | 97% | 100% ✅ |
-| `29-orders-json` | `context_compression` | 89% | 100% ✅ |
-| `30-metrics-json` | `context_compression` | 90% | 100% ✅ |
+| `29-orders-json` | `context_compression` | 42% | 100% ✅ |
+| `30-metrics-json` | `context_compression` | 42% | 100% ✅ |
 | `5-code-search` | `relevance_filter` | 56% | 100% ✅ |
 | `6-git-diff` | `context_compression` | 65% | 100% ✅ |
 | `7-codebase-explore` | `code_graph` | 18% | 100% ✅ |
