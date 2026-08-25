@@ -481,3 +481,61 @@ test('loop-cost still reports no added turns, and COMPARISON says what the data 
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Cache economics. The published cost multipliers decide the whole argument, so
+// they are recomputed from the committed per-turn rows rather than trusted.
+
+const cacheEcon = () => readJson(join(ROOT, 'tools', 'cache-economics.json'));
+
+test('COMPARISON cache-economics multipliers match the committed per-turn data', () => {
+  const { rows } = cacheEcon();
+  const md = doc('COMPARISON.md');
+  const base = rows.find((r) => r.arm === 'none');
+  assert.ok(base, 'cache-economics.json must carry the no-compressor control');
+
+  for (const r of rows) {
+    // Warm cost is the sum of the per-turn prices; if those disagree, the
+    // headline multiplier is arithmetic on nothing.
+    const summed = r.warmTurns.reduce((n, w) => n + w.costUnits, 0);
+    assert.equal(r.warmCostUnits, summed, `${r.arm}: warmCostUnits != sum of its turns`);
+
+    const mult = Number((r.warmCostUnits / base.warmCostUnits).toFixed(2));
+    assert.equal(r.costVsNoCompressor, mult, `${r.arm}: costVsNoCompressor drifted`);
+    assert.ok(
+      md.includes(`${mult.toFixed(2)}×`) || md.includes(`${mult}×`),
+      `COMPARISON.md must show ${r.arm} at ${mult}x`
+    );
+  }
+});
+
+// The control is the reference every multiplier is quoted against. If it ever
+// bust its own prefix, the mock upstream is broken and every number above is
+// measured against a moving baseline.
+test('the cache-economics control holds its prefix on every warm turn', () => {
+  const base = cacheEcon().rows.find((r) => r.arm === 'none');
+  assert.equal(
+    base.warmBusts,
+    0,
+    'the no-compressor control bust its own prefix — the mock upstream is not ' +
+      'modelling prefix caching correctly, so every multiplier is meaningless'
+  );
+});
+
+// COMPARISON.md states plainly that token mode did NOT bust the cache and that
+// cache mode did. That is the counterintuitive part of the finding and the part
+// most likely to be quietly "corrected" later; pin it to the data.
+test('COMPARISON cache-mode/token-mode claims match the committed data', () => {
+  const rows = cacheEcon().rows;
+  const token = rows.find((r) => r.arm === 'headroom-token');
+  const cacheMode = rows.find((r) => r.arm === 'headroom-cache');
+  const restart = rows.find((r) => r.arm === 'headroom-cache-restart');
+  if (!token || !cacheMode || !restart) return; // arms are optional (need --python)
+
+  assert.equal(token.warmBusts, 0, 'COMPARISON says token mode held the prefix');
+  assert.ok(cacheMode.warmBusts > 0, 'COMPARISON says cache mode bust the prefix');
+  assert.ok(
+    restart.warmCostUnits > cacheMode.warmCostUnits,
+    'COMPARISON says the restart arm is the expensive one'
+  );
+});

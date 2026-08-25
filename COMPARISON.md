@@ -1,16 +1,20 @@
-# Comparison & loop cost
+# Comparison, loop cost & cache economics
 
-Two things this repo could not previously answer, because every other number in
+Three things this repo could not previously answer, because every other number in
 it is Anyray measuring Anyray on one request at a time:
 
 1. **Is the saving any good?** — [head-to-head against Headroom](#head-to-head-vs-headroom)
    on identical payloads with an identical scorer.
 2. **Does the saving survive an agent loop?** — [loop cost](#loop-cost-does-optimizing-add-turns):
    the same task run to completion with the optimizer off and on, counting turns.
+3. **Does the saving actually pay?** — [cache economics](#cache-economics-does-a-saving-pay-for-itself):
+   a saving that rewrites a cached prefix can cost ~10× what it saves, so this
+   one prices the turn instead of counting its bytes.
 
-Both are reproducible: `tools/compare-headroom.mjs` and `tools/loop-cost.mjs`.
-Both produced a result that is **not** flattering, and both are published as
-measured.
+All three are reproducible: `tools/compare-headroom.mjs`, `tools/loop-cost.mjs`,
+`tools/cache-economics.mjs`. Each produced a result that is **not** flattering —
+including one that refutes the hypothesis it was built to test — and all are
+published as measured.
 
 ---
 
@@ -151,3 +155,91 @@ safe. The harness now threads pins the way the gateway does
 (`OptimizerClient.optimizeWithPins`). A benchmark that skips that field measures
 a no-op and reports it as "the optimizer does not help here" — a statement about
 the harness, not the product.
+
+---
+
+## Cache economics: does a saving pay for itself?
+
+Everything above scores **bytes**. A provider does not bill bytes at face value
+on a warm turn — it bills a cached prefix at ~0.1× and a *re-written* one at
+~1.25×, so removing tokens from a prefix you already had cached can cost roughly
+**10× more** than leaving them alone. A byte-counting benchmark reports that
+rewrite as a saving. `tools/cache-economics.mjs` prices it instead.
+
+**The harness.** A mock upstream stands in for the provider: it measures the
+longest common byte prefix against the last prompt it saw for that conversation
+and bills the match as a cache read, the rest as a cache write. No provider
+account, no key, no network — anyone can re-run it. A 5-turn agent session
+(~47k-token prefix, ~1.9k-token delta per turn) replays byte-identically through
+every arm. Cost is in fresh-input-token equivalents over the **4 warm turns**
+(turn 1 writes the cache in every arm, so it is excluded).
+
+This needs no compressor to be nondeterministic. **Any** rewrite of
+previously-cached bytes is enough, which is what makes it fair.
+
+| Arm | Turn-1 prompt | Warm busts | Warm cost | vs no compressor |
+|---|--:|--:|--:|--:|
+| `none` (control) | 46,725 | 0/4 | 29,296u | 1.00× |
+| `anyray` | 46,725 | 1/4 | 24,836u | **0.85×** |
+| `anyray-nopins` (state lost every turn) | 46,725 | 1/4 | 24,836u | **0.85×** |
+| `headroom-token` | 3,321 | 0/4 | 11,934u | **0.41×** |
+| `headroom-cache` | 40,621 | 1/4 | 37,048u | **1.26×** |
+| `headroom-cache-restart` (proxy restarted each turn) | 40,621 | 1/4 | 82,922u | **2.83×** |
+
+### The hypothesis was half right, and the half it got wrong is the interesting half
+
+**`token` mode did not bust the cache — it was the cheapest arm.** The predicted
+failure was that "prior turns may be rewritten" would churn the prefix every
+turn. It does not, because the rewrite is **deterministic**: the same history
+compresses to the same bytes each turn, so the prefix stays stable *and* it is
+~14× smaller (3.3k vs 46.7k). Stable-and-small beats stable-and-large. A rewrite
+of cached bytes is only expensive if it **differs** turn-to-turn, and this one
+does not.
+
+**`cache` mode — the one that advertises prefix stability — is the arm that bust
+it.** It compressed the turn-1 prompt (46.7k → 40.6k), then on turn 2 forwarded
+bytes that did not extend what turn 1 had cached: 8,592 fresh tokens against
+1,894 in the control, costing 1.26× overall while removing 13% of the bytes.
+It then held cleanly for turns 3–5. So the bust is a **one-time transition**, not
+per-turn churn, and it lands precisely where the delta engine takes over.
+
+**The restart arm is the one that matters operationally: 2.83×.** Restarting the
+proxy between turns loses the frozen prefix, and the replacement forwards the
+*original* uncompressed transcript against a cache holding the *compressed* one —
+93 cached tokens out of 48,618. One pod roll, one load-balancer hop to a cold
+replica, and a single turn costs 60,666u where the control pays 7,040u. That is
+the failure a warm single-process benchmark can never see, and it is not exotic:
+it is an ordinary Tuesday deploy.
+
+### Anyray is not clean here either
+
+Anyray came out at 0.85×, but it **bust the prefix once too**, on turn 4 — the
+turn `command_digest` and `observation_mask` first fire and rewrite settled
+history (46.7k of cached prefix down to 7.7k). It pays 7,426u for that turn and
+earns the rewrite back over turns 4–5, ending net cheaper than the control. The
+honest reading is *a one-time re-write that amortises*, not *never touches the
+cache* — and on a session that ended at turn 4 it would have been a straight
+loss.
+
+**`anyray-nopins` is identical to `anyray`, and that is a null result, not a
+pass.** The optimizer returns 4 pins from turn 4 onward, so there is genuine
+state to lose — but discarding it changed neither the bytes nor the cost here.
+This transcript does not exercise the replay path that pins exist to protect, so
+the arm should be read as "not yet tested", not as evidence Anyray survives a
+cold replica. Building a transcript that does exercise it is the obvious next
+step.
+
+### What this does and does not establish
+
+- It **does** show that mode names are not guarantees: the mode advertising cache
+  safety bust the cache, and the mode advertising aggressive rewriting did not.
+- It **does** show state-loss is the dominant cost for a stateful compressor —
+  2.83× from restarts alone, on a product whose prefix stability is real while
+  the process lives.
+- It does **not** model TTL expiry, multi-breakpoint Anthropic caching, or
+  concurrent sessions sharing a prefix.
+- Prices are the public Anthropic ratios (read 0.1×, write 1.25×). The exact
+  schedule varies by provider and model; the **direction** does not.
+
+Reproduce: `node tools/cache-economics.mjs --python /path/to/venv/bin/python`.
+Per-turn rows, decisions, and pin counts: `tools/cache-economics.json`.
