@@ -1,0 +1,1090 @@
+{
+  "measuredAt": "2026-08-25",
+  "headroomWarmup": {
+    "available": true,
+    "ready": true,
+    "waited_s": null
+  },
+  "rows": [
+    {
+      "id": "16-test-run",
+      "suite": "agent-ops",
+      "shape": "single-turn",
+      "beforeChars": 6060,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 5294,
+        "beforeTok": 1515,
+        "afterTok": 1324,
+        "savedPct": 13,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 5,
+        "verdict": "MARGINAL"
+      },
+      "headroom": {
+        "afterChars": 6060,
+        "beforeTok": 1515,
+        "afterTok": 1515,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 5,
+        "verdict": "MARGINAL"
+      }
+    },
+    {
+      "id": "24-agent-toolcalls",
+      "suite": "agent-ops",
+      "shape": "tool-bearing",
+      "beforeChars": 3122,
+      "messages": 14,
+      "anyray": {
+        "afterChars": 2729,
+        "beforeTok": 781,
+        "afterTok": 682,
+        "savedPct": 13,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 3122,
+        "beforeTok": 781,
+        "afterTok": 781,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "3-github-triage",
+      "suite": "agent-ops",
+      "shape": "single-turn",
+      "beforeChars": 22333,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 9759,
+        "beforeTok": 5583,
+        "afterTok": 2440,
+        "savedPct": 56,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 22333,
+        "beforeTok": 5583,
+        "afterTok": 5583,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "31-long-toolsession",
+      "suite": "agent-ops",
+      "shape": "tool-bearing",
+      "beforeChars": 14036,
+      "messages": 24,
+      "anyray": {
+        "afterChars": 4194,
+        "beforeTok": 3509,
+        "afterTok": 1049,
+        "savedPct": 70,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 14036,
+        "beforeTok": 3509,
+        "afterTok": 3509,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "34-repeat-reads",
+      "suite": "agent-ops",
+      "shape": "tool-bearing",
+      "beforeChars": 7170,
+      "messages": 14,
+      "anyray": {
+        "afterChars": 4490,
+        "beforeTok": 1793,
+        "afterTok": 1123,
+        "savedPct": 37,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 6428,
+        "beforeTok": 1793,
+        "afterTok": 1607,
+        "savedPct": 10,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "35-flaky-test-rerun",
+      "suite": "agent-ops",
+      "shape": "tool-bearing",
+      "beforeChars": 19956,
+      "messages": 10,
+      "anyray": {
+        "afterChars": 12548,
+        "beforeTok": 4989,
+        "afterTok": 3137,
+        "savedPct": 37,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 18025,
+        "beforeTok": 4989,
+        "afterTok": 4506,
+        "savedPct": 10,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "43-thinking-replay",
+      "suite": "agent-ops",
+      "shape": "single-turn",
+      "beforeChars": 18922,
+      "messages": 14,
+      "anyray": {
+        "afterChars": 9386,
+        "beforeTok": 4731,
+        "afterTok": 2347,
+        "savedPct": 50,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 4,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 18922,
+        "beforeTok": 4731,
+        "afterTok": 4731,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "8-long-session",
+      "suite": "agent-ops",
+      "shape": "single-turn",
+      "beforeChars": 328438,
+      "messages": 64,
+      "anyray": {
+        "afterChars": 328438,
+        "beforeTok": 82110,
+        "afterTok": 82110,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 259042,
+        "beforeTok": 82110,
+        "afterTok": 64761,
+        "savedPct": 21,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "15-multifile-graph",
+      "suite": "code-context",
+      "shape": "tool-bearing",
+      "beforeChars": 8511,
+      "messages": 15,
+      "anyray": {
+        "afterChars": 5684,
+        "beforeTok": 2128,
+        "afterTok": 1421,
+        "savedPct": 33,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 8511,
+        "beforeTok": 2128,
+        "afterTok": 2128,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "17-python-multifile",
+      "suite": "code-context",
+      "shape": "tool-bearing",
+      "beforeChars": 7295,
+      "messages": 15,
+      "anyray": {
+        "afterChars": 4877,
+        "beforeTok": 1824,
+        "afterTok": 1219,
+        "savedPct": 33,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 7295,
+        "beforeTok": 1824,
+        "afterTok": 1824,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "27-read-service-ts",
+      "suite": "code-context",
+      "shape": "tool-bearing",
+      "beforeChars": 10697,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 3647,
+        "beforeTok": 2674,
+        "afterTok": 912,
+        "savedPct": 66,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 10697,
+        "beforeTok": 2674,
+        "afterTok": 2674,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "28-read-module-py",
+      "suite": "code-context",
+      "shape": "tool-bearing",
+      "beforeChars": 8966,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 2698,
+        "beforeTok": 2242,
+        "afterTok": 675,
+        "savedPct": 70,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 8966,
+        "beforeTok": 2242,
+        "afterTok": 2242,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "5-code-search",
+      "suite": "code-context",
+      "shape": "single-turn",
+      "beforeChars": 17099,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 7474,
+        "beforeTok": 4275,
+        "afterTok": 1869,
+        "savedPct": 56,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 17099,
+        "beforeTok": 4275,
+        "afterTok": 4275,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "6-git-diff",
+      "suite": "code-context",
+      "shape": "single-turn",
+      "beforeChars": 22676,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 2327,
+        "beforeTok": 5669,
+        "afterTok": 582,
+        "savedPct": 90,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 4,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 22676,
+        "beforeTok": 5669,
+        "afterTok": 5669,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "7-codebase-explore",
+      "suite": "code-context",
+      "shape": "single-turn",
+      "beforeChars": 18714,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 1168,
+        "beforeTok": 4679,
+        "afterTok": 292,
+        "savedPct": 94,
+        "messagesDelta": 0,
+        "keyFactsKept": 1,
+        "keyFactsTotal": 5,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 18714,
+        "beforeTok": 4679,
+        "afterTok": 4679,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "10-screenshot-ocr",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 54327,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 54327,
+        "beforeTok": 13582,
+        "afterTok": 13582,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 54327,
+        "beforeTok": 13582,
+        "afterTok": 13582,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "14-runaway-max-tokens",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 153,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 153,
+        "beforeTok": 38,
+        "afterTok": 38,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 153,
+        "beforeTok": 38,
+        "afterTok": 38,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "25-claude-cache-prefix",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 4938,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 4938,
+        "beforeTok": 1235,
+        "afterTok": 1235,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 4938,
+        "beforeTok": 1235,
+        "afterTok": 1235,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "26-context-quality",
+      "suite": "guardrails",
+      "shape": "tool-bearing",
+      "beforeChars": 10891,
+      "messages": 10,
+      "anyray": {
+        "afterChars": 10891,
+        "beforeTok": 2723,
+        "afterTok": 2723,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 10891,
+        "beforeTok": 2723,
+        "afterTok": 2723,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "38-anthropic-context-trim",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 21155,
+      "messages": 14,
+      "anyray": {
+        "afterChars": 12639,
+        "beforeTok": 5289,
+        "afterTok": 3160,
+        "savedPct": 40,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 5,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 20209,
+        "beforeTok": 5289,
+        "afterTok": 5052,
+        "savedPct": 4,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "39-reasoning-downshift",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 2056,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 1862,
+        "beforeTok": 514,
+        "afterTok": 466,
+        "savedPct": 9,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 1862,
+        "beforeTok": 514,
+        "afterTok": 466,
+        "savedPct": 9,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "40-output-shaping",
+      "suite": "guardrails",
+      "shape": "tool-bearing",
+      "beforeChars": 2542,
+      "messages": 6,
+      "anyray": {
+        "afterChars": 2542,
+        "beforeTok": 636,
+        "afterTok": 636,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 4,
+        "verdict": "MARGINAL"
+      },
+      "headroom": {
+        "afterChars": 2542,
+        "beforeTok": 636,
+        "afterTok": 636,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 4,
+        "verdict": "MARGINAL"
+      }
+    },
+    {
+      "id": "41-mixed-content-census",
+      "suite": "guardrails",
+      "shape": "tool-bearing",
+      "beforeChars": 7940,
+      "messages": 14,
+      "anyray": {
+        "afterChars": 6797,
+        "beforeTok": 1985,
+        "afterTok": 1699,
+        "savedPct": 14,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 6096,
+        "beforeTok": 1985,
+        "afterTok": 1524,
+        "savedPct": 23,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "44-prefix-churn",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 800,
+      "messages": 2,
+      "anyray": {
+        "afterChars": 800,
+        "beforeTok": 200,
+        "afterTok": 200,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 800,
+        "beforeTok": 200,
+        "afterTok": 200,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "9-repeat-request",
+      "suite": "guardrails",
+      "shape": "single-turn",
+      "beforeChars": 142,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 142,
+        "beforeTok": 36,
+        "afterTok": 36,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 142,
+        "beforeTok": 36,
+        "afterTok": 36,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 0,
+        "keyFactsTotal": 0,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "1-access-log",
+      "suite": "logs-and-data",
+      "shape": "single-turn",
+      "beforeChars": 104612,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 38580,
+        "beforeTok": 26153,
+        "afterTok": 9645,
+        "savedPct": 63,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 104612,
+        "beforeTok": 26153,
+        "afterTok": 26153,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "2-sre-incident",
+      "suite": "logs-and-data",
+      "shape": "single-turn",
+      "beforeChars": 105541,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 47686,
+        "beforeTok": 26385,
+        "afterTok": 11922,
+        "savedPct": 55,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 105541,
+        "beforeTok": 26385,
+        "afterTok": 26385,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "29-orders-json",
+      "suite": "logs-and-data",
+      "shape": "tool-bearing",
+      "beforeChars": 71882,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 41866,
+        "beforeTok": 17971,
+        "afterTok": 10467,
+        "savedPct": 42,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 23025,
+        "beforeTok": 17971,
+        "afterTok": 5756,
+        "savedPct": 68,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "30-metrics-json",
+      "suite": "logs-and-data",
+      "shape": "tool-bearing",
+      "beforeChars": 48465,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 28289,
+        "beforeTok": 12116,
+        "afterTok": 7072,
+        "savedPct": 42,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 14894,
+        "beforeTok": 12116,
+        "afterTok": 3724,
+        "savedPct": 69,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 2,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "33-synonym-gap-logs",
+      "suite": "logs-and-data",
+      "shape": "single-turn",
+      "beforeChars": 11850,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 722,
+        "beforeTok": 2963,
+        "afterTok": 181,
+        "savedPct": 94,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 4,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 11850,
+        "beforeTok": 2963,
+        "afterTok": 2963,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "4-json-array",
+      "suite": "logs-and-data",
+      "shape": "single-turn",
+      "beforeChars": 297840,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 85081,
+        "beforeTok": 74460,
+        "afterTok": 21270,
+        "savedPct": 71,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 6,
+        "verdict": "MARGINAL"
+      },
+      "headroom": {
+        "afterChars": 297840,
+        "beforeTok": 74460,
+        "afterTok": 74460,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 6,
+        "keyFactsTotal": 6,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "18-session-recall",
+      "suite": "memory-recall",
+      "shape": "tool-bearing",
+      "beforeChars": 23744,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 8379,
+        "beforeTok": 5936,
+        "afterTok": 2095,
+        "savedPct": 65,
+        "messagesDelta": 0,
+        "keyFactsKept": 2,
+        "keyFactsTotal": 5,
+        "verdict": "FAIL"
+      },
+      "headroom": {
+        "afterChars": 23744,
+        "beforeTok": 5936,
+        "afterTok": 5936,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "36-stale-observations",
+      "suite": "memory-recall",
+      "shape": "single-turn",
+      "beforeChars": 26888,
+      "messages": 15,
+      "anyray": {
+        "afterChars": 8976,
+        "beforeTok": 6722,
+        "afterTok": 2244,
+        "savedPct": 67,
+        "messagesDelta": 0,
+        "keyFactsKept": 7,
+        "keyFactsTotal": 7,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 16344,
+        "beforeTok": 6722,
+        "afterTok": 4086,
+        "savedPct": 39,
+        "messagesDelta": 0,
+        "keyFactsKept": 7,
+        "keyFactsTotal": 7,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "37-durable-blob",
+      "suite": "memory-recall",
+      "shape": "tool-bearing",
+      "beforeChars": 98322,
+      "messages": 7,
+      "anyray": {
+        "afterChars": 85647,
+        "beforeTok": 24581,
+        "afterTok": 21412,
+        "savedPct": 13,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 5341,
+        "beforeTok": 24581,
+        "afterTok": 1335,
+        "savedPct": 95,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "11-mcp-tools",
+      "suite": "tools-and-rag",
+      "shape": "single-turn",
+      "beforeChars": 22456,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 22456,
+        "beforeTok": 5614,
+        "afterTok": 5614,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 22456,
+        "beforeTok": 5614,
+        "afterTok": 5614,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "12-rag-overfetch",
+      "suite": "tools-and-rag",
+      "shape": "single-turn",
+      "beforeChars": 5990,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 4302,
+        "beforeTok": 1498,
+        "afterTok": 1076,
+        "savedPct": 28,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 5990,
+        "beforeTok": 1498,
+        "afterTok": 1498,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "13-prompt-boilerplate",
+      "suite": "tools-and-rag",
+      "shape": "single-turn",
+      "beforeChars": 23365,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 3434,
+        "beforeTok": 5841,
+        "afterTok": 859,
+        "savedPct": 85,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 23365,
+        "beforeTok": 5841,
+        "afterTok": 5841,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 5,
+        "keyFactsTotal": 5,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "23-mcp-schema",
+      "suite": "tools-and-rag",
+      "shape": "single-turn",
+      "beforeChars": 6450,
+      "messages": 1,
+      "anyray": {
+        "afterChars": 5708,
+        "beforeTok": 1613,
+        "afterTok": 1427,
+        "savedPct": 12,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 6450,
+        "beforeTok": 1613,
+        "afterTok": 1613,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 3,
+        "verdict": "PASS"
+      }
+    },
+    {
+      "id": "32-vocab-mismatch-rag",
+      "suite": "tools-and-rag",
+      "shape": "tool-bearing",
+      "beforeChars": 9072,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 8456,
+        "beforeTok": 2268,
+        "afterTok": 2114,
+        "savedPct": 7,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 8860,
+        "beforeTok": 2268,
+        "afterTok": 2215,
+        "savedPct": 2,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 4,
+        "verdict": "MARGINAL"
+      }
+    },
+    {
+      "id": "42-semantic-rerank-rag",
+      "suite": "tools-and-rag",
+      "shape": "tool-bearing",
+      "beforeChars": 3766,
+      "messages": 5,
+      "anyray": {
+        "afterChars": 3766,
+        "beforeTok": 942,
+        "afterTok": 942,
+        "savedPct": 0,
+        "messagesDelta": 0,
+        "keyFactsKept": 4,
+        "keyFactsTotal": 4,
+        "verdict": "PASS"
+      },
+      "headroom": {
+        "afterChars": 3662,
+        "beforeTok": 942,
+        "afterTok": 916,
+        "savedPct": 3,
+        "messagesDelta": 0,
+        "keyFactsKept": 3,
+        "keyFactsTotal": 4,
+        "verdict": "MARGINAL"
+      }
+    }
+  ]
+}

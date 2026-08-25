@@ -19,7 +19,12 @@ suite's `results/`, and the headline below is the sum of those files.
 
 The payloads here are synthetic, so the optimizer is also replayed against public
 datasets nobody wrote for it — every source linked, with its licence and its
-measured result, in **[DATASETS.md](DATASETS.md)**.
+measured result, in **[DATASETS.md](DATASETS.md)**. And because a number Anyray
+measures about Anyray is not comparative, **[COMPARISON.md](COMPARISON.md)** runs
+the same payloads through [Headroom](https://github.com/headroomlabs-ai/headroom)
+with the same scorer (it beats us on the like-for-like aggregate), and measures
+whether optimizing makes an agent loop take more turns (it does not — because on
+warm loops the cache guard correctly suppresses trimming entirely).
 
 ## Headline
 
@@ -141,6 +146,12 @@ scores it against the optimizer alone, so anyone can reproduce it. The optional
 semantic-judge lane (`--judge`) has **not** been re-run against the current optimizer,
 so no judge verdicts are committed — an old verdict describes a differently-trimmed
 context and would be worse than none.
+
+**This 33/33 describes the tuned configuration these suites measure** — one hero
+strategy per workload, at a knob swept for it. Running every default-enabled
+strategy at stock knobs instead drops key facts on 6 workloads, because a
+different strategy reaches the message first.
+[COMPARISON.md](COMPARISON.md#quality-same-scorer-same-markers) has the split.
 
 ## Why these workloads
 

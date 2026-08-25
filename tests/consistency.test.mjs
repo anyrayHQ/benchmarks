@@ -407,3 +407,77 @@ test('COVERAGE headline counts match the mirror and the results', async () => {
   const missingPhrase = missing === 1 ? '**1** is not' : `**${missing}** are not`;
   assert.ok(md.includes(missingPhrase), `COVERAGE must say "${missingPhrase}"`);
 });
+
+// ---------------------------------------------------------------------------
+// COMPARISON.md publishes numbers measured against a THIRD-PARTY tool and a live
+// model. Neither can be recomputed in CI, so these guards check the two things
+// that would actually mislead a reader: a published figure that no longer
+// matches the committed JSON, and a competitor comparison quietly scored against
+// a cold model (which reads as a competitor weakness rather than a harness bug).
+
+const comparison = () => readJson(join(ROOT, 'tools', 'headroom-comparison.json'));
+
+test('COMPARISON aggregate savings match the committed comparison JSON', () => {
+  const md = doc('COMPARISON.md');
+  const { rows } = comparison();
+  for (const shape of ['tool-bearing', 'single-turn']) {
+    const rs = rows.filter((r) => r.shape === shape);
+    for (const side of ['anyray', 'headroom']) {
+      const b = rs.reduce((n, r) => n + r[side].beforeTok, 0);
+      const a = rs.reduce((n, r) => n + r[side].afterTok, 0);
+      const pct = savedPct(b, a);
+      assert.ok(
+        md.includes(`${pct}%`),
+        `COMPARISON.md must show ${side} ${shape} aggregate ${pct}%`
+      );
+    }
+  }
+});
+
+test('COMPARISON quality tallies match the committed comparison JSON', () => {
+  const md = doc('COMPARISON.md');
+  const { rows } = comparison();
+  for (const side of ['anyray', 'headroom']) {
+    const scored = rows.filter((r) => r[side].keyFactsTotal > 0);
+    const t = tally(scored.map((r) => r[side].verdict));
+    assert.ok(
+      md.includes(`| ${scored.length} | ${t.PASS} | ${t.MARGINAL} | **${t.FAIL}** |`),
+      `COMPARISON.md ${side} quality row must read ${scored.length} | ${t.PASS} | ${t.MARGINAL} | ${t.FAIL}`
+    );
+  }
+});
+
+// The comparison is only meaningful if the competitor's model was resident. A
+// run recorded while it was still downloading scores Headroom at 0% everywhere
+// and looks exactly like a decline — so the receipt is committed and asserted
+// rather than trusted.
+test('the committed comparison was measured against a warm Headroom', () => {
+  const { headroomWarmup } = comparison();
+  assert.ok(
+    headroomWarmup?.ready === true,
+    'headroom-comparison.json was recorded with a cold Kompress model; its 0% rows ' +
+      'are the harness, not the competitor. Re-run tools/compare-headroom.mjs.'
+  );
+});
+
+// The loop-cost result is "no turns added". If a future run ever adds one, that
+// is the single most important number in this repo and must not slip out
+// silently in a JSON diff nobody reads.
+test('loop-cost still reports no added turns, and COMPARISON says what the data says', () => {
+  const loop = readJson(join(ROOT, 'tools', 'loop-cost.json'));
+  const md = doc('COMPARISON.md');
+  for (const r of loop.rows) {
+    const delta = r.optimized.turns - r.plain.turns;
+    assert.equal(
+      delta,
+      0,
+      `${r.task}: optimized loop took ${delta > 0 ? 'MORE' : 'FEWER'} turns (${r.plain.turns} -> ` +
+        `${r.optimized.turns}). This is the headline claim of COMPARISON.md — update the page.`
+    );
+    assert.ok(
+      md.includes(`${r.plain.turns} \u2192 ${r.optimized.turns}`) ||
+        md.includes(`${r.plain.turns} → ${r.optimized.turns}`),
+      `COMPARISON.md is missing the turn row for ${r.task} (${r.plain.turns} → ${r.optimized.turns})`
+    );
+  }
+});
