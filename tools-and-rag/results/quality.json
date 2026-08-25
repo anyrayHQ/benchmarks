@@ -46,7 +46,7 @@
   {
     "id": "23-mcp-schema",
     "strategy": "tool_schema_compression",
-    "savedPct": 7,
+    "savedPct": 12,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,

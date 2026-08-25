@@ -5,7 +5,7 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=8000, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 17099,
     "afterChars": 7493,
@@ -25,7 +25,7 @@
     "strategy": "context_compression",
     "knob": "roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 22676,
     "afterChars": 8046,
@@ -45,18 +45,18 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 18714,
-    "afterChars": 15280,
+    "afterChars": 13408,
     "beforeTok": 4679,
-    "afterTok": 3820,
-    "savedPct": 18,
+    "afterTok": 3352,
+    "savedPct": 28,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 1 file(s): kept 10 working-set symbol(s) (1 from intent, 8 central), elided 81 body line(s) 18714->15280 chars (-18%); 1 stashed for retrieval"
+      "graph-outlined 1 file(s): kept 5 working-set symbol(s) (1 from intent, 3 central), elided 164 body line(s) 18714->13408 chars (-28%); 1 stashed for retrieval"
     ]
   },
   {
@@ -65,10 +65,10 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 8511,
-    "afterChars": 5805,
+    "afterChars": 5802,
     "beforeTok": 2128,
     "afterTok": 1451,
     "savedPct": 32,
@@ -76,7 +76,7 @@
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3718 chars (-42%); 8 stashed for retrieval"
+      "graph-outlined 8 file(s): kept 6 working-set symbol(s) (2 from intent, 0 central), elided 74 body line(s) 6424->3715 chars (-42%); 8 stashed for retrieval"
     ]
   },
   {
@@ -85,18 +85,18 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 7295,
-    "afterChars": 4877,
+    "afterChars": 4881,
     "beforeTok": 1824,
-    "afterTok": 1219,
+    "afterTok": 1220,
     "savedPct": 33,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4076 chars (-37%); 10 stashed for retrieval"
+      "graph-outlined 10 file(s): kept 5 working-set symbol(s) (2 from intent, 0 central), elided 81 body line(s) 6494->4080 chars (-37%); 10 stashed for retrieval"
     ]
   },
   {
@@ -105,7 +105,7 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 10697,
     "afterChars": 3647,
@@ -125,7 +125,7 @@
     "strategy": "code_graph",
     "knob": "minChars=200, minBodyLines=2",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 8966,
     "afterChars": 2698,

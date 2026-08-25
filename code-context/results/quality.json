@@ -24,7 +24,7 @@
   {
     "id": "7-codebase-explore",
     "strategy": "code_graph",
-    "savedPct": 18,
+    "savedPct": 28,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,

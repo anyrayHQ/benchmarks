@@ -5,7 +5,7 @@
     "strategy": "tool_pruning",
     "knob": "keepUnnamed=true",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 22455,
     "afterChars": 6702,
@@ -25,18 +25,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1200, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 5990,
-    "afterChars": 1913,
+    "afterChars": 1920,
     "beforeTok": 1498,
-    "afterTok": 478,
+    "afterTok": 480,
     "savedPct": 68,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (5990->1913 chars, -68%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (5990->1920 chars, -68%); 1 stashed for retrieval"
     ]
   },
   {
@@ -45,7 +45,7 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 9072,
     "afterChars": 2269,
@@ -65,7 +65,7 @@
     "strategy": "prompt_compression",
     "knob": "minChars=400",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 23365,
     "afterChars": 3434,
@@ -85,18 +85,18 @@
     "strategy": "tool_schema_compression",
     "knob": "collapseWhitespace=true, stripBoilerplate=true",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 6449,
-    "afterChars": 6014,
+    "afterChars": 5707,
     "beforeTok": 1612,
-    "afterTok": 1504,
-    "savedPct": 7,
+    "afterTok": 1427,
+    "savedPct": 12,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "compressed 10 tool schemas, −435 chars of definition text"
+      "compressed 10 tool schemas, −742 chars of definition text"
     ]
   },
   {
@@ -105,7 +105,7 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999",
     "tier": "accounting",
-    "optimizerVersion": "0.3.128",
+    "optimizerVersion": "0.3.132",
     "defaultsRevision": 10,
     "beforeChars": 3766,
     "afterChars": 2479,

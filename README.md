@@ -24,12 +24,12 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 26,035 | **84%** |
-| [`code-context/`](code-context/) | 7 | 23,491 | 11,962 | **49%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,704 | **68%** |
-| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 12,063 | **88%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 2,352 | **94%** |
-| **Total** | **29** | **338,833** | **58,116** | **83%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 26,032 | **84%** |
+| [`code-context/`](code-context/) | 7 | 23,491 | 11,495 | **51%** |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,629 | **68%** |
+| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 12,064 | **88%** |
+| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 2,350 | **94%** |
+| **Total** | **29** | **338,833** | **57,570** | **83%** |
 | [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
 
 Three strategies carry most of this suite's input — `context_compression`,
@@ -52,7 +52,7 @@ isolation, and it means the total above is *not* what a stock deployment produce
 | strategies **on** by default | **62%** |
 | strategies **off** by default (`window_budget` 28%, `output_externalize` 9%, `tool_pruning` 1%) | **38%** |
 
-On the default-on subset alone the suite reads 222,238 → 49,535 tok, **78%**. The
+On the default-on subset alone the suite reads 222,238 → 48,988 tok, **78%**. The
 opt-in strategies are off for reasons, not by oversight — `window_budget` crops whole
 messages against a client-supplied ceiling, so it stays operator-enabled — and each
 one is annotated in [`config.yaml`](config.yaml).
