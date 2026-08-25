@@ -17,6 +17,10 @@ hook that sits on the gateway's hot path) over these workloads and measuring the
 request it returns. Nothing is hand-typed: `./run.sh` writes the JSON in each
 suite's `results/`, and the headline below is the sum of those files.
 
+The payloads here are synthetic, so the optimizer is also replayed against public
+datasets nobody wrote for it — every source linked, with its licence and its
+measured result, in **[DATASETS.md](DATASETS.md)**.
+
 ## Headline
 
 Whole-request token reduction, measured by running each workload's hero strategy
@@ -126,13 +130,11 @@ define the **answer-bearing key facts** and check how many survive:
 |---|--:|--:|--:|--:|
 | Key-fact survival (strict substring, model-free) | 33 | 33 | 0 | 0 |
 
-**The answer survives on all 33.** An earlier run of this suite recorded one
-failure, `30-metrics-json`: `context_compression` kept only a head slice of a long
-JSON array, so an answering row further down the series was dropped while the
-trimmed array still looked complete. That was a real optimizer defect, and it was
-kept as a failing row rather than tuned away until it was fixed. Array truncation
-is now off by default, and the row passes at a lower, honest saving. The
-per-workload table is in **[QUALITY.md](QUALITY.md)**.
+**The answer survives on all 33.** Key facts are fixed per workload before a
+strategy runs, so a trim cannot be scored by moving the answer into whatever it
+kept; a workload that starts failing stays failing until the optimizer is fixed,
+at whatever lower saving the fix costs. The per-workload table is in
+**[QUALITY.md](QUALITY.md)**.
 
 The strict check is the floor, and it is the one that needs no model: `run_quality.mjs`
 scores it against the optimizer alone, so anyone can reproduce it. The optional
@@ -223,6 +225,14 @@ optimizer's own one-line decision strings — never message bodies. That mirrors
 Anyray's core invariant: prompt/response *content* is never logged. Every payload
 in this repo is **synthetic**.
 
+Synthetic payloads are reproducible but they are written by someone who knows
+which strategy is about to run. So the optimizer is *also* replayed against public
+datasets nobody assembled with Anyray in mind — SWE-agent trajectories, WildChat,
+Toucan MCP catalogues, MT-Eval, and two corpora that are supposed to save nothing.
+Every one is linked, none is vendored, and the measured result is a good deal
+lower than this repo's headline. **[DATASETS.md](DATASETS.md)** has the full
+inventory, the licences, the numbers, and what is evaluated but not publishable.
+
 ## Prerequisites
 
 - Node.js 20+
@@ -287,15 +297,11 @@ Usually, and the suite is built to show where it does not. The
 [**quality benchmark**](QUALITY.md) defines the answer-bearing key facts for each
 workload and checks how many survive: **33 of 33 by strict substring**.
 
-The suite has caught a real defect this way, which is what it is for.
-[`30-metrics-json`](logs-and-data/) asks which timestamp shows a p99 spike, and the
-answering row sits at array index 305. `context_compression` used to retain only the
-first 50 items of a JSON array, so the model got 50 unremarkable rows plus an elision
-marker and answered confidently from data that no longer contained the answer. The
-row was kept failing until the optimizer was fixed — moving the incident into the
-retained head would have scored 100% and measured nothing. Arrays are no longer
-truncated by default, so the workload now passes, at 42% saved instead of the 93%
-that had been bought with the answer.
+The check is designed so that a strategy cannot buy savings with the answer. Key
+facts are fixed per workload **before** a strategy runs, and a workload that starts
+failing is kept failing until the optimizer is fixed — never re-tuned, and never
+rewritten to move the answer somewhere the trim happens to keep. Scoring a workload
+by editing the payload measures nothing.
 
 Anyray's strategies are also reversible — every elided span is retrievable on demand
 (`POST /v1/retrieve`) — so even a partial trim is recoverable.
