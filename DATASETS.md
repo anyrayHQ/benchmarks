@@ -93,13 +93,12 @@ pinned to flatter a strategy.
 |---|--:|--:|--:|--:|--:|--:|--:|
 | All public corpora | 1,056 | 72 | 22,542 tok | 49,466 | 85,113 | **16.3%** | **23.1%** |
 
-**That is well below the 83% this repo headlines, and the gap is the point.** The
-committed suite pins one hero strategy per workload on a payload built to exhibit
-that workload's waste pattern. The lab runs the whole default pipeline over
-whatever the trajectory happened to contain — including turns with nothing to
-save. Both numbers are real; they answer different questions, and the honest
-reading of the pair is that **83% is the ceiling a matched workload reaches, not
-the number a given deployment should expect.**
+These numbers answer a different question than the committed suite's. That suite
+pins one hero strategy per workload on a payload built to exhibit that workload's
+waste pattern; the lab runs the whole default pipeline over whatever the
+trajectory happened to contain, including turns with nothing to save. **83% is
+what a matched workload reaches; 23.1% is what an untuned pipeline returns across
+mixed traffic.**
 
 ---
 
