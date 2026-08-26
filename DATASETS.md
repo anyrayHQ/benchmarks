@@ -164,25 +164,6 @@ strategies real traffic exercises and at what prompt sizes, so the corpora above
 can be checked for being unrepresentative. No published savings figure is derived
 from it.
 
-### The realism gap, stated plainly
-
-Independent published measurement of real coding-agent traffic
-([TraceLab, arXiv:2606.30560](https://arxiv.org/abs/2606.30560) — 665,453 rounds
-from ~4,300 Claude Code and Codex sessions) puts a median round at **~140k input
-tokens**, appending ~1.1k to a ~140k prefix and reading ~99% of its input from
-cache.
-
-The heaviest corpus in this document has a median of ~55k, and the public
-trajectory corpora sit near 22k. **Everything measured here is lighter than the
-traffic it is meant to represent**, which matters most for size-gated strategies:
-a gate that rarely trips at 22k may trip on every round at 140k, and a
-cache-busting trim that looks cheap here is re-billing a 99%-cached prefix there.
-That is why the optimizer's cache-safety guards are not tuned against these
-numbers.
-
-We publish this gap rather than closing it quietly, because the only honest way
-to close it is with traffic we are not willing to collect.
-
 ---
 
 ## Why the committed payloads stay synthetic
