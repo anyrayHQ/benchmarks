@@ -24,7 +24,7 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | `reasoning_budget` | `39-reasoning-downshift` | −67% thinking budget | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
 | `thinking_trim` | `43-thinking-replay` | 83% of replayed thinking (15% of request) | `cacheBusting` | yes | strategy + guardrails + protocol | covered |
 | `tool_pruning` | `11-mcp-tools` | 70% | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
-| `tool_schema_compression` | `23-mcp-schema` | 7% | none (deterministic) | yes | strategy page | covered |
+| `tool_schema_compression` | `23-mcp-schema` | 12% | none (deterministic) | yes | strategy page | covered |
 | `param_tuning` | `14-runaway-max-tokens` | n/a (guardrail) | none (deterministic) | no | strategy page | covered |
 | `vision_ocr` | `10-screenshot-ocr` | n/a (vision) | `cacheBusting` | no | strategy page | covered |
 | `semantic_cache` | `9-repeat-request` | n/a (cache) | none (deterministic) | yes | strategy page | covered |
