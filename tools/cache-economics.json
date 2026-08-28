@@ -1,0 +1,324 @@
+{
+  "measuredAt": "2026-08-25",
+  "rates": {
+    "cacheRead": 0.1,
+    "cacheWrite": 1.25,
+    "fresh": 1
+  },
+  "rows": [
+    {
+      "arm": "none",
+      "note": "",
+      "turns": 5,
+      "turn1Tok": 46725,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 48618,
+          "cachedTok": 46724,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7040
+        },
+        {
+          "turn": 3,
+          "totalTok": 50511,
+          "cachedTok": 48617,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7229
+        },
+        {
+          "turn": 4,
+          "totalTok": 52404,
+          "cachedTok": 50510,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7419
+        },
+        {
+          "turn": 5,
+          "totalTok": 54297,
+          "cachedTok": 52403,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7608
+        }
+      ],
+      "warmBusts": 0,
+      "warmCostUnits": 29296,
+      "costVsNoCompressor": 1
+    },
+    {
+      "arm": "anyray",
+      "note": "pins threaded turn-to-turn, as the gateway does",
+      "turns": 5,
+      "turn1Tok": 46725,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 48618,
+          "cachedTok": 46724,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7040
+        },
+        {
+          "turn": 3,
+          "totalTok": 50511,
+          "cachedTok": 48617,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7229
+        },
+        {
+          "turn": 4,
+          "totalTok": 7733,
+          "cachedTok": 1948,
+          "freshTok": 5785,
+          "prefixHeld": false,
+          "costUnits": 7426
+        },
+        {
+          "turn": 5,
+          "totalTok": 9626,
+          "cachedTok": 7732,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 3141
+        }
+      ],
+      "warmBusts": 1,
+      "warmCostUnits": 24836,
+      "perTurnDecisions": [
+        [
+          "content_census"
+        ],
+        [
+          "content_census"
+        ],
+        [
+          "content_census"
+        ],
+        [
+          "content_census",
+          "command_digest",
+          "observation_mask"
+        ],
+        [
+          "content_census",
+          "command_digest",
+          "observation_mask"
+        ]
+      ],
+      "pinsReturnedPerTurn": [
+        0,
+        0,
+        0,
+        4,
+        4
+      ],
+      "costVsNoCompressor": 0.85
+    },
+    {
+      "arm": "anyray-nopins",
+      "note": "pin state LOST every turn (restart / cold replica)",
+      "turns": 5,
+      "turn1Tok": 46725,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 48618,
+          "cachedTok": 46724,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7040
+        },
+        {
+          "turn": 3,
+          "totalTok": 50511,
+          "cachedTok": 48617,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7229
+        },
+        {
+          "turn": 4,
+          "totalTok": 7733,
+          "cachedTok": 1948,
+          "freshTok": 5785,
+          "prefixHeld": false,
+          "costUnits": 7426
+        },
+        {
+          "turn": 5,
+          "totalTok": 9626,
+          "cachedTok": 7732,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 3141
+        }
+      ],
+      "warmBusts": 1,
+      "warmCostUnits": 24836,
+      "perTurnDecisions": [
+        [
+          "content_census"
+        ],
+        [
+          "content_census"
+        ],
+        [
+          "content_census"
+        ],
+        [
+          "content_census",
+          "command_digest",
+          "observation_mask"
+        ],
+        [
+          "content_census",
+          "command_digest",
+          "observation_mask"
+        ]
+      ],
+      "pinsReturnedPerTurn": [
+        0,
+        0,
+        0,
+        4,
+        4
+      ],
+      "costVsNoCompressor": 0.85
+    },
+    {
+      "arm": "headroom-cache",
+      "note": "--mode cache",
+      "turns": 5,
+      "turn1Tok": 40621,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 48742,
+          "cachedTok": 40150,
+          "freshTok": 8592,
+          "prefixHeld": false,
+          "costUnits": 14755
+        },
+        {
+          "turn": 3,
+          "totalTok": 50635,
+          "cachedTok": 48741,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7242
+        },
+        {
+          "turn": 4,
+          "totalTok": 52528,
+          "cachedTok": 50634,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7431
+        },
+        {
+          "turn": 5,
+          "totalTok": 54421,
+          "cachedTok": 52527,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7620
+        }
+      ],
+      "warmBusts": 1,
+      "warmCostUnits": 37048,
+      "costVsNoCompressor": 1.26
+    },
+    {
+      "arm": "headroom-token",
+      "note": "--mode token",
+      "turns": 5,
+      "turn1Tok": 3321,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 5214,
+          "cachedTok": 3320,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 2700
+        },
+        {
+          "turn": 3,
+          "totalTok": 7107,
+          "cachedTok": 5213,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 2889
+        },
+        {
+          "turn": 4,
+          "totalTok": 9000,
+          "cachedTok": 7106,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 3078
+        },
+        {
+          "turn": 5,
+          "totalTok": 10893,
+          "cachedTok": 8999,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 3267
+        }
+      ],
+      "warmBusts": 0,
+      "warmCostUnits": 11934,
+      "costVsNoCompressor": 0.41
+    },
+    {
+      "arm": "headroom-cache-restart",
+      "note": "--mode cache, proxy RESTARTED between every turn (delta state lost)",
+      "turns": 5,
+      "turn1Tok": 40621,
+      "warmTurns": [
+        {
+          "turn": 2,
+          "totalTok": 48618,
+          "cachedTok": 93,
+          "freshTok": 48525,
+          "prefixHeld": false,
+          "costUnits": 60666
+        },
+        {
+          "turn": 3,
+          "totalTok": 50511,
+          "cachedTok": 48617,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7229
+        },
+        {
+          "turn": 4,
+          "totalTok": 52404,
+          "cachedTok": 50510,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7419
+        },
+        {
+          "turn": 5,
+          "totalTok": 54297,
+          "cachedTok": 52403,
+          "freshTok": 1894,
+          "prefixHeld": true,
+          "costUnits": 7608
+        }
+      ],
+      "warmBusts": 1,
+      "warmCostUnits": 82922,
+      "costVsNoCompressor": 2.83
+    }
+  ]
+}

@@ -1,0 +1,662 @@
+{
+  "measuredAt": "2026-08-25",
+  "model": "gpt-4o-mini",
+  "rows": [
+    {
+      "task": "retry-policy",
+      "trials": 5,
+      "plainTrials": [
+        {
+          "turns": 4,
+          "inputTokens": 60271,
+          "outputTokens": 511,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60271,
+          "outputTokens": 496,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60270,
+          "outputTokens": 562,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60269,
+          "outputTokens": 510,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60269,
+          "outputTokens": 510,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        }
+      ],
+      "plain": {
+        "turns": 4,
+        "inputTokens": 60270,
+        "outputTokens": 510,
+        "correct": 5,
+        "of": 5,
+        "reads": 5,
+        "rereads": 0
+      },
+      "optimizedTrials": [
+        {
+          "turns": 4,
+          "inputTokens": 32576,
+          "outputTokens": 396,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60270,
+          "outputTokens": 536,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 32567,
+          "outputTokens": 368,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60271,
+          "outputTokens": 525,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 60271,
+          "outputTokens": 517,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 5,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        }
+      ],
+      "optimized": {
+        "turns": 4,
+        "inputTokens": 60270,
+        "outputTokens": 517,
+        "correct": 5,
+        "of": 5,
+        "reads": 5,
+        "rereads": 0
+      },
+      "turnsDelta": 0,
+      "inputTokenDelta": 0,
+      "netSavedPct": 0
+    },
+    {
+      "task": "auth-expiry",
+      "trials": 5,
+      "plainTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 21043,
+          "outputTokens": 344,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21028,
+          "outputTokens": 330,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21028,
+          "outputTokens": 330,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21037,
+          "outputTokens": 339,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21043,
+          "outputTokens": 344,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        }
+      ],
+      "plain": {
+        "turns": 3,
+        "inputTokens": 21037,
+        "outputTokens": 339,
+        "correct": 5,
+        "of": 5,
+        "reads": 2,
+        "rereads": 0
+      },
+      "optimizedTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 21037,
+          "outputTokens": 339,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21043,
+          "outputTokens": 344,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21037,
+          "outputTokens": 337,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21037,
+          "outputTokens": 339,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 21028,
+          "outputTokens": 329,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        }
+      ],
+      "optimized": {
+        "turns": 3,
+        "inputTokens": 21037,
+        "outputTokens": 339,
+        "correct": 5,
+        "of": 5,
+        "reads": 2,
+        "rereads": 0
+      },
+      "turnsDelta": 0,
+      "inputTokenDelta": 0,
+      "netSavedPct": 0
+    },
+    {
+      "task": "audit-all",
+      "trials": 5,
+      "plainTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 77114,
+          "outputTokens": 661,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77114,
+          "outputTokens": 655,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 4,
+          "inputTokens": 97533,
+          "outputTokens": 628,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 6,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77075,
+          "outputTokens": 626,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77114,
+          "outputTokens": 661,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        }
+      ],
+      "plain": {
+        "turns": 3,
+        "inputTokens": 77114,
+        "outputTokens": 655,
+        "correct": 5,
+        "of": 5,
+        "reads": 8,
+        "rereads": 0
+      },
+      "optimizedTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 77075,
+          "outputTokens": 626,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77114,
+          "outputTokens": 661,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77075,
+          "outputTokens": 626,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77114,
+          "outputTokens": 661,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 77075,
+          "outputTokens": 626,
+          "correct": true,
+          "factsKept": 4,
+          "factsTotal": 4,
+          "reads": 8,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        }
+      ],
+      "optimized": {
+        "turns": 3,
+        "inputTokens": 77075,
+        "outputTokens": 626,
+        "correct": 5,
+        "of": 5,
+        "reads": 8,
+        "rereads": 0
+      },
+      "turnsDelta": 0,
+      "inputTokenDelta": -39,
+      "netSavedPct": 0
+    },
+    {
+      "task": "billing-grace",
+      "trials": 5,
+      "plainTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [],
+          "answered": true
+        }
+      ],
+      "plain": {
+        "turns": 3,
+        "inputTokens": 20978,
+        "outputTokens": 348,
+        "correct": 5,
+        "of": 5,
+        "reads": 2,
+        "rereads": 0
+      },
+      "optimizedTrials": [
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        },
+        {
+          "turns": 3,
+          "inputTokens": 20978,
+          "outputTokens": 348,
+          "correct": true,
+          "factsKept": 2,
+          "factsTotal": 2,
+          "reads": 2,
+          "rereads": 0,
+          "decisions": [
+            "cache_optimizer",
+            "content_census"
+          ],
+          "answered": true
+        }
+      ],
+      "optimized": {
+        "turns": 3,
+        "inputTokens": 20978,
+        "outputTokens": 348,
+        "correct": 5,
+        "of": 5,
+        "reads": 2,
+        "rereads": 0
+      },
+      "turnsDelta": 0,
+      "inputTokenDelta": 0,
+      "netSavedPct": 0
+    }
+  ]
+}
