@@ -64,7 +64,15 @@ test('README headline numbers match the committed results', () => {
   const after = rows.reduce((s, r) => s + r.afterTok, 0);
   const pct = savedPct(before, after);
   const md = doc('README.md');
-  assert.ok(md.includes(`${rows.length} real-world workloads`), `README must say "${rows.length} real-world workloads"`);
+  // Both counts the README states are derived here, never typed: the
+  // accounting-tier rows the headline sums, and every measured workload
+  // (accounting + own-basis) that the "what we measure it on" table claims.
+  const measured = rowsFrom('optimized.json').length;
+  assert.ok(
+    md.includes(`${rows.length} whole-request workloads`),
+    `README must say "${rows.length} whole-request workloads"`,
+  );
+  assert.ok(md.includes(`${measured} workloads`), `README must say "${measured} workloads"`);
   assert.ok(md.includes(fmt(before)), `README must show before total ${fmt(before)}`);
   assert.ok(md.includes(fmt(after)), `README must show after total ${fmt(after)}`);
   assert.ok(md.includes(`${pct}%`), `README must show overall ${pct}%`);
