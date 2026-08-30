@@ -5,21 +5,25 @@
 [![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
 [![answer: kept](https://img.shields.io/badge/answer-kept%2033%2F33-1a7f5a)](QUALITY.md)
 
-Each of the 29 real-world workloads here is a token-waste pattern real devs and agents
-produce every day — pasting a whole log and asking one question, an agent re-reading
-entire files, MCP tool-schema bloat, RAG over-fetching, resending the full session every
-turn. These aren't inputs cherry-picked to flatter the optimizer; each is a waste pattern
-the cost literature ranks as common and expensive (see [Why these workloads](#why-these-workloads)). Anyray
-fixes them **on the request path, without touching the app**.
+Anyray sits on the request path of every LLM call an org makes — coding
+assistants, agents, SDK jobs — and rewrites each request to spend fewer tokens
+before it reaches the provider. The app doesn't change, and nothing is thrown
+away: every elided span stays retrievable (`POST /v1/retrieve`).
 
-Every number is produced by running the **real optimizer** (the before-request
-hook that sits on the gateway's hot path) over these workloads and measuring the
-request it returns. Nothing is hand-typed: `./run.sh` writes the JSON in each
-suite's `results/`, and the headline below is the sum of those files.
+This repo measures how much that saves.
 
-The payloads here are synthetic, so the optimizer is also replayed against public
-datasets nobody wrote for it — every source linked, with its licence and its
-measured result, in **[DATASETS.md](DATASETS.md)**.
+## What we measure it on
+
+| Data | What it is | Result |
+|---|---|---|
+| **Synthetic suite** — in this repo | 40 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **83%** on the 29 whole-request workloads, with **33/33** answers intact |
+| **Public corpora** — [DATASETS.md](DATASETS.md) | 8 datasets nobody assembled for Anyray: SWE-agent and OpenHands trajectories, WildChat, Toucan MCP catalogues, MT-Eval, xlam function calling, orca-agentinstruct. 1,056 turns through the full default pipeline, no per-corpus tuning. | **23.1%** aggregate, **16.3%** median |
+| **Production** — [profile](DATASETS.md#production-traffic-profile) | Anyray's own deployments, read content-free: token counts, prefix growth, which strategies fired. Prompts are encrypted at rest and the query does not select those columns. | Confirms the corpora match real prompt sizes and strategy mix. No published savings figure comes from it. |
+
+Every number below comes from running the **real optimizer** — the same
+before-request hook that sits on the gateway's hot path — over these workloads
+and measuring the request it returns. `./run.sh` writes the JSON in each suite's
+`results/`; the headline is the sum of those files.
 
 ## Headline
 
@@ -222,16 +226,13 @@ provider tokens on dense logs/JSON). A real-provider cross-check is in
 
 **Content-free, by construction.** The harness records only sizes and the
 optimizer's own one-line decision strings — never message bodies. That mirrors
-Anyray's core invariant: prompt/response *content* is never logged. Every payload
-in this repo is **synthetic**.
+Anyray's core invariant: prompt/response *content* is never logged.
 
-Synthetic payloads are reproducible but they are written by someone who knows
-which strategy is about to run. So the optimizer is *also* replayed against public
-datasets nobody assembled with Anyray in mind — SWE-agent trajectories, WildChat,
-Toucan MCP catalogues, MT-Eval, and two corpora that are supposed to save nothing.
-Every one is linked, none is vendored, and the measured result is a good deal
-lower than this repo's headline. **[DATASETS.md](DATASETS.md)** has the full
-inventory, the licences, the numbers, and what is evaluated but not publishable.
+This describes the synthetic suite. The public-corpora replay scores
+differently: no strategy is pinned, no knob is tuned per corpus, and the full
+default pipeline runs over every turn — which is why it returns 23.1% where a
+matched workload returns 83%. Corpora, licences, per-corpus numbers, and what is
+evaluated but not publishable are in **[DATASETS.md](DATASETS.md)**.
 
 ## Prerequisites
 
