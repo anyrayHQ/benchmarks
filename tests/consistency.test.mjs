@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { estTokens, savedPct } from '../lib/tokens.mjs';
@@ -189,12 +189,47 @@ test('RESULTS top-three prose shares match the share-of-input column', () => {
 // The suite measures its own fixtures, never production traffic. The docs once
 // claimed otherwise; this keeps that claim from returning.
 test('no doc claims the fixture mix is weighted to production traffic', () => {
-  for (const name of ['README.md', 'RESULTS.md', 'SUMMARY.md', 'COVERAGE.md', 'QUALITY.md']) {
+  for (const name of ['README.md', 'RESULTS.md', 'SUMMARY.md', 'COVERAGE.md', 'QUALITY.md', 'DATASETS.md']) {
     assert.ok(
       !/weighted to (real|production)/i.test(doc(name)),
       `${name} claims the mix is weighted to real traffic — this suite cannot support that`
     );
   }
+});
+
+// DATASETS.md exists to separate two evaluation surfaces: the synthetic payloads
+// committed here, and public corpora replayed elsewhere. The whole page is worth
+// nothing if a reader can come away thinking a headline figure came from the
+// corpora — so the payload count it states is recomputed from the files on disk,
+// and the headline it contrasts against is recomputed from the results JSON.
+test('DATASETS payload count matches the committed payloads', () => {
+  const n = SUITES.reduce(
+    (sum, s) => sum + readdirSync(join(ROOT, s, 'payloads')).filter((f) => f.endsWith('.json')).length,
+    0
+  );
+  assert.ok(
+    doc('DATASETS.md').includes(`${n} synthetic`),
+    `DATASETS.md must say "${n} synthetic" — that is how many payload files are committed`
+  );
+});
+
+test('DATASETS states the same headline it contrasts the corpora against', () => {
+  const rows = accounting();
+  const pct = savedPct(
+    rows.reduce((s, r) => s + r.beforeTok, 0),
+    rows.reduce((s, r) => s + r.afterTok, 0)
+  );
+  assert.ok(
+    doc('DATASETS.md').includes(`${pct}%`),
+    `DATASETS.md contrasts the corpora against this repo's headline; expected ${pct}%`
+  );
+});
+
+// The point of the non-public section is that it discloses shape and never
+// content. A sample of a payload appearing there would defeat it entirely.
+test('DATASETS discloses no payload content', () => {
+  const md = doc('DATASETS.md');
+  assert.ok(!/```/.test(md), 'DATASETS.md must not contain code blocks — no payload samples');
 });
 
 // The README's figures are committed SVGs and nothing checked them. The quality
