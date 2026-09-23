@@ -35,7 +35,7 @@
   {
     "id": "24-agent-toolcalls",
     "strategy": "window_budget",
-    "savedPct": 39,
+    "savedPct": 47,
     "keyFacts": 3,
     "deterministic": {
       "coverage": 100,
@@ -46,7 +46,7 @@
   {
     "id": "31-long-toolsession",
     "strategy": "window_budget",
-    "savedPct": 46,
+    "savedPct": 65,
     "keyFacts": 2,
     "deterministic": {
       "coverage": 100,

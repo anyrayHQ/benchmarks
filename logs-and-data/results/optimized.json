@@ -5,18 +5,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=3000, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 104612,
-    "afterChars": 4245,
+    "afterChars": 4258,
     "beforeTok": 26153,
-    "afterTok": 1061,
+    "afterTok": 1065,
     "savedPct": 96,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (104612->4245 chars, -96%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (104612->4258 chars, -96%); 1 stashed for retrieval"
     ]
   },
   {
@@ -25,18 +25,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=12000, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 105541,
-    "afterChars": 17024,
+    "afterChars": 16954,
     "beforeTok": 26385,
-    "afterTok": 4256,
+    "afterTok": 4239,
     "savedPct": 84,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (105541->17024 chars, -84%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (105541->16954 chars, -84%); 1 stashed for retrieval"
     ]
   },
   {
@@ -45,18 +45,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 11850,
-    "afterChars": 4652,
+    "afterChars": 4630,
     "beforeTok": 2963,
-    "afterTok": 1163,
+    "afterTok": 1158,
     "savedPct": 61,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (11850->4652 chars, -61%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (11850->4630 chars, -61%); 1 stashed for retrieval; semantic re-rank: 1 msg, 120 lines embedded"
     ]
   },
   {
@@ -65,19 +65,17 @@
     "strategy": "context_compression",
     "knob": "roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 297840,
-    "afterChars": 8050,
+    "afterChars": 297840,
     "beforeTok": 74460,
-    "afterTok": 2013,
-    "savedPct": 97,
+    "afterTok": 74460,
+    "savedPct": 0,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "compressed 1 tool output(s) (1 text) 297840->8050 chars (-97%); 1 stashed for retrieval"
-    ]
+    "fired": false,
+    "decisions": []
   },
   {
     "id": "29-orders-json",
@@ -85,8 +83,8 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 71882,
     "afterChars": 41866,
     "beforeTok": 17971,
@@ -105,8 +103,8 @@
     "strategy": "context_compression",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 48465,
     "afterChars": 28289,
     "beforeTok": 12116,

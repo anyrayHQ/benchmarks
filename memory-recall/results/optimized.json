@@ -5,18 +5,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2500, roles=tool|function|user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 23744,
-    "afterChars": 3574,
+    "afterChars": 3585,
     "beforeTok": 5936,
-    "afterTok": 894,
+    "afterTok": 896,
     "savedPct": 85,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (23413->3243 chars, -86%); 1 stashed for retrieval"
+      "relevance-filtered 1 message(s) against the live turn (23413->3254 chars, -86%); 1 stashed for retrieval"
     ]
   },
   {
@@ -25,19 +25,17 @@
     "strategy": "observation_mask",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 26888,
-    "afterChars": 4460,
+    "afterChars": 26888,
     "beforeTok": 6722,
-    "afterTok": 1115,
-    "savedPct": 83,
+    "afterTok": 6722,
+    "savedPct": 0,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
-    "fired": true,
-    "decisions": [
-      "masked 3 stale tool observation(s) (22709->281 chars, -99%); 3 stashed for retrieval"
-    ]
+    "fired": false,
+    "decisions": []
   },
   {
     "id": "37-durable-blob",
@@ -45,8 +43,8 @@
     "strategy": "output_externalize",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 98322,
     "afterChars": 1364,
     "beforeTok": 24581,

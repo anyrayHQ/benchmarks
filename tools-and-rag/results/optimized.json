@@ -5,8 +5,8 @@
     "strategy": "tool_pruning",
     "knob": "keepUnnamed=true",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 22455,
     "afterChars": 6702,
     "beforeTok": 5614,
@@ -25,8 +25,8 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1200, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 5990,
     "afterChars": 1920,
     "beforeTok": 1498,
@@ -45,10 +45,10 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.7",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 9072,
-    "afterChars": 2269,
+    "afterChars": 2266,
     "beforeTok": 2268,
     "afterTok": 567,
     "savedPct": 75,
@@ -56,7 +56,7 @@
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (8662->1859 chars, -79%); 1 stashed for retrieval; semantic re-rank: 1 msg, 59 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (8662->1856 chars, -79%); 1 stashed for retrieval; semantic re-rank: 1 msg, 59 lines embedded"
     ]
   },
   {
@@ -65,8 +65,8 @@
     "strategy": "prompt_compression",
     "knob": "minChars=400",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 23365,
     "afterChars": 3434,
     "beforeTok": 5841,
@@ -85,8 +85,8 @@
     "strategy": "tool_schema_compression",
     "knob": "collapseWhitespace=true, stripBoilerplate=true",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 6449,
     "afterChars": 5707,
     "beforeTok": 1612,
@@ -105,18 +105,18 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=1500, roles=tool|function|user, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 3766,
-    "afterChars": 2479,
+    "afterChars": 2488,
     "beforeTok": 942,
-    "afterTok": 620,
+    "afterTok": 622,
     "savedPct": 34,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "relevance-filtered 1 message(s) against the live turn (3473->2186 chars, -37%); 1 stashed for retrieval; semantic re-rank: 1 msg, 41 lines embedded"
+      "relevance-filtered 1 message(s) against the live turn (3473->2195 chars, -37%); 1 stashed for retrieval; semantic re-rank: 1 msg, 41 lines embedded"
     ]
   }
 ]

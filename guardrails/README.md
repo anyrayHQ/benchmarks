@@ -7,16 +7,14 @@ decision string; this README explains what each number means.
 
 **Why these are common:** redundant / near-duplicate requests are **40–60%** of
 enterprise LLM traffic (**18%** exact duplicates, **~47%** semantically similar) —
-the cache case; pasted screenshots are billed as expensive vision tokens — the OCR
-case; and uncapped output ceilings let a one-line task reserve 100k output tokens —
-the `param_tuning` case.
+the cache case; and uncapped output ceilings let a one-line task reserve 100k
+output tokens — the `param_tuning` case.
 
 ## Workloads
 
 | Workload | Strategy | Knob | Basis | Result |
 |---|---|---|---|---|
 | Repeated identical request — 2nd call served from cache | `semantic_cache` | (defaults) | call avoided | 2nd call served from cache |
-| Pasted screenshot — "what is this error and how do I fix it?" | `vision_ocr` | `imageTokenEstimate=1000` | vision tokens | image → OCR text |
 | Runaway `max_tokens` — 100k ceiling on a one-line task | `param_tuning` | `maxTokensCap=4096` | output ceiling | `max_tokens` 100,000 → 4,096 |
 | Claude prompt-cache prefix — stabilize the system+tools prefix | `cache_optimizer` | `minPrefixChars=4096` | cached-read reuse | tools sorted + `cache_control` injected (tools, system) |
 | Context health — flag a bloated, over-fetched context | `context_quality` | `bloatedToolChars=1500` | health score (read-only) | 69/100 (6 bloated, 2 duplicate) |
@@ -56,15 +54,6 @@ request cannot exercise it, which is why it had no row until now.
   character trim. (The seed is written directly; the optimizer's own provider→cache
   write-back path is not exercised here.) The win is realized across repeated
   traffic, not on a cold first call.
-
-- **`vision_ocr` — the saving is in vision tokens, not characters.** The strategy
-  runs a local OCR pass on a text-bearing screenshot and swaps the image for the
-  extracted text, so a text-only model can answer and the expensive image tokens
-  go away. The harness measures the request payload by characters: the 54,354-char
-  request (almost entirely the base64 image) shrinks to ~790 chars of text. The *meaningful* basis
-  is the provider's **vision-token** cost — roughly `imageTokenEstimate` (~1,000)
-  → ~146 text tokens, about **85%** — which is what the live trace on the Anyray
-  demo stack recorded.
 
 - **`param_tuning` — the saving is the output *ceiling*, not the input.** It
   clamps a runaway `max_tokens` (100,000 → 4,096), capping worst-case output spend

@@ -303,7 +303,7 @@ benchmarks:
     blurb: >-
       Workloads whose saving is not whole-request character reduction, so they are
       reported on their own basis: a repeated call served from cache, a pasted
-      screenshot swapped for OCR text, a runaway output ceiling clamped, a Claude
+      a runaway output ceiling clamped, a Claude
       prompt-cache prefix stabilized, and a low-signal context scored for health.
       See the suite README for each basis.
     workloads:
@@ -313,12 +313,6 @@ benchmarks:
         params: {}
         tier: "cache"
         qualityCheck: cache_hit
-      - id: "10-screenshot-ocr"
-        title: 'Pasted screenshot — "what is this error and how do I fix it?"'
-        strategy: "vision_ocr"
-        params: { imageTokenEstimate: 1000 }
-        tier: "vision"
-        qualityCheck: answer_judge
       - id: "14-runaway-max-tokens"
         title: "Runaway max_tokens — 100k output ceiling on a one-line task"
         strategy: "param_tuning"

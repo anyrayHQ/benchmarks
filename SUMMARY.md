@@ -1,17 +1,17 @@
 # Anyray optimizer — results summary
 
-Across 29 synthetic agent/coding workloads, the Anyray optimizer cut input tokens by **83% overall** (median 66% per workload) while preserving the answer-bearing key facts in **100%** of cases (0% confirmed by an LLM judge).
+Across 29 synthetic agent/coding workloads, the Anyray optimizer cut input tokens by **59% overall** (median 61% per workload) while preserving the answer-bearing key facts in **100%** of cases (0% confirmed by an LLM judge).
 
 ## Token savings by workload type
 
 | Workload type | Workloads | Median input-token reduction |
 |---|---:|---:|
-| Logs & structured data | 6 | 73% |
-| Code context | 7 | 56% |
+| Logs & structured data | 6 | 52% |
+| Code context | 7 | 33% |
 | Tools & retrieval | 6 | 69% |
-| Agent operations | 7 | 46% |
+| Agent operations | 7 | 65% |
 | Cross-session memory recall | 3 | 85% |
-| **All** | **29** | **83% overall** |
+| **All** | **29** | **59% overall** |
 
 ## Quality preservation
 
@@ -21,6 +21,6 @@ Quality is measured as **answer-bearing key-fact survival** — for each workloa
 - **0/0** confirmed by the LLM judge.
 
 
-_(11 guardrail workloads — semantic cache, screenshot OCR, runaway-output caps — use special accounting rather than whole-request token reduction and are reported separately.)_
+_(10 guardrail workloads — semantic cache, runaway-output caps — use special accounting rather than whole-request token reduction and are reported separately.)_
 
 _Synthetic data only (privacy-preserving). Numbers are reproducible: `npm run bench:all` then `npm run quality:all`, then `npm run summary`. See `VALIDATION.md` for methodology._
