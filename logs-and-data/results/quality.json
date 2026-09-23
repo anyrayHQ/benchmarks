@@ -33,17 +33,6 @@
     }
   },
   {
-    "id": "4-json-array",
-    "strategy": "context_compression",
-    "savedPct": 0,
-    "keyFacts": 6,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    }
-  },
-  {
     "id": "29-orders-json",
     "strategy": "context_compression",
     "savedPct": 42,
@@ -59,6 +48,17 @@
     "strategy": "context_compression",
     "savedPct": 42,
     "keyFacts": 2,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    }
+  },
+  {
+    "id": "4-json-array",
+    "strategy": "context_compression",
+    "savedPct": 94,
+    "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",

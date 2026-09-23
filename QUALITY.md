@@ -42,12 +42,12 @@ none.
 | `1-access-log` | `relevance_filter` | 96% | 100% ✅ |
 | `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ |
 | `33-synonym-gap-logs` | `relevance_filter` | 61% | 100% ✅ |
-| `4-json-array` | `context_compression` | 0% | 100% ✅ |
+| `4-json-array` | `context_compression` | 94% | 100% ✅ |
 | `29-orders-json` | `context_compression` | 42% | 100% ✅ |
 | `30-metrics-json` | `context_compression` | 42% | 100% ✅ |
 | `5-code-search` | `relevance_filter` | 56% | 100% ✅ |
-| `6-git-diff` | `context_compression` | 0% | 100% ✅ |
-| `7-codebase-explore` | `code_graph` | 0% | 100% ✅ |
+| `6-git-diff` | `context_compression` | 84% | 100% ✅ |
+| `7-codebase-explore` | `code_graph` | 27% | 100% ✅ |
 | `15-multifile-graph` | `code_graph` | 32% | 100% ✅ |
 | `17-python-multifile` | `code_graph` | 33% | 100% ✅ |
 | `27-read-service-ts` | `code_graph` | 66% | 100% ✅ |
@@ -67,7 +67,7 @@ none.
 | `35-flaky-test-rerun` | `context_dedupe` | 37% | 100% ✅ |
 | `43-thinking-replay` | `thinking_trim` | *guardrail* | 100% ✅ |
 | `18-session-recall` | `relevance_filter` | 85% | 100% ✅ |
-| `36-stale-observations` | `observation_mask` | 0% | 100% ✅ |
+| `36-stale-observations` | `observation_mask` | 95% | 100% ✅ |
 | `37-durable-blob` | `output_externalize` | 99% | 100% ✅ |
 | `38-anthropic-context-trim` | `provider_context_trim` | *guardrail* | 100% ✅ |
 | `39-reasoning-downshift` | `reasoning_budget` | *guardrail* | 100% ✅ |

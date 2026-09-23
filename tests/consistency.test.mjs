@@ -179,20 +179,31 @@ test('README accounting/own-basis split matches the committed results', () => {
 // below said 32% / 26% / 23%, and the mix was still described as "weighted to
 // real coding-agent traffic" after README.md had retracted exactly that claim.
 // A published share is a number like any other — recompute it.
-test('RESULTS top-three prose shares match the share-of-input column', () => {
+test('RESULTS leading-strategy prose shares match the share-of-input column', () => {
   const md = doc('RESULTS.md');
   const rows = aggregate(accounting(), 'strategy');
   const total = [...rows.values()].reduce((n, v) => n + v.before, 0);
-  const top3 = ['context_compression', 'window_budget', 'relevance_filter'];
-  const shares = top3.map((s) => Math.round((100 * rows.get(s).before) / total));
+  // Derived, not hardcoded: which strategies lead is a property of the fixture
+  // mix, and it moves whenever a fixture is resized. Pinning the names here
+  // made a legitimate fixture change look like prose drift (the 36-stale
+  // -observations regrow, which put observation_mask on top).
+  const ranked = [...rows.entries()].sort((a, b) => b[1].before - a[1].before);
+  const leaders = ranked.slice(0, 4).map(([s]) => s);
+  const shares = leaders.map((s) => Math.round((100 * rows.get(s).before) / total));
   assert.ok(
     md.includes(`(${shares.join('% / ')}%)`),
-    `RESULTS top-three prose drifted: expected "(${shares.join('% / ')}%)"`
+    `RESULTS leading-strategy prose drifted: expected "(${shares.join('% / ')}%)"`
   );
-  const sum = top3.reduce((n, s) => n + rows.get(s).before, 0);
+  for (const s of leaders) {
+    assert.ok(
+      md.includes(`\`${s}\``),
+      `RESULTS prose omits a leading strategy: ${s}`
+    );
+  }
+  const sum = leaders.reduce((n, s) => n + rows.get(s).before, 0);
   assert.ok(
     Math.round((100 * sum) / total) >= 75,
-    'top three no longer hold ~80% of input — the prose claim needs rewriting'
+    'the leaders no longer hold most of the input — the prose claim needs rewriting'
   );
 });
 

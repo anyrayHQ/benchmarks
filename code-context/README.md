@@ -14,8 +14,8 @@ pegs roughly **70% of a coding agent's tokens as irrelevant file reads**.
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
 | Code search (100 hits) — "where is the retry policy configured?" | `relevance_filter` | `keepChars=8000, roles=user` | 4,275 | 1,860 | **56%** |
-| Git diff — "any risky change in this PR?" | `context_compression` | `roles=user` | 5,669 | 5,669 | **0%** |
-| Codebase exploration — "explain the architecture & where retries live" | `code_graph` | `minChars=200, minBodyLines=2, roles=user` | 4,679 | 4,679 | **0%** |
+| Git diff — "any risky change in this PR?" | `context_compression` | `roles=user, maxDiffLines=40` | 5,669 | 898 | **84%** |
+| Codebase exploration — "explain the architecture & where retries live" | `code_graph` | `minChars=200, minBodyLines=2, roles=user` | 4,687 | 3,420 | **27%** |
 | Multi-file trace — "how does Checkout.submitOrder capture payment?" | `code_graph` | `minChars=200, minBodyLines=2` | 2,128 | 1,450 | **32%** |
 | Multi-file trace (Python) — same, in an indentation language | `code_graph` | `minChars=200, minBodyLines=2` | 1,824 | 1,220 | **33%** |
 | Read a large TS service file (tool result) — keep the on-path bodies | `code_graph` | `minChars=200, minBodyLines=2` | 2,674 | 908 | **66%** |
