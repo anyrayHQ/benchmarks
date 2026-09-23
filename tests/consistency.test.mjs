@@ -14,6 +14,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { estTokens, savedPct } from '../lib/tokens.mjs';
 import { verdictFor } from '../lib/quality.mjs';
+import { REGISTRY_MIRROR } from '../lib/writeCoverage.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SUITES = ['agent-ops', 'code-context', 'guardrails', 'logs-and-data', 'memory-recall', 'tools-and-rag'];
@@ -99,20 +100,21 @@ test('RESULTS savings-by-strategy table matches the committed results', () => {
 // produce — a large share of measured savings comes from strategies that ship OFF. The
 // README states that split; this keeps it true.
 //
-// UNVERIFIED MIRROR. OFF_BY_DEFAULT copies DEFAULT_CONFIG from the monorepo
-// (optimizer/src/config.ts), and NOTHING checks the two still agree — this repo
-// cannot see that file, and the upstream test that would have closed the loop
-// was never landed. So a default flipped there makes the published share wrong
-// here, silently, and this guard will keep passing.
+// OFF_BY_DEFAULT is DERIVED, not a second hand-copy. It used to be its own
+// literal list beside REGISTRY_MIRROR's `enabled` field, so the repo carried the
+// same fact twice and nothing compared them: by 2026-09 that copy still listed
+// the deleted `vision_ocr`, had `semantic_cache` on the wrong side, and knew
+// nothing of `client_prefix_compression` or `columnar_fold` — and this guard
+// kept passing, because a guard cannot check a fact it is the only source of.
+// One mirror can go stale; two disagree silently. Reading the shared mirror
+// means a default fixed in one place is fixed everywhere.
 //
-// Re-check by hand when a strategy's shipped default changes; the list below is
-// every `enabled: false` entry in DEFAULT_CONFIG. Closing this properly needs a
-// source-scan test upstream reading THIS file — a "must match" comment, which is
-// what this now is, is explicitly the weaker option.
-const OFF_BY_DEFAULT = new Set([
-  'window_budget', 'output_externalize', 'tool_pruning', 'param_tuning',
-  'vision_ocr', 'reasoning_budget', 'output_shaping', 'context_quality',
-]);
+// The remaining mirror is REGISTRY_MIRROR (lib/writeCoverage.mjs), still hand-
+// maintained against the monorepo's baked optimizer.config.json, still unable
+// to verify itself from this repo. Re-check it when a shipped default changes.
+const OFF_BY_DEFAULT = new Set(
+  REGISTRY_MIRROR.filter((r) => r.enabled === false).map((r) => r.kind)
+);
 
 test('README default-state split matches the committed results', () => {
   const md = doc('README.md');

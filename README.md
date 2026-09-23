@@ -16,7 +16,7 @@ This repo measures how much that saves.
 
 | Data | What it is | Result |
 |---|---|---|
-| **Synthetic suite** — in this repo | 40 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **83%** on the 29 whole-request workloads, with **33/33** answers intact |
+| **Synthetic suite** — in this repo | 39 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **59%** on the 29 whole-request workloads, with **33/33** answers intact |
 | **Public corpora** — [DATASETS.md](DATASETS.md) | 8 datasets nobody assembled for Anyray: SWE-agent and OpenHands trajectories, WildChat, Toucan MCP catalogues, MT-Eval, xlam function calling, orca-agentinstruct. 1,056 turns through the full default pipeline, no per-corpus tuning. | **23.1%** aggregate, **16.3%** median |
 | **Production** — [profile](DATASETS.md#production-traffic-profile) | Anyray's own deployments, read content-free: token counts, prefix growth, which strategies fired. Prompts are encrypted at rest and the query does not select those columns. | Confirms the corpora match real prompt sizes and strategy mix. No published savings figure comes from it. |
 
@@ -32,12 +32,12 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 26,032 | **84%** |
-| [`code-context/`](code-context/) | 7 | 23,491 | 11,495 | **51%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,629 | **68%** |
-| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 12,064 | **88%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 2,350 | **94%** |
-| **Total** | **29** | **338,833** | **57,570** | **83%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 98,461 | **38%** |
+| [`code-context/`](code-context/) | 7 | 23,491 | 16,461 | **30%** |
+| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,631 | **68%** |
+| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 11,340 | **89%** |
+| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 7,959 | **79%** |
+| **Total** | **29** | **338,833** | **139,852** | **59%** |
 | [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
 
 Three strategies carry most of this suite's input — `context_compression`,
@@ -57,25 +57,25 @@ isolation, and it means the total above is *not* what a stock deployment produce
 
 | | Share of measured savings |
 |---|--:|
-| strategies **on** by default | **62%** |
-| strategies **off** by default (`window_budget` 28%, `output_externalize` 9%, `tool_pruning` 1%) | **38%** |
+| strategies **on** by default | **45%** |
+| strategies **off** by default (`window_budget` 40%, `output_externalize` 12%, `tool_pruning` 2%) | **55%** |
 
-On the default-on subset alone the suite reads 222,238 → 48,988 tok, **78%**. The
+On the default-on subset alone the suite reads 222,238 → 131,994 tok, **41%**. The
 opt-in strategies are off for reasons, not by oversight — `window_budget` crops whole
 messages against a client-supplied ceiling, so it stays operator-enabled — and each
 one is annotated in [`config.yaml`](config.yaml).
 
 ### What the headline does and doesn't sum
 
-[COVERAGE.md](COVERAGE.md) shows this suite measures **22 of the 23** registered
-strategies. The headline above is **not** the sum of those 22 — it sums the **11**
-scored on whole-request bytes. The other 11 are measured on their own bases,
+[COVERAGE.md](COVERAGE.md) shows this suite measures **21 of the 25** registered
+strategies. The headline above is **not** the sum of those 21 — it sums the **11**
+scored on whole-request bytes. The other 10 are measured on their own bases,
 because a whole-request percentage would be meaningless or misleading for them:
 
 | Scored how | Strategies | In the headline? |
 |---|---|:-:|
 | whole-request bytes (accounting) | `context_compression`, `window_budget`, `relevance_filter`, `output_externalize`, `code_graph`, `observation_mask`, `prompt_compression`, `tool_pruning`, `context_dedupe`, `command_digest`, `tool_schema_compression` | yes |
-| own basis (guardrail / cache / diagnostic / vision) | `thinking_trim`, `cache_lint`, `cache_optimizer`, `semantic_cache`, `vision_ocr`, `param_tuning`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `content_census`, `context_quality` | no |
+| own basis (guardrail / cache / diagnostic) | `thinking_trim`, `cache_lint`, `cache_optimizer`, `semantic_cache`, `param_tuning`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `content_census`, `context_quality` | no |
 
 `thinking_trim` is the one to know about. It only touches replayed reasoning, so a
 whole-request figure would mostly measure how much unrelated file body a fixture
@@ -165,7 +165,6 @@ the same culprits show up every time. We benchmark Anyray on exactly those.
 | Command / test output read back verbatim | runner output is mostly passing lines + banners | `agent-ops` |
 | Recall a large store (sessions, decisions, notes) for a narrow question | recall-heavy assistant + agent usage | `memory-recall` |
 | Redundant / near-duplicate requests | **40–60%** of enterprise LLM traffic is repetitive (**18%** exact duplicates, **~47%** semantically similar) | `guardrails` (cache) |
-| Pasted screenshots billed as vision tokens | text-bearing images cost far more than their extracted text | `guardrails` (OCR) |
 | Runaway output ceilings / over-generation | uncapped `max_tokens` inflates worst-case spend | `guardrails` (param) |
 
 *(Figures are the patterns the 2025–2026 industry cost research surfaces
@@ -190,7 +189,7 @@ request.
 | [`tools-and-rag/`](tools-and-rag/) | 6 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
 | [`agent-ops/`](agent-ops/) | 8 | `window_budget`, `relevance_filter`, `command_digest`, `context_dedupe`, `thinking_trim` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output, re-read files, replayed reasoning |
 | [`memory-recall/`](memory-recall/) | 3 | `relevance_filter`, `observation_mask`, `output_externalize` | A large recalled store + a "remember this for me" question; stale trajectories; durable blobs |
-| [`guardrails/`](guardrails/) | 10 | `semantic_cache`, `vision_ocr`, `param_tuning`, `cache_optimizer`, `context_quality`, `content_census`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `cache_lint` | Repeated calls, pasted screenshots, runaway ceilings, cache-prefix stability, context health, content census, provider-side trim, reasoning downshift, output shaping, prefix churn |
+| [`guardrails/`](guardrails/) | 10 | `semantic_cache`, `param_tuning`, `cache_optimizer`, `context_quality`, `content_census`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `cache_lint` | Repeated calls, pasted screenshots, runaway ceilings, cache-prefix stability, context health, content census, provider-side trim, reasoning downshift, output shaping, prefix churn |
 
 The optimizer is **reversible**: every elided span is stashed behind a retrieval
 handle (`POST /v1/retrieve`), so the model can pull
@@ -231,7 +230,7 @@ Anyray's core invariant: prompt/response *content* is never logged.
 This describes the synthetic suite. The public-corpora replay scores
 differently: no strategy is pinned, no knob is tuned per corpus, and the full
 default pipeline runs over every turn — which is why it returns 23.1% where a
-matched workload returns 83%. Corpora, licences, per-corpus numbers, and what is
+matched workload returns 59%. Corpora, licences, per-corpus numbers, and what is
 evaluated but not publishable are in **[DATASETS.md](DATASETS.md)**.
 
 ## Prerequisites

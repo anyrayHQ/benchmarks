@@ -13,7 +13,7 @@
   {
     "id": "6-git-diff",
     "strategy": "context_compression",
-    "savedPct": 65,
+    "savedPct": 0,
     "keyFacts": 4,
     "deterministic": {
       "coverage": 100,
@@ -24,7 +24,7 @@
   {
     "id": "7-codebase-explore",
     "strategy": "code_graph",
-    "savedPct": 28,
+    "savedPct": 0,
     "keyFacts": 5,
     "deterministic": {
       "coverage": 100,

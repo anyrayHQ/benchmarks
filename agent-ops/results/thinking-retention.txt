@@ -1,0 +1,6 @@
+arm          kept turns  think tok  saved%     facts   verdict
+control             7/7       3370      0% 4/4 (100%)      PASS
+shipped             1/7        482     86%  0/4 (0%)      FAIL
+optionA             3/7       1430     58% 1/4 (25%)      FAIL
+synthesis           3/7       1430     58% 1/4 (25%)      FAIL
+pr2114              5/7       2400     29% 2/4 (50%)      FAIL

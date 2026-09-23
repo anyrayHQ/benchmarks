@@ -2,7 +2,7 @@
 
 # Coverage
 
-Every strategy the optimizer registers, and whether this suite measures it. **22 of 23** registered kinds are covered by **40** workloads; **1** is not.
+Every strategy the optimizer registers, and whether this suite measures it. **21 of 25** registered kinds are covered by **39** workloads; **4** are not.
 
 The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/src/strategies/index.ts`), not this file, not the docs, and not the console. Where a doc and the registry disagree, the registry wins and the doc is a bug to file.
 
@@ -11,14 +11,15 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | Kind | Workload(s) | Measured saving | Cache flags | Default on? | Docs | Verdict |
 | --- | --- | --: | --- | --- | --- | --- |
 | `audited_holdout` | — | — | none (deterministic) | n/a — top-level `holdout` | human name only ("audited holdout", 7 pages); id only in the protocol page | UNCOVERED |
+| `client_prefix_compression` | — | — | none (deterministic) | no | strategy page | UNCOVERED |
 | `prompt_compression` | `13-prompt-boilerplate` | 85% | none (deterministic) | yes | strategy page | covered |
-| `context_dedupe` | `34-repeat-reads`, `35-flaky-test-rerun` | 37% (median of 2) | none (deterministic) | yes | strategy page | covered |
-| `observation_mask` | `36-stale-observations` | 83% | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
+| `context_dedupe` | `34-repeat-reads`, `35-flaky-test-rerun` | 37% (median of 2) | `cacheBusting` | yes | strategy page | covered |
+| `observation_mask` | `36-stale-observations` | 0% | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
 | `command_digest` | `16-test-run` | 77% | `cacheBusting` | yes | strategy page | covered |
-| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 54% (median of 4) | `cacheBusting` | yes | strategy page | covered |
+| `context_compression` | `4-json-array`, `29-orders-json`, `30-metrics-json`, `6-git-diff` | 21% (median of 4) | `cacheBusting` | yes | strategy page | covered |
 | `code_graph` | `7-codebase-explore`, `15-multifile-graph`, `17-python-multifile`, `27-read-service-ts`, `28-read-module-py` | 33% (median of 5) | `cacheBusting` | yes | strategy page | covered |
 | `relevance_filter` | `1-access-log`, `2-sre-incident`, `33-synonym-gap-logs`, `5-code-search`, `12-rag-overfetch`, `32-vocab-mismatch-rag`, `42-semantic-rerank-rag`, `3-github-triage`, `18-session-recall` | 75% (median of 9) | `cacheBusting` + `cacheSuffixSafe` | yes | strategy page | covered |
-| `window_budget` | `8-long-session`, `24-agent-toolcalls`, `31-long-toolsession` | 46% (median of 3) | `cacheBusting` + `cacheSuffixSafe` | no | strategy page | covered |
+| `window_budget` | `8-long-session`, `24-agent-toolcalls`, `31-long-toolsession` | 65% (median of 3) | `cacheBusting` + `cacheSuffixSafe` | no | strategy page | covered |
 | `provider_context_trim` | `38-anthropic-context-trim` | 94% of input marked clearable | none (deterministic) | yes | strategy page | covered |
 | `output_shaping` | `40-output-shaping` | n/a (guardrail) | none (deterministic) | no | CHANGELOG ONLY — no reference page | covered |
 | `reasoning_budget` | `39-reasoning-downshift` | −67% thinking budget | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
@@ -26,13 +27,14 @@ The source of truth for the kind list is `REGISTRY` in the monorepo (`optimizer/
 | `tool_pruning` | `11-mcp-tools` | 70% | `cacheBusting` + `prefixCacheBusting` | no | strategy page | covered |
 | `tool_schema_compression` | `23-mcp-schema` | 12% | none (deterministic) | yes | strategy page | covered |
 | `param_tuning` | `14-runaway-max-tokens` | n/a (guardrail) | none (deterministic) | no | strategy page | covered |
-| `vision_ocr` | `10-screenshot-ocr` | n/a (vision) | `cacheBusting` | no | strategy page | covered |
-| `semantic_cache` | `9-repeat-request` | n/a (cache) | none (deterministic) | yes | strategy page | covered |
+| `semantic_cache` | `9-repeat-request` | n/a (cache) | none (deterministic) | no | strategy page | covered |
 | `cache_optimizer` | `25-claude-cache-prefix` | n/a (cache-prefix) | none (deterministic) | yes | strategy page | covered |
 | `context_quality` | `26-context-quality` | n/a (diagnostic) | none (deterministic) | no | ABSENT — id and human name both | covered |
 | `content_census` | `41-mixed-content-census` | n/a (diagnostic) | none (deterministic) | yes | PROTOCOL ONLY (as "census") — no reference page | covered |
 | `cache_lint` | `44-prefix-churn` | 3 churned prefix regions (read-only) | none (deterministic) | yes | CHANGELOG ONLY — no reference page | covered |
 | `output_externalize` | `37-durable-blob` | 99% | `cacheBusting` | no | strategy page | covered |
+| `columnar_fold` | — | — | none (deterministic) | no | strategy page | UNCOVERED |
+| `repeat_factor` | — | — | `cacheBusting` | yes | strategy page | UNCOVERED |
 
 ## The uncovered kinds, ranked by what covering them is worth
 
@@ -46,6 +48,18 @@ Default on? **n/a — top-level `holdout`**. Cache flags: none (deterministic). 
 **Why it is uncovered.** The control marker itself. It transforms nothing (`run` returns the request byte-identical) and its assignment is owned by the top-level `holdout` block, not a per-strategy toggle, so there is no knob for the harness to pin. Its saving is measured downstream from a treated cohort's real spend.
 
 **What covering it is worth.** NONE here, and recording it as a gap would be the wrong call. This suite is the wrong instrument; the guardrails quality-parity endpoint is the right one.
+
+### `client_prefix_compression` — uncovered
+
+Default on? **no**. Cache flags: none (deterministic). Docs: strategy page.
+
+### `columnar_fold` — uncovered
+
+Default on? **no**. Cache flags: none (deterministic). Docs: strategy page.
+
+### `repeat_factor` — uncovered
+
+Default on? **yes**. Cache flags: `cacheBusting`. Docs: strategy page.
 
 ## Docs drift (the third column)
 

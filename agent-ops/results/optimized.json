@@ -5,8 +5,8 @@
     "strategy": "relevance_filter",
     "knob": "keepChars=2000, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 22333,
     "afterChars": 3531,
     "beforeTok": 5583,
@@ -25,18 +25,18 @@
     "strategy": "window_budget",
     "knob": "maxTokens=8000",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 328438,
-    "afterChars": 16825,
+    "afterChars": 16817,
     "beforeTok": 82110,
-    "afterTok": 4206,
+    "afterTok": 4204,
     "savedPct": 95,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 29 message(s) to fit ~8000-token budget (est 99828->5397 tokens, -95%); 29 stashed for retrieval"
+      "cropped 29 message(s) to fit ~8000-token budget (est 100179->5748 tokens, -94%); 29 stashed for retrieval"
     ]
   },
   {
@@ -45,8 +45,8 @@
     "strategy": "command_digest",
     "knob": "maxFailures=10, contextLines=12, roles=user",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 6060,
     "afterChars": 1401,
     "beforeTok": 1515,
@@ -65,18 +65,18 @@
     "strategy": "window_budget",
     "knob": "maxTokens=700",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 3122,
-    "afterChars": 1920,
+    "afterChars": 1640,
     "beforeTok": 781,
-    "afterTok": 480,
-    "savedPct": 39,
+    "afterTok": 410,
+    "savedPct": 47,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 3 message(s) to fit ~700-token budget (est 1059->694 tokens, -34%); 3 stashed for retrieval"
+      "cropped 4 message(s) to fit ~700-token budget (est 1411->961 tokens, -32%); 4 stashed for retrieval (still over budget — nothing left to crop)"
     ]
   },
   {
@@ -85,18 +85,18 @@
     "strategy": "window_budget",
     "knob": "maxTokens=2500",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 14036,
-    "afterChars": 7515,
+    "afterChars": 4908,
     "beforeTok": 3509,
-    "afterTok": 1879,
-    "savedPct": 46,
+    "afterTok": 1227,
+    "savedPct": 65,
     "max_tokens_before": 1024,
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "cropped 5 message(s) to fit ~2500-token budget (est 4402->2427 tokens, -45%); 5 stashed for retrieval; 2 evicted by relevance over recency"
+      "cropped 7 message(s) to fit ~2500-token budget (est 5057->2292 tokens, -55%); 7 stashed for retrieval"
     ]
   },
   {
@@ -105,8 +105,8 @@
     "strategy": "context_dedupe",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 7170,
     "afterChars": 4491,
     "beforeTok": 1793,
@@ -125,10 +125,10 @@
     "strategy": "context_dedupe",
     "knob": "(defaults)",
     "tier": "accounting",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 19956,
-    "afterChars": 12573,
+    "afterChars": 12572,
     "beforeTok": 4989,
     "afterTok": 3143,
     "savedPct": 37,
@@ -136,7 +136,7 @@
     "max_tokens_after": 1024,
     "fired": true,
     "decisions": [
-      "delta-collapsed 1 near-duplicate tool output(s) (-7383 chars, 15 changed line(s) kept verbatim in-line); anchors kept verbatim"
+      "delta-collapsed 1 near-duplicate tool output(s) (-7384 chars, 15 changed line(s) kept verbatim in-line); anchors kept verbatim"
     ]
   },
   {
@@ -145,8 +145,8 @@
     "strategy": "thinking_trim",
     "knob": "(defaults)",
     "tier": "guardrail",
-    "optimizerVersion": "0.3.132",
-    "defaultsRevision": 10,
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
     "beforeChars": 18922,
     "afterChars": 16525,
     "beforeTok": 4731,

@@ -13,7 +13,7 @@
   {
     "id": "36-stale-observations",
     "strategy": "observation_mask",
-    "savedPct": 83,
+    "savedPct": 0,
     "keyFacts": 7,
     "deterministic": {
       "coverage": 100,

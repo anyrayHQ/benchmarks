@@ -24,7 +24,7 @@ instruction block once per item — all billed every call.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999` | 942 | 620 | **34%** |
+| Cost-cutting synonyms RAG (14 docs) — "lower the cloud bill" vs "infrastructure spend" | `relevance_filter` | `keepChars=1500, semanticRerank=true, semanticWeight=0.85, lexConfidentHits=999` | 942 | 622 | **34%** |
 
 A third vocabulary-mismatch scenario, this one with a deliberate **lexical trap**:
 a distractor doc titled "Cloud bill anomaly alerts" matches the question's wording

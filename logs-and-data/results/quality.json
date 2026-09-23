@@ -35,7 +35,7 @@
   {
     "id": "4-json-array",
     "strategy": "context_compression",
-    "savedPct": 97,
+    "savedPct": 0,
     "keyFacts": 6,
     "deterministic": {
       "coverage": 100,

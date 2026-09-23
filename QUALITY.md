@@ -21,7 +21,7 @@ the optimizer alone, so it needs no model and anyone can re-run it.
 | **Key-fact survival** (substring, strict — committed) | 33 | 33 | 0 | 0 |
 
 **All 33 preserve the answer in full.** Each workload runs against the deployed
-optimizer (**v0.3.128**, defaults revision 10) with its strategy matched to the
+optimizer (**v0.3.201**, defaults revision 17) with its strategy matched to the
 content and settings tuned for strong savings while keeping every answer-bearing
 fact. Code reads (`5-code-search`, `6-git-diff`) use the structure-keeping
 strategies that suit them (see [Matching strategy to content](#matching-strategy-to-content)).
@@ -42,12 +42,12 @@ none.
 | `1-access-log` | `relevance_filter` | 96% | 100% ✅ |
 | `2-sre-incident` | `relevance_filter` | 84% | 100% ✅ |
 | `33-synonym-gap-logs` | `relevance_filter` | 61% | 100% ✅ |
-| `4-json-array` | `context_compression` | 97% | 100% ✅ |
+| `4-json-array` | `context_compression` | 0% | 100% ✅ |
 | `29-orders-json` | `context_compression` | 42% | 100% ✅ |
 | `30-metrics-json` | `context_compression` | 42% | 100% ✅ |
 | `5-code-search` | `relevance_filter` | 56% | 100% ✅ |
-| `6-git-diff` | `context_compression` | 65% | 100% ✅ |
-| `7-codebase-explore` | `code_graph` | 18% | 100% ✅ |
+| `6-git-diff` | `context_compression` | 0% | 100% ✅ |
+| `7-codebase-explore` | `code_graph` | 0% | 100% ✅ |
 | `15-multifile-graph` | `code_graph` | 32% | 100% ✅ |
 | `17-python-multifile` | `code_graph` | 33% | 100% ✅ |
 | `27-read-service-ts` | `code_graph` | 66% | 100% ✅ |
@@ -56,18 +56,18 @@ none.
 | `12-rag-overfetch` | `relevance_filter` | 68% | 100% ✅ |
 | `32-vocab-mismatch-rag` | `relevance_filter` | 75% | 100% ✅ |
 | `13-prompt-boilerplate` | `prompt_compression` | 85% | 100% ✅ |
-| `23-mcp-schema` | `tool_schema_compression` | 7% | 100% ✅ |
+| `23-mcp-schema` | `tool_schema_compression` | 12% | 100% ✅ |
 | `42-semantic-rerank-rag` | `relevance_filter` | 34% | 100% ✅ |
 | `3-github-triage` | `relevance_filter` | 84% | 100% ✅ |
 | `8-long-session` | `window_budget` | 95% | 100% ✅ |
 | `16-test-run` | `command_digest` | 77% | 100% ✅ |
-| `24-agent-toolcalls` | `window_budget` | 39% | 100% ✅ |
-| `31-long-toolsession` | `window_budget` | 46% | 100% ✅ |
+| `24-agent-toolcalls` | `window_budget` | 47% | 100% ✅ |
+| `31-long-toolsession` | `window_budget` | 65% | 100% ✅ |
 | `34-repeat-reads` | `context_dedupe` | 37% | 100% ✅ |
 | `35-flaky-test-rerun` | `context_dedupe` | 37% | 100% ✅ |
 | `43-thinking-replay` | `thinking_trim` | *guardrail* | 100% ✅ |
 | `18-session-recall` | `relevance_filter` | 85% | 100% ✅ |
-| `36-stale-observations` | `observation_mask` | 83% | 100% ✅ |
+| `36-stale-observations` | `observation_mask` | 0% | 100% ✅ |
 | `37-durable-blob` | `output_externalize` | 99% | 100% ✅ |
 | `38-anthropic-context-trim` | `provider_context_trim` | *guardrail* | 100% ✅ |
 | `39-reasoning-downshift` | `reasoning_budget` | *guardrail* | 100% ✅ |

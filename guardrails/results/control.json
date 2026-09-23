@@ -7,13 +7,6 @@
     "max_tokens": 1024
   },
   {
-    "id": "10-screenshot-ocr",
-    "title": "Pasted screenshot — \"what is this error and how do I fix it?\"",
-    "chars": 54327,
-    "tokens": 13582,
-    "max_tokens": 1024
-  },
-  {
     "id": "14-runaway-max-tokens",
     "title": "Runaway max_tokens — 100k output ceiling on a one-line task",
     "chars": 153,

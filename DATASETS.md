@@ -15,7 +15,7 @@ cited as evidence.** They answer different questions:
 
 Every number in [RESULTS.md](RESULTS.md), [SUMMARY.md](SUMMARY.md) and the README
 headline comes from **surface 1** — the synthetic suite in this repo. Nothing on
-this page changes those figures. This page exists because "83% on our own
+this page changes those figures. This page exists because "59% on our own
 fixtures" is a weaker claim than it looks until you can also see what happens on
 data we did not write.
 
@@ -87,7 +87,10 @@ Neither is "fixed" by making it heavier. A control that reacts is not a control.
 
 One clean run, optimizer **0.3.132** (monorepo `0c6d013e`) — the same build PR
 #22 measured surface 1 on. Full default pipeline, no per-corpus tuning, no knob
-pinned to flatter a strategy.
+pinned to flatter a strategy. Not re-run for the 0.3.201 refresh, so the 59%
+above and the 23.1% here now come from different builds: read the contrast as
+matched-vs-mixed traffic, which is what it is for, and not as two numbers from
+one measurement.
 
 | | Turns | Instances | Median input | p90 | Max | Median saved | Aggregate saved |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -96,7 +99,7 @@ pinned to flatter a strategy.
 These numbers answer a different question than the committed suite's. That suite
 pins one hero strategy per workload on a payload built to exhibit that workload's
 waste pattern; the lab runs the whole default pipeline over whatever the
-trajectory happened to contain, including turns with nothing to save. **83% is
+trajectory happened to contain, including turns with nothing to save. **59% is
 what a matched workload reaches; 23.1% is what an untuned pipeline returns across
 mixed traffic.**
 
