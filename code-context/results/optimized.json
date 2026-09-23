@@ -20,42 +20,6 @@
     ]
   },
   {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "strategy": "context_compression",
-    "knob": "roles=user",
-    "tier": "accounting",
-    "optimizerVersion": "0.3.201",
-    "defaultsRevision": 17,
-    "beforeChars": 22676,
-    "afterChars": 22676,
-    "beforeTok": 5669,
-    "afterTok": 5669,
-    "savedPct": 0,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": false,
-    "decisions": []
-  },
-  {
-    "id": "7-codebase-explore",
-    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
-    "strategy": "code_graph",
-    "knob": "minChars=200, minBodyLines=2, roles=user",
-    "tier": "accounting",
-    "optimizerVersion": "0.3.201",
-    "defaultsRevision": 17,
-    "beforeChars": 18714,
-    "afterChars": 18714,
-    "beforeTok": 4679,
-    "afterTok": 4679,
-    "savedPct": 0,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": false,
-    "decisions": []
-  },
-  {
     "id": "15-multifile-graph",
     "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
     "strategy": "code_graph",
@@ -133,6 +97,46 @@
     "fired": true,
     "decisions": [
       "graph-outlined 1 file(s): kept 2 working-set symbol(s) (2 from intent, 0 central), elided 113 body line(s) 8780->2512 chars (-71%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "strategy": "context_compression",
+    "knob": "roles=user, maxDiffLines=40",
+    "tier": "accounting",
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
+    "beforeChars": 22676,
+    "afterChars": 3592,
+    "beforeTok": 5669,
+    "afterTok": 898,
+    "savedPct": 84,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 gitdiff) 22676->3592 chars (-84%); 1 stashed for retrieval"
+    ]
+  },
+  {
+    "id": "7-codebase-explore",
+    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
+    "strategy": "code_graph",
+    "knob": "minChars=200, minBodyLines=2, roles=user",
+    "tier": "accounting",
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
+    "beforeChars": 18747,
+    "afterChars": 13680,
+    "beforeTok": 4687,
+    "afterTok": 3420,
+    "savedPct": 27,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "graph-outlined 1 file(s): kept 5 working-set symbol(s) (1 from intent, 2 central), elided 158 body line(s) 18567->13500 chars (-27%); 1 stashed for retrieval"
     ]
   }
 ]

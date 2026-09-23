@@ -11,28 +11,6 @@
     }
   },
   {
-    "id": "6-git-diff",
-    "strategy": "context_compression",
-    "savedPct": 0,
-    "keyFacts": 4,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    }
-  },
-  {
-    "id": "7-codebase-explore",
-    "strategy": "code_graph",
-    "savedPct": 0,
-    "keyFacts": 5,
-    "deterministic": {
-      "coverage": 100,
-      "verdict": "PASS",
-      "missing": []
-    }
-  },
-  {
     "id": "15-multifile-graph",
     "strategy": "code_graph",
     "savedPct": 32,
@@ -70,6 +48,28 @@
     "strategy": "code_graph",
     "savedPct": 70,
     "keyFacts": 3,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    }
+  },
+  {
+    "id": "6-git-diff",
+    "strategy": "context_compression",
+    "savedPct": 84,
+    "keyFacts": 4,
+    "deterministic": {
+      "coverage": 100,
+      "verdict": "PASS",
+      "missing": []
+    }
+  },
+  {
+    "id": "7-codebase-explore",
+    "strategy": "code_graph",
+    "savedPct": 27,
+    "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",

@@ -94,7 +94,12 @@ benchmarks:
       - id: "4-json-array"
         title: 'JSON array (500 items) — "which orders failed and why?"'
         strategy: "context_compression"
-        params: { roles: ["user"] }
+        # The dump rides in a tool result, so the JSON crusher parses it as JSON.
+        # Pasted into the user turn behind a sentence of prose it classified as
+        # `text` instead, and only a raw character cap could touch it.
+        # maxArrayItems caps the array structurally: all eight failed orders are
+        # in the head, the rest goes behind a retrieve handle.
+        params: { maxArrayItems: 50 }
       - id: "29-orders-json"
         title: 'Orders dump (tool result) — "which orders failed and why?"'
         strategy: "context_compression"
@@ -122,7 +127,10 @@ benchmarks:
         # relevance_filter ranked the loosened-auth hunk below larger hunks (a FAIL);
         # context_compression keeps every hunk structurally, so the auth change survives.
         strategy: "context_compression"
-        params: { roles: ["user"] }
+        # maxDiffLines, not maxChars: the diff compressor is shape-aware, and
+        # per-hunk line caps keep every file header (so the loosened auth check
+        # stays findable) where a raw byte cap just truncates the tail.
+        params: { roles: ["user"], maxDiffLines: 40 }
       - id: "7-codebase-explore"
         title: 'Codebase exploration — "explain the architecture & where retries live"'
         # code_skeleton is retired in v0.3.24 (mutually exclusive with code_graph, rejected);
@@ -281,11 +289,20 @@ benchmarks:
       - id: "36-stale-observations"
         title: 'Stale trajectory — mask old bulky observations, keep errors and fresh turns'
         strategy: "observation_mask"
-        # Bulky helm/describe/pods dumps sit past the keepRecentTurns=3 cutoff and mask to
-        # retrieval markers; the error log rides an Anthropic tool_result flagged
-        # is_error: true — the only hard-keep observation_mask honors — so the root-cause
-        # facts stay inline while the three stale dumps (~22.7 KB) externalize.
+        # Bulky describe/get dumps from a long rollout investigation mask to retrieval
+        # markers; the error log rides an Anthropic tool_result flagged is_error: true
+        # — the only hard-keep observation_mask honors — so the root-cause facts stay
+        # inline while the stale dumps externalize.
+        #
+        # modelContextTokens is REQUIRED here, and is not a tuning knob: with no window
+        # declared the optimizer can never compute context pressure, `maskAdmission`
+        # falls to its priced-mint lane, and that lane only mints inside a cached prefix
+        # the harness has no gateway to establish — so the strategy stands down and the
+        # row reads 0% whatever the payload. 200k is this model's real window, and the
+        # trajectory is sized to genuinely exceed it, which is the condition the mask
+        # exists for. See RESULTS.md, "The rows that used to read 0%".
         endpoint: "/v1/messages"
+        metadata: { modelContextTokens: 200000 }
         params: {}
       - id: "37-durable-blob"
         title: 'Durable externalization — a 100 KB manifest becomes a retrieval handle'
