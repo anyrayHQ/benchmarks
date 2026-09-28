@@ -158,7 +158,7 @@ const secs = (ms) => (ms == null ? '—' : (ms / 1000).toFixed(0) + ' s');
 const x2 = (n) => (n == null ? '—' : n.toFixed(2) + '×');
 const NS = 'http://www.w3.org/2000/svg';
 const armName = (arm) => (arm === 'anyray' ? 'Through Anyray' : 'Direct');
-const label = (r) => r.scenario.name + (r.compare === 'control' ? ' · control' : ' · Anyray');
+const label = (r) => r.scenario.name + (r.compare === 'control' ? ' · control' : ' · Anyray') + (r.label ? ' · ' + r.label : '');
 const verdictChip = (v) => '<span class="chip ' + ({ PASS: 'good', FAIL: 'bad', INCONCLUSIVE: 'warn' }[v] || '') + '">' + esc(v) + '</span>';
 const okRounds = (r) => r.rounds.filter((x) => !x.error);
 

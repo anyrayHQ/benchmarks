@@ -15,7 +15,8 @@
 // Usage:
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 1
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 6 --compare control
-// Output: results/agent/<scenario>--<compare>.json (resumes; adds rounds), then
+//   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --label observation_mask
+// Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
@@ -29,11 +30,12 @@ import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs'
 import { rmSync } from 'node:fs';
 
 function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray' };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
+    else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -93,7 +95,7 @@ async function main() {
 
   const out = join(cfg.root, 'results', 'agent');
   mkdirSync(out, { recursive: true });
-  const file = join(out, `${args.scenario}--${args.compare}.json`);
+  const file = join(out, `${args.scenario}--${args.compare}${args.label ? `--${args.label}` : ''}.json`);
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
 
   // Static context: the repo, both arms' setup, what Anyray has turned on.
@@ -101,6 +103,7 @@ async function main() {
   record.scenario = { name: args.scenario, ...scenario, repoInfo: describeRepo(probe, scenario) };
   rmSync(probe, { recursive: true, force: true });
   record.compare = args.compare;
+  record.label = args.label;
   record.gateway = run.gatewayUrl;
   record.arms = arms;
   record.setup = {

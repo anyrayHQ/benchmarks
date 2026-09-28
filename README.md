@@ -63,7 +63,7 @@ npm run agent:report     # → results/agent/report.html
 ```
 
 Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so re-running adds
-rounds. `results/` is local only, because transcripts hold tool output. Share the
+rounds. `--label <name>` keeps a run in its own file (e.g. a single-strategy run). `results/` is local only, because transcripts hold tool output. Share the
 report instead.
 
 ### Turning strategies on for benchmark traffic only
@@ -71,6 +71,8 @@ report instead.
 ```bash
 npm run bench-rule -- show           # what the gateway has on and off
 npm run bench-rule -- enable [kind…] # default: every strategy that is off
+npm run bench-rule -- only <kind…>   # just these on, every other strategy off
+                                     # either takes --params '{"<kind>":{…}}'
 npm run bench-rule -- remove
 ```
 
