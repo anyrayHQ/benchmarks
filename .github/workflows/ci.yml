@@ -24,20 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # Docs ↔ data consistency + lib unit tests. Reads the committed results,
-      # so it needs no running optimizer — green here means the published numbers
-      # match the data anyone can re-run with `./run.sh --all`.
+      # Lib unit tests + README/RESULTS consistency. Reads only committed files, so it
+      # needs no gateway or provider credentials.
       - name: Tests
         run: npm test
-
-      # The README figures are generated, not hand-typed. Regenerate and fail if
-      # the committed SVGs drifted from the committed results — catches both edited
-      # and newly-untracked charts.
-      - name: Charts are regenerated from results (no hand-edited numbers)
-        run: |
-          node tools/make-charts.mjs
-          if [ -n "$(git status --porcelain -- assets/)" ]; then
-            echo "::error::assets/ drifted from results/ — run 'npm run charts' and commit the result"
-            git status --porcelain -- assets/
-            exit 1
-          fi

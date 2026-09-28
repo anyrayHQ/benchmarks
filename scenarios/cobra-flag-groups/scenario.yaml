@@ -1,0 +1,14 @@
+title: "Bug fix in spf13/cobra — mutually exclusive flags no longer rejected"
+repo:
+  git: https://github.com/spf13/cobra.git
+  ref: adbc8813901bba65827259daa8e22ff94ec1f30e
+# Applied to the checkout before the session: breaks the exclusive-flag-group check.
+patch: bug.patch
+task: >-
+  A user reports that since the last change, cobra no longer rejects commands where two
+  flags marked with MarkFlagsMutuallyExclusive are both set: `app --json --yaml` runs
+  instead of failing. Find the cause, fix it, and make sure `go test ./...` passes.
+# Graded by running this in the session's workdir afterwards: exit 0 = solved.
+check: "go test ./..."
+maxTurns: 20
+timeoutMin: 6

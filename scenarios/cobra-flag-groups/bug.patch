@@ -1,0 +1,13 @@
+diff --git a/flag_groups.go b/flag_groups.go
+index 560612f..e8f3376 100644
+--- a/flag_groups.go
++++ b/flag_groups.go
+@@ -195,7 +195,7 @@ func validateExclusiveFlagGroups(data map[string]map[string]bool) error {
+ 				set = append(set, flagname)
+ 			}
+ 		}
+-		if len(set) == 0 || len(set) == 1 {
++		if len(set) <= 2 {
+ 			continue
+ 		}
+ 

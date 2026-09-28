@@ -1,0 +1,17 @@
+title: "Codebase question in spf13/cobra — how a command line is dispatched"
+repo:
+  git: https://github.com/spf13/cobra.git
+  ref: adbc8813901bba65827259daa8e22ff94ec1f30e
+task: >-
+  I'm new to this codebase. Explain how cobra goes from os.Args to running a
+  command's Run function: which functions are involved, in which files, and how
+  flags are separated from the subcommand path. Cite file names and function names.
+# Graded by the answer containing each of these.
+keyFacts:
+  - "ExecuteC"
+  - "Find"
+  - "stripFlags"
+  - "ParseFlags"
+  - "command.go"
+maxTurns: 20
+timeoutMin: 6

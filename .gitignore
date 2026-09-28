@@ -5,32 +5,15 @@ npm-debug.log*
 # Environment
 .env
 
-# Live-bill outputs need provider keys and are not reproducible in CI, so they
-# are not committed. The accounting results (control.json / optimized.json) ARE
-# committed — they are the real, reproducible scores.
-**/results/live-bill.json
-
-# Local optimizer scratch
-optimizer.config.json
-optimizer-settings-audit.log
-
-# Optimized request bodies stashed by run_benchmark for the quality runner to
-# reuse — derived (synthetic) content, so not committed.
-**/results/optimized-requests.local.json
+# Run outputs are local: they depend on the gateway, model and day they ran against,
+# and agent transcripts hold tool output. Share results through the report instead.
+/results/
+**/results/
+RESULTS.md
 
 # macOS
 .DS_Store
 
-# Intermediate judge dumps (regenerate with --dump)
-**/results/judge-inputs.json
-
-# Live answer-quality validation — INTERNAL ONLY. run_live.mjs and its generators are
-# committed (the tool), but its per-workload/per-strategy outputs are private working
-# data (failures, tune/rework verdicts, knob sweeps) — not the public showcase.
-# Regenerate locally; the public SUMMARY.md is the committed overview.
-**/results/live.json
-**/results/pipeline.json
-**/results/sweep-*.json
-/results/
-VERDICTS.md
-PIPELINE.md
+# Per-target env files (hold keys)
+.env.*
+!.env.example
