@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 import { join } from 'node:path';
@@ -246,6 +246,23 @@ test('armConfig: the private HOME never touches the real ~/.anyray or ~/.claude'
   } finally {
     process.env.HOME = oldHome;
     rmSync(fakeHome, { recursive: true, force: true });
+  }
+}));
+
+test('armConfig: refuses a HOME outside the session directory before writing', () => withCfg((cfgDir) => {
+  const outside = mkdtempSync(join(tmpdir(), 'any712-outside-'));
+  try {
+    symlinkSync(outside, join(cfgDir, 'home'), 'dir');
+    for (const readTrim of [true, false]) {
+      const enrolledOn = readTrim ? GW : 'https://elsewhere.example';
+      assert.throws(
+        () => armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, readTrim, cfgDir, deps: deps(enrolledOn) }),
+        /session directory/,
+      );
+      assert.deepEqual(readdirSync(outside), []);
+    }
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
   }
 }));
 
