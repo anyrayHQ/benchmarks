@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { countCacheBreaks } from '../lib/cacheBreaks.mjs';
 import { armConfig, checkCitations, describeSetup } from '../lib/agentRun.mjs';
-import { parseArgs, armSetups, armReadTrim } from '../run_agent.mjs';
+import { parseArgs, armSetups, armReadTrim, slotOptions } from '../run_agent.mjs';
 
 // ---- cache-break counter ---------------------------------------------------
 
@@ -293,4 +293,49 @@ test('checkCitations: resolves Python path:line citations (what pyrepo-docs is g
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --arm-env (#32) combined with --read-trim (#33): the env lands in the session settings,
+// never in the private HOME, and never displaces the route or the private-HOME hooks.
+test('armConfig: --arm-env with readTrim adds the env to the session and keeps gateway env, private-HOME hooks and MCP', () => withCfg((dir) => {
+  const env = { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' };
+  const c = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, readTrim: true, cfgDir: dir, env, deps: deps(GW) });
+  assert.equal(c.settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+  assert.equal(c.settings.env.ANTHROPIC_BASE_URL, GW);
+  assert.match(c.settings.env.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-api-key: ark_test/);
+  assert.ok(c.settings.hooks.PostToolUse[0].hooks[0].command.startsWith(`HOME='${c.trimHome.home}'`));
+  assert.equal(c.mcp.mcpServers.anyray.env.HOME, c.trimHome.home);
+  const homeSettings = JSON.parse(readFileSync(join(c.trimHome.home, '.claude', 'settings.json'), 'utf8'));
+  assert.equal('CLAUDE_CODE_MAX_CONTEXT_TOKENS' in homeSettings.env, false);
+  assert.equal(homeSettings.env.ANTHROPIC_BASE_URL, GW);
+}));
+
+test('armConfig: --arm-env reaches the direct arm and the plain anyray arm too', () => withCfg((dir) => {
+  const env = { X: '1' };
+  assert.deepEqual(armConfig({ arm: 'direct', gatewayUrl: GW, runTag: TAG, cfgDir: dir, env, deps: deps(GW) }).settings.env, { X: '1' });
+  const a = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, cfgDir: dir, env, deps: deps(GW) });
+  assert.equal(a.settings.env.X, '1');
+  assert.equal(a.settings.env.ANTHROPIC_BASE_URL, GW);
+}));
+
+test('--arm-env refuses keys that would reroute an arm or escape its private HOME', () => withCfg((dir) => {
+  for (const key of ['HOME', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS', 'ANYRAY_REFRESH_DISABLE']) {
+    assert.throws(() => armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, readTrim: true, cfgDir: dir, env: { [key]: 'x' }, deps: deps(GW) }), /--arm-env cannot set/);
+    assert.throws(() => parseArgs(['--scenario', 's', '--arm-env', `b:${key}=x`]), /--arm-env cannot set/);
+  }
+}));
+
+test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slot', () => {
+  const args = parseArgs(['--scenario', 's', '--read-trim', '--arm-env', 'b:K=v']);
+  const arms = { a: 'direct', b: 'anyray' };
+  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {} });
+  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' } });
+  const control = parseArgs(['--scenario', 's', '--compare', 'control', '--arm-env', 'b:K=v']);
+  const both = { a: 'direct', b: 'direct' };
+  assert.deepEqual(slotOptions(control, both, 'a').env, {});
+  assert.deepEqual(slotOptions(control, both, 'b').env, { K: 'v' });
+  const s = armSetups(args, arms, { model: 'm', gatewayUrl: GW }, { maxTurns: 3 }, { enrolled: true });
+  assert.equal('env' in s.a, false);
+  assert.deepEqual(s.b.env, { K: 'v' });
+  assert.match(s.b.readTrim, /^on for this session only/);
 });
