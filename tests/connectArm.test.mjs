@@ -271,7 +271,7 @@ test('--arm-env on the connect-configured arm overrides connect\'s env in --sett
 
 test('the recorded setup keeps --arm-env beside what connect configured, never the key', () => {
   const a = connectedArm({ env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' } });
-  const args = parseArgs(['--scenario', 's', '--arm-env', 'b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000']);
+  const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--arm-env', 'b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000']);
   const planned = armSetups(args, { a: 'direct', b: 'anyray' }, { model: 'm', gatewayUrl: GATEWAY }, { maxTurns: 3 }, { enrolled: false });
   const s = withSessionSetups(planned, { a: { setup: null }, b: { setup: a.setup } });
   assert.deepEqual(s.b.env, { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' });
