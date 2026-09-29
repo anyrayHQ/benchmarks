@@ -43,6 +43,7 @@ import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs'
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds.mjs';
+import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 
 export function parseArgs(argv) {
   const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null };
@@ -92,9 +93,9 @@ export const slotOptions = (args, arms, slot) => ({
 });
 
 /** Both arms' setup, as recorded in the result file. */
-export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
+export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) {
   const one = (slot) => describeSetup({
-    ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled,
+    ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled, tenant,
   });
   return { a: one('a'), b: one('b') };
 }
@@ -180,7 +181,10 @@ async function main() {
   record.readTrim = args.readTrim;
   record.kinds = args.kinds; // what the Anyray arm requested (x-anyray-optimization-kinds)
   record.arms = arms;
-  record.setup = armSetups(args, arms, run, scenario);
+  // The Anyray arm's key decides its tenant (warns here, once, on the shared fallback).
+  const tenant = args.compare === 'anyray' ? benchTenantSetup(resolveBenchKey()) : null;
+  record.tenant = tenant;
+  record.setup = armSetups(args, arms, run, scenario, { tenant });
   if (args.compare === 'anyray') {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
