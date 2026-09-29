@@ -317,6 +317,28 @@ and `--judge` for the optional semantic pass, which needs a model.
   `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
   guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
 
+## Want these numbers on your own traffic?
+
+This repo is credible because its results are **committed**: the fixtures are in
+the tree, `./run.sh --all` regenerates them, and anyone gets the same figures.
+That is also its limit — they are our workloads, not yours.
+
+[`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator) answers the other
+question. You point it at your own gateway, your own coding agent captures your
+own prompts, and it sends each one twice — once with `x-anyray-optimize: off`,
+once the ordinary way — reporting the input-token delta from your provider's own
+`usage` field and whether the facts you declared as required still survive. Its
+results are yours alone and are never committed anywhere.
+
+| | this repo | simulator |
+| --- | --- | --- |
+| Points at | the optimizer on `:8088` | your gateway |
+| Credential | admin token | a client key |
+| Payloads | synthetic, committed | yours, never committed |
+| Token counts | tokenizer estimate | provider's `usage` field |
+| Calls a provider | no | yes, on your bill |
+| Results | committed — anyone reproduces them | private, unique to you |
+
 ---
 
 Built on the Anyray optimizer. Learn more at [anyray.ai](https://anyray.ai) ·
