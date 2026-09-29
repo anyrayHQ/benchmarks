@@ -19,6 +19,9 @@
 //   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --strategy thinking_trim
 //     (tags the Anyray arm's x-anyray-metadata with experiment=<kind>; needs
 //      `bench-rule per-experiment <kind>`; each round fails if another strategy acted)
+//   node run_agent.mjs --scenario pyrepo-docs --rounds 3 --label read-trim --read-trim
+//     (Anyray arm only: anyray-connect's Read trim on for that session, without
+//      touching the shared connect policy; see readTrimHome in lib/agentRun.mjs)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -29,31 +32,48 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { rule0 } from './lib/stats.mjs';
+import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 
-function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null };
+export function parseArgs(argv) {
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
+    else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (!['anyray', 'control'].includes(a.compare)) throw new Error('--compare anyray|control');
   if (a.strategy && a.compare !== 'anyray') throw new Error('--strategy needs --compare anyray');
+  if (a.readTrim && a.compare !== 'anyray') throw new Error('--read-trim needs --compare anyray');
   a.label ??= a.strategy;
   return a;
 }
 
+/** `--read-trim` applies to the Anyray arm only. */
+export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
+
+/** Both arms' setup, as recorded in the result file. */
+export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
+  const one = (arm) => describeSetup({
+    arm, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns,
+    readTrim: armReadTrim(args, arm), enrolled,
+  });
+  return { a: one(arms.a), b: one(arms.b) };
+}
+
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 function summarize(session, pricing) {
-  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0 };
+  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
   let mainIn = 0;
   let subIn = 0;
+  // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
+  t.cacheBreaks = countCacheBreaks(session.requests);
   for (const r of session.requests) {
     const u = { ...(r.usage ?? {}), output_tokens: 0 };
     r.inputTotal = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
@@ -64,7 +84,14 @@ function summarize(session, pricing) {
     for (const b of r.blocks) {
       if (b.type !== 'tool_use') continue;
       t.toolCalls++;
-      if (b.result?.trimmedByAnyrayHook) t.hookTrimmed++;
+      if (b.result?.trimmedByAnyrayHook) {
+        t.hookTrimmed++;
+        t.hookTrimmedByTool = { ...t.hookTrimmedByTool, [b.name]: (t.hookTrimmedByTool?.[b.name] ?? 0) + 1 };
+      }
+      if (b.name === 'mcp__anyray__anyray_retrieve') {
+        t.retrieveCalls++;
+        if (b.result && !b.result.isError) t.retrieveOk++;
+      }
     }
   }
   const mu = Object.values(session.result?.modelUsage ?? {});
@@ -111,11 +138,9 @@ async function main() {
   record.compare = args.compare;
   record.label = args.label;
   record.gateway = run.gatewayUrl;
+  record.readTrim = args.readTrim;
   record.arms = arms;
-  record.setup = {
-    a: describeSetup({ arm: arms.a, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns }),
-    b: describeSetup({ arm: arms.b, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns }),
-  };
+  record.setup = armSetups(args, arms, run, scenario);
   if (args.compare === 'anyray') {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
@@ -125,7 +150,7 @@ async function main() {
     const runTag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${Date.now()}`, tool: 'anyray-bench', intent: args.scenario };
     if (args.strategy) runTag.experiment = args.strategy;
     console.log(`${args.scenario} [${args.compare}] round ${round}: ${arms.a} ‖ ${arms.b} (concurrent)…`);
-    const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag });
+    const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag, readTrim: armReadTrim(args, arm) });
     const [sa, sb] = await Promise.allSettled([run1(arms.a), run1(arms.b)]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
@@ -160,8 +185,8 @@ async function main() {
     const ta = sessions.a.totals;
     const tb = sessions.b.totals;
     console.log(
-      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
-        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
+      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
+        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
         `  ratio B/A ${r.ratio?.toFixed(3)}`
     );
     record.stats = rule0(record.rounds.filter((x) => !x.error));
@@ -176,7 +201,7 @@ async function main() {
   );
 }
 
-main().catch((e) => {
+if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
   console.error(e.message ?? e);
   process.exit(1);
 });
