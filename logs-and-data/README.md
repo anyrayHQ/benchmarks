@@ -16,7 +16,7 @@ entirely off-topic to the question being asked.
 | Access log (500 requests) — "find the failing requests" | `relevance_filter` | `keepChars=3000, roles=user` | 26,153 | 1,065 | **96%** |
 | SRE incident — "why did checkout p99 spike at 10:05?" | `relevance_filter` | `keepChars=12000, roles=user` | 26,385 | 4,239 | **84%** |
 | Synonym-gap logs — "find the resource-exhaustion event" (OOM/cgroup) | `relevance_filter` | `keepChars=3000, roles=user, semanticRerank=true, semanticWeight=0.7` | 2,963 | 1,158 | **61%** |
-| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `roles=user` | 74,460 | 74,460 | **0%** |
+| JSON array (500 items) — "which orders failed and why?" | `context_compression` | `maxArrayItems=50` | 74,535 | 4,816 | **94%** |
 | Orders dump (tool result) — "which orders failed and why?" | `context_compression` | `(defaults)` | 17,971 | 10,467 | **42%** |
 | Metrics series (tool result) — "find the latency spike" | `context_compression` | `(defaults)` | 12,116 | 7,072 | **42%** |
 

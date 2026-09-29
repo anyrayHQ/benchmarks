@@ -16,7 +16,7 @@ This repo measures how much that saves.
 
 | Data | What it is | Result |
 |---|---|---|
-| **Synthetic suite** — in this repo | 39 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **59%** on the 29 whole-request workloads, with **33/33** answers intact |
+| **Synthetic suite** — in this repo | 39 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **87%** on the 29 whole-request workloads, with **33/33** answers intact |
 | **Public corpora** — [DATASETS.md](DATASETS.md) | 8 datasets nobody assembled for Anyray: SWE-agent and OpenHands trajectories, WildChat, Toucan MCP catalogues, MT-Eval, xlam function calling, orca-agentinstruct. 1,056 turns through the full default pipeline, no per-corpus tuning. | **23.1%** aggregate, **16.3%** median |
 | **Production** — [profile](DATASETS.md#production-traffic-profile) | Anyray's own deployments, read content-free: token counts, prefix growth, which strategies fired. Prompts are encrypted at rest and the query does not select those columns. | Confirms the corpora match real prompt sizes and strategy mix. No published savings figure comes from it. |
 
@@ -32,16 +32,17 @@ through a live optimizer (accounting basis — see [Methodology](#methodology)):
 
 | Suite | Workloads | Before (tok) | After (tok) | **Saved** |
 |---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 160,048 | 98,461 | **38%** |
-| [`code-context/`](code-context/) | 7 | 23,491 | 16,461 | **30%** |
+| [`logs-and-data/`](logs-and-data/) | 6 | 160,123 | 28,817 | **82%** |
+| [`code-context/`](code-context/) | 7 | 23,499 | 10,431 | **56%** |
 | [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,631 | **68%** |
 | [`agent-ops/`](agent-ops/) | 7 | 100,280 | 11,340 | **89%** |
-| [`memory-recall/`](memory-recall/) | 3 | 37,239 | 7,959 | **79%** |
-| **Total** | **29** | **338,833** | **139,852** | **59%** |
+| [`memory-recall/`](memory-recall/) | 3 | 204,254 | 9,116 | **96%** |
+| **Total** | **29** | **505,931** | **65,335** | **87%** |
 | [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
 
-Three strategies carry most of this suite's input — `context_compression`,
-`window_budget`, and `relevance_filter`, together ~80% of the tokens measured here.
+Four strategies carry most of this suite's input — `observation_mask`,
+`context_compression`, `window_budget` and `relevance_filter`, together ~88% of the
+tokens measured here.
 That is a property of **these fixtures**, not a measurement of production traffic;
 treat the per-strategy rows as "what each strategy does to a representative payload",
 not as a weighted forecast of a given deployment's bill. Token counts use a
@@ -57,10 +58,10 @@ isolation, and it means the total above is *not* what a stock deployment produce
 
 | | Share of measured savings |
 |---|--:|
-| strategies **on** by default | **45%** |
-| strategies **off** by default (`window_budget` 40%, `output_externalize` 12%, `tool_pruning` 2%) | **55%** |
+| strategies **on** by default | **75%** |
+| strategies **off** by default (`window_budget` 18%, `output_externalize` 6%, `tool_pruning` 1%) | **25%** |
 
-On the default-on subset alone the suite reads 222,238 → 131,994 tok, **41%**. The
+On the default-on subset alone the suite reads 389,336 → 57,477 tok, **85%**. The
 opt-in strategies are off for reasons, not by oversight — `window_budget` crops whole
 messages against a client-supplied ceiling, so it stays operator-enabled — and each
 one is annotated in [`config.yaml`](config.yaml).

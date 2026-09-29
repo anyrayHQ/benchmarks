@@ -31,7 +31,7 @@ self-gated to a no-op.
 
 | Workload | Strategy | Knob | Before (tok) | After (tok) | Saved |
 |---|---|---|--:|--:|--:|
-| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | 6,722 | 6,722 | **0%** |
+| Stale trajectory — mask old bulky observations, keep errors and fresh turns | `observation_mask` | (defaults) | 173,737 | 7,879 | **95%** |
 | Durable externalization — a 100 KB manifest becomes a retrieval handle | `output_externalize` | needs the durable CCR tier | 24,581 | 341 | **99%** |
 
 ## How it works

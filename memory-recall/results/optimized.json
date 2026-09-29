@@ -20,24 +20,6 @@
     ]
   },
   {
-    "id": "36-stale-observations",
-    "title": "Stale trajectory — mask old bulky observations, keep errors and fresh turns",
-    "strategy": "observation_mask",
-    "knob": "(defaults)",
-    "tier": "accounting",
-    "optimizerVersion": "0.3.201",
-    "defaultsRevision": 17,
-    "beforeChars": 26888,
-    "afterChars": 26888,
-    "beforeTok": 6722,
-    "afterTok": 6722,
-    "savedPct": 0,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": false,
-    "decisions": []
-  },
-  {
     "id": "37-durable-blob",
     "title": "Durable externalization — a 100 KB manifest becomes a retrieval handle",
     "strategy": "output_externalize",
@@ -55,6 +37,26 @@
     "fired": true,
     "decisions": [
       "externalized 1 tool output(s) 97025->67 chars (-100%); retrievable on demand"
+    ]
+  },
+  {
+    "id": "36-stale-observations",
+    "title": "Stale trajectory — mask old bulky observations, keep errors and fresh turns",
+    "strategy": "observation_mask",
+    "knob": "(defaults)",
+    "tier": "accounting",
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
+    "beforeChars": 694946,
+    "afterChars": 31516,
+    "beforeTok": 173737,
+    "afterTok": 7879,
+    "savedPct": 95,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "masked 79 stale tool observation(s) (670837->7407 chars, -99%); 79 stashed for retrieval"
     ]
   }
 ]

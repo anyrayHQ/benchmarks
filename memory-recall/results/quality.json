@@ -11,10 +11,10 @@
     }
   },
   {
-    "id": "36-stale-observations",
-    "strategy": "observation_mask",
-    "savedPct": 0,
-    "keyFacts": 7,
+    "id": "37-durable-blob",
+    "strategy": "output_externalize",
+    "savedPct": 99,
+    "keyFacts": 5,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",
@@ -22,10 +22,10 @@
     }
   },
   {
-    "id": "37-durable-blob",
-    "strategy": "output_externalize",
-    "savedPct": 99,
-    "keyFacts": 5,
+    "id": "36-stale-observations",
+    "strategy": "observation_mask",
+    "savedPct": 95,
+    "keyFacts": 7,
     "deterministic": {
       "coverage": 100,
       "verdict": "PASS",

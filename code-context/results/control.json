@@ -7,20 +7,6 @@
     "max_tokens": 1024
   },
   {
-    "id": "6-git-diff",
-    "title": "Git diff — \"any risky change in this PR?\"",
-    "chars": 22676,
-    "tokens": 5669,
-    "max_tokens": 1024
-  },
-  {
-    "id": "7-codebase-explore",
-    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
-    "chars": 18714,
-    "tokens": 4679,
-    "max_tokens": 1024
-  },
-  {
     "id": "15-multifile-graph",
     "title": "Multi-file trace — \"how does Checkout.submitOrder capture payment?\"",
     "chars": 8511,
@@ -46,6 +32,20 @@
     "title": "Read a Python module (tool result) — keep the on-path bodies",
     "chars": 8966,
     "tokens": 2242,
+    "max_tokens": 1024
+  },
+  {
+    "id": "6-git-diff",
+    "title": "Git diff — \"any risky change in this PR?\"",
+    "chars": 22676,
+    "tokens": 5669,
+    "max_tokens": 1024
+  },
+  {
+    "id": "7-codebase-explore",
+    "title": "Codebase exploration — \"explain the architecture & where retries live\"",
+    "chars": 18747,
+    "tokens": 4687,
     "max_tokens": 1024
   }
 ]

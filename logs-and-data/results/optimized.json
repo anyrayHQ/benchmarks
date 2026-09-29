@@ -60,24 +60,6 @@
     ]
   },
   {
-    "id": "4-json-array",
-    "title": "JSON array (500 items) — \"which orders failed and why?\"",
-    "strategy": "context_compression",
-    "knob": "roles=user",
-    "tier": "accounting",
-    "optimizerVersion": "0.3.201",
-    "defaultsRevision": 17,
-    "beforeChars": 297840,
-    "afterChars": 297840,
-    "beforeTok": 74460,
-    "afterTok": 74460,
-    "savedPct": 0,
-    "max_tokens_before": 1024,
-    "max_tokens_after": 1024,
-    "fired": false,
-    "decisions": []
-  },
-  {
     "id": "29-orders-json",
     "title": "Orders dump (tool result) — \"which orders failed and why?\"",
     "strategy": "context_compression",
@@ -115,6 +97,26 @@
     "fired": true,
     "decisions": [
       "compressed 1 tool output(s) (1 json) 48244->28068 chars (-42%)"
+    ]
+  },
+  {
+    "id": "4-json-array",
+    "title": "JSON array (500 items) — \"which orders failed and why?\"",
+    "strategy": "context_compression",
+    "knob": "maxArrayItems=50",
+    "tier": "accounting",
+    "optimizerVersion": "0.3.201",
+    "defaultsRevision": 17,
+    "beforeChars": 298141,
+    "afterChars": 19263,
+    "beforeTok": 74535,
+    "afterTok": 4816,
+    "savedPct": 94,
+    "max_tokens_before": 1024,
+    "max_tokens_after": 1024,
+    "fired": true,
+    "decisions": [
+      "compressed 1 tool output(s) (1 json) 297586->18708 chars (-94%); 1 stashed for retrieval"
     ]
   }
 ]
