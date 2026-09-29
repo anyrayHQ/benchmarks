@@ -1,0 +1,24 @@
+title: "Long session in gin-gonic/gin — six user turns over one codebase"
+# A multi-turn session: each follow-up is sent when the previous answer is done, so
+# the history holds closed user loops, earlier thinking, and large tool output that
+# has gone stale by the later turns. That is the shape the history strategies
+# (thinking_trim, observation_mask, relevance_filter) are built for; a one-shot
+# task never gives them anything to act on.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+patch: bugs.patch
+hidePatch: true
+task: >-
+  CI is red on this branch. Run `go test -v ./...` and read its full output (don't
+  pipe it through tail, head or grep: the CI log is what we have), and tell me which
+  tests fail and why. Don't fix anything yet.
+followups:
+  - "Fix the causes in the library code (not the tests)."
+  - "Run `go test -v ./...` again and read its full output to confirm everything passes."
+  - "Read context.go in full, then explain how Context.Next and Abort control the handler chain."
+  - "Read tree.go in full, then explain how the router matches a path with parameters and wildcards."
+  - "Finally: list every file you changed and summarize each change in one line."
+check: "go test ./..."
+maxTurns: 30
+timeoutMin: 20

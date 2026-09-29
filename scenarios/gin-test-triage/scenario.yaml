@@ -1,0 +1,19 @@
+title: "Test triage in gin-gonic/gin — two regressions, verbose test output"
+# Built to create large, fresh tool output: `go test -v ./...` on this checkout prints
+# ~80 KB (~20k tokens) with 8 failing tests from two unrelated planted bugs. Trims of
+# fresh tool output (command_digest, context_dedupe, columnar_fold, observation_mask)
+# have something to act on before it is cached.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+patch: bugs.patch
+# Imported as a single commit, so the bugs can't be found with git diff/log.
+hidePatch: true
+task: >-
+  CI is red on this branch. Run `go test -v ./...` and read its full output (don't
+  pipe it through tail, head or grep: the CI log is what we have), work out why each
+  failing test fails, fix the causes in the library code (not the tests), and make sure
+  `go test ./...` passes.
+check: "go test ./..."
+maxTurns: 30
+timeoutMin: 8

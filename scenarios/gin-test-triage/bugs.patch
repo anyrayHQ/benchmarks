@@ -1,0 +1,26 @@
+diff --git a/context.go b/context.go
+index a6add8a..507a60b 100644
+--- a/context.go
++++ b/context.go
+@@ -562,7 +562,7 @@ func (c *Context) DefaultQuery(key, defaultValue string) string {
+ //	("", true) == c.GetQuery("lastname")
+ func (c *Context) GetQuery(key string) (string, bool) {
+ 	if values, ok := c.GetQueryArray(key); ok {
+-		return values[0], ok
++		return values[len(values)-1], ok
+ 	}
+ 	return "", false
+ }
+diff --git a/utils.go b/utils.go
+index e8b86fc..2b08db6 100644
+--- a/utils.go
++++ b/utils.go
+@@ -139,7 +139,7 @@ func joinPaths(absolutePath, relativePath string) string {
+ 	}
+ 
+ 	finalPath := path.Join(absolutePath, relativePath)
+-	if lastChar(relativePath) == '/' && lastChar(finalPath) != '/' {
++	if false && lastChar(relativePath) == '/' && lastChar(finalPath) != '/' {
+ 		return finalPath + "/"
+ 	}
+ 	return finalPath

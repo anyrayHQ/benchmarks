@@ -16,6 +16,9 @@
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 1
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 6 --compare control
 //   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --label observation_mask
+//   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --strategy thinking_trim
+//     (tags the Anyray arm's x-anyray-metadata with experiment=<kind>; needs
+//      `bench-rule per-experiment <kind>`; each round fails if another strategy acted)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -30,16 +33,19 @@ import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs'
 import { rmSync } from 'node:fs';
 
 function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
+    else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (!['anyray', 'control'].includes(a.compare)) throw new Error('--compare anyray|control');
+  if (a.strategy && a.compare !== 'anyray') throw new Error('--strategy needs --compare anyray');
+  a.label ??= a.strategy;
   return a;
 }
 
@@ -117,6 +123,7 @@ async function main() {
   for (let k = 0; k < args.rounds; k++) {
     const round = record.rounds.length + 1;
     const runTag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${Date.now()}`, tool: 'anyray-bench', intent: args.scenario };
+    if (args.strategy) runTag.experiment = args.strategy;
     console.log(`${args.scenario} [${args.compare}] round ${round}: ${arms.a} ‖ ${arms.b} (concurrent)…`);
     const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag });
     const [sa, sb] = await Promise.allSettled([run1(arms.a), run1(arms.b)]);
@@ -142,6 +149,12 @@ async function main() {
       // the gateway recorded doing on each request.
       r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
       r.traces = await sessionTraces(run.gatewayUrl, runTag.sessionId, { waitMs: 30000 });
+      if (args.strategy) {
+        // Isolation check: nothing but the named strategy may have acted on this session.
+        const others = new Set((r.traces?.traces ?? []).flatMap((t) => (t.decisions ?? []).map((d) => d.kind)).filter((k) => k !== args.strategy && k !== 'mint_economics')); // mint_economics = the strategy's own admission estimate
+        r.isolation = others.size ? { ok: false, otherKinds: [...others] } : { ok: true };
+        if (others.size) console.log(`  ISOLATION BROKEN: ${[...others].join(', ')} also acted`);
+      }
     }
     record.rounds.push(r);
     const ta = sessions.a.totals;
