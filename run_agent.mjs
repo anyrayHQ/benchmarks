@@ -22,6 +22,10 @@
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 3 --label read-trim --read-trim
 //     (Anyray arm only: anyray-connect's Read trim on for that session, without
 //      touching the shared connect policy; see readTrimHome in lib/agentRun.mjs)
+//   node run_agent.mjs --scenario pyrepo-docs --compare control --label max-ctx \
+//     --arm-env b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
+//     (extra Claude Code settings env on arm a, b, or both with no prefix; repeatable.
+//      Combines with --read-trim: the env goes into the session settings, not the private HOME)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -35,9 +39,10 @@ import { rule0 } from './lib/stats.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
+import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [] };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -45,6 +50,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
     else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
+    else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -52,19 +58,27 @@ export function parseArgs(argv) {
   if (a.strategy && a.compare !== 'anyray') throw new Error('--strategy needs --compare anyray');
   if (a.readTrim && a.compare !== 'anyray') throw new Error('--read-trim needs --compare anyray');
   a.label ??= a.strategy;
+  a.env = parseArmEnv(a.armEnv);
+  assertArmEnvSafe(a.env.a);
+  assertArmEnvSafe(a.env.b);
   return a;
 }
 
 /** `--read-trim` applies to the Anyray arm only. */
 export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
 
+/**
+ * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
+ * --arm-env follows the SLOT (a/b): under --compare control both slots are 'direct'.
+ */
+export const slotOptions = (args, arms, slot) => ({ arm: arms[slot], readTrim: armReadTrim(args, arms[slot]), env: args.env?.[slot] ?? {} });
+
 /** Both arms' setup, as recorded in the result file. */
 export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
-  const one = (arm) => describeSetup({
-    arm, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns,
-    readTrim: armReadTrim(args, arm), enrolled,
+  const one = (slot) => describeSetup({
+    ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled,
   });
-  return { a: one(arms.a), b: one(arms.b) };
+  return { a: one('a'), b: one('b') };
 }
 
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
@@ -74,9 +88,12 @@ function summarize(session, pricing) {
   let subIn = 0;
   // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
   t.cacheBreaks = countCacheBreaks(session.requests);
+  t.compactions = session.compactions?.length ?? 0;
+  t.peakContext = {}; // largest input (fresh + cache read + write) any one request of each agent sent
   for (const r of session.requests) {
     const u = { ...(r.usage ?? {}), output_tokens: 0 };
     r.inputTotal = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    t.peakContext[r.agent] = Math.max(t.peakContext[r.agent] ?? 0, r.inputTotal);
     r.inputCostUsd = costOfAnthropicUsage(pricing, r.model, u);
     delete r.usage.output_tokens; // message-start snapshot, not the real count
     if (r.agent === 'main') mainIn += r.inputCostUsd ?? 0;
@@ -150,8 +167,8 @@ async function main() {
     const runTag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${Date.now()}`, tool: 'anyray-bench', intent: args.scenario };
     if (args.strategy) runTag.experiment = args.strategy;
     console.log(`${args.scenario} [${args.compare}] round ${round}: ${arms.a} ‖ ${arms.b} (concurrent)…`);
-    const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag, readTrim: armReadTrim(args, arm) });
-    const [sa, sb] = await Promise.allSettled([run1(arms.a), run1(arms.b)]);
+    const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag });
+    const [sa, sb] = await Promise.allSettled([run1('a'), run1('b')]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
       console.log(`  round ${round} failed: ${err}`);
