@@ -13,6 +13,9 @@
 //   node tools/bench-rule.mjs show
 //   node tools/bench-rule.mjs enable [kind …]    # default: every strategy that is off
 //   node tools/bench-rule.mjs only <kind …>      # these on, every other strategy off
+//   node tools/bench-rule.mjs per-experiment <kind …>   # one rule per kind: a session whose
+//                                                # x-anyray-metadata carries experiment=<kind>
+//                                                # gets that kind alone (run_agent --strategy)
 //   … enable|only … --params '{"observation_mask":{"mintPaybackRatio":0}}'   # strategy params for the rule
 //   node tools/bench-rule.mjs remove
 
@@ -22,6 +25,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LABEL = 'anyray-bench: strategies on for benchmark traffic only';
+const EXP_LABEL = (k) => `anyray-bench: ${k} alone for experiment=${k}`;
+const ours = (r) => r.label === LABEL || r.label?.startsWith('anyray-bench: ') && r.label.includes(' alone for experiment=');
 const gw = (process.env.ANYRAY_GATEWAY_URL || '').replace(/\/$/, '');
 const key = process.env.ANYRAY_ADMIN_KEY;
 if (!gw) throw new Error('set ANYRAY_GATEWAY_URL');
@@ -50,6 +55,7 @@ const strategies = config.strategies ?? [];
 
 if (cmd === 'show') {
   for (const s of strategies) console.log(`${s.enabled ? 'on ' : 'off'}  ${s.kind}`);
+  for (const r of rules.filter((r) => ours(r) && r.label !== LABEL)) console.log(`${r.label}${r.params ? ` params ${JSON.stringify(r.params)}` : ''}`);
   const mine = rules.find((r) => r.label === LABEL);
   console.log(mine ? `\nbench rule: enables ${mine.enable.join(', ')}${mine.disable?.length ? `; disables ${mine.disable.join(', ')}` : ''}${mine.params ? `; params ${JSON.stringify(mine.params)}` : ''}` : '\nbench rule: not set');
 } else if (cmd === 'enable' || cmd === 'only') {
@@ -67,10 +73,28 @@ if (cmd === 'show') {
   const next = { ...config, overrides: { ...(config.overrides ?? {}), rules: [...rules.filter((r) => r.label !== LABEL), rule] } };
   await call('PUT', { config: next });
   console.log(`bench rule set: enables ${enable.join(', ')}${rule.disable ? `; disables the other ${rule.disable.length}` : ''} for tool=anyray-bench\n(previous config saved to results/optimizer-config.before.json)`);
+} else if (cmd === 'per-experiment') {
+  if (!kinds.length) throw new Error('usage: per-experiment <kind …>');
+  const known = new Set(strategies.map((s) => s.kind));
+  const unknown = kinds.filter((k) => !known.has(k));
+  if (unknown.length) throw new Error(`unknown strategy: ${unknown.join(', ')}`);
+  mkdirSync(join(ROOT, 'results'), { recursive: true });
+  writeFileSync(join(ROOT, 'results', 'optimizer-config.before.json'), JSON.stringify(config, null, 2) + '\n');
+  const all = strategies.map((s) => s.kind).filter((k) => k !== 'audited_holdout');
+  const added = kinds.map((k) => ({
+    label: EXP_LABEL(k),
+    when: { metadata: { tool: ['anyray-bench'], experiment: [k] } },
+    enable: [k],
+    disable: all.filter((x) => x !== k),
+    ...(params?.[k] ? { params: { [k]: params[k] } } : {}),
+  }));
+  const next = { ...config, overrides: { ...(config.overrides ?? {}), rules: [...rules.filter((r) => !ours(r)), ...added] } };
+  await call('PUT', { config: next });
+  console.log(`per-experiment rules set for ${kinds.join(', ')} (tool=anyray-bench + experiment=<kind>; every other strategy disabled)`);
 } else if (cmd === 'remove') {
-  const next = { ...config, overrides: { ...(config.overrides ?? {}), rules: rules.filter((r) => r.label !== LABEL) } };
+  const next = { ...config, overrides: { ...(config.overrides ?? {}), rules: rules.filter((r) => !ours(r)) } };
   await call('PUT', { config: next });
   console.log('bench rule removed');
 } else {
-  throw new Error('usage: show | enable [kind …] | only <kind …> | remove');
+  throw new Error('usage: show | enable [kind …] | only <kind …> | per-experiment <kind …> | remove');
 }

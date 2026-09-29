@@ -44,9 +44,14 @@ far two identical setups drift apart. A result inside that band proves nothing.
 | `cobra-flag-groups` | spf13/cobra (pinned) | Fix a planted bug in mutually exclusive flags | `go test ./...` passes |
 | `cobra-dispatch` | spf13/cobra (pinned) | Explain how a command line is dispatched | Key facts in the answer |
 | `gin-doc-audit` | gin-gonic/gin (pinned) | Audit 2,700 lines of docs against 24k lines of Go | Path:line citations resolve |
+| `gin-test-triage` | gin-gonic/gin (pinned) | Fix two hidden regressions from ~80 KB of verbose test output | `go test ./...` passes |
+| `gin-long-session` | gin-gonic/gin (pinned) | Six user turns in one session: triage, fix, re-test, two code walkthroughs, recap | `go test ./...` passes |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
-is capped at `timeoutMin` (6 minutes by default) and `maxTurns`.
+is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
+`followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
+when the previous answer is done. `hidePatch: true` re-imports the patched checkout as a
+single commit, so the planted bug can't be found with `git diff` or `git log`.
 
 ### Running it
 
@@ -73,8 +78,15 @@ npm run bench-rule -- show           # what the gateway has on and off
 npm run bench-rule -- enable [kind…] # default: every strategy that is off
 npm run bench-rule -- only <kind…>   # just these on, every other strategy off
                                      # either takes --params '{"<kind>":{…}}'
+npm run bench-rule -- per-experiment <kind…>  # one rule per kind, selected per session
 npm run bench-rule -- remove
 ```
+
+`per-experiment` adds one rule per strategy. A rule matches `tool == "anyray-bench"` and
+`experiment == <kind>`, turns that strategy on and every other one off. Pick the strategy
+for a run with `npm run agent -- --scenario <name> --strategy <kind>`: the Anyray arm
+sends `experiment=<kind>` in `x-anyray-metadata`, and each round records whether any
+other strategy acted (`isolation.ok`). `remove` deletes every rule this tool added.
 
 This adds one override rule to the gateway's optimizer config. The rule matches
 `metadata.tool == "anyray-bench"`, which only this harness sends, so other traffic on
