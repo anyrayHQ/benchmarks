@@ -1,346 +1,124 @@
-# Anyray Optimizer Benchmarks
+# Anyray Benchmarks
 
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
-[![results: reproducible](https://img.shields.io/badge/results-reproducible-1a7f5a)](RESULTS.md)
-[![answer: kept](https://img.shields.io/badge/answer-kept%2033%2F33-1a7f5a)](QUALITY.md)
 
-Anyray sits on the request path of every LLM call an org makes — coding
-assistants, agents, SDK jobs — and rewrites each request to spend fewer tokens
-before it reaches the provider. The app doesn't change, and nothing is thrown
-away: every elided span stays retrievable (`POST /v1/retrieve`).
+Does putting Anyray on a real agent's request path make the session cheaper, without
+making the result worse? This repo answers that the way a customer's bill would, against
+Anyray's Rule 0: **a session must never cost more because of us.**
 
-This repo measures how much that saves.
+## The agent benchmark
 
-## What we measure it on
+Each **round** runs the same task on a real open-source repo in two arms **at the same
+time**, each a full Claude Code session on its own fresh checkout:
 
-| Data | What it is | Result |
-|---|---|---|
-| **Synthetic suite** — in this repo | 39 workloads, each a common token-waste pattern (a pasted log, an agent re-reading files, MCP schema bloat, RAG over-fetch, a resent session). One strategy pinned at one knob per workload. | **87%** on the 29 whole-request workloads, with **33/33** answers intact |
-| **Public corpora** — [DATASETS.md](DATASETS.md) | 8 datasets nobody assembled for Anyray: SWE-agent and OpenHands trajectories, WildChat, Toucan MCP catalogues, MT-Eval, xlam function calling, orca-agentinstruct. 1,056 turns through the full default pipeline, no per-corpus tuning. | **23.1%** aggregate, **16.3%** median |
-| **Production** — [profile](DATASETS.md#production-traffic-profile) | Anyray's own deployments, read content-free: token counts, prefix growth, which strategies fired. Prompts are encrypted at rest and the query does not select those columns. | Confirms the corpora match real prompt sizes and strategy mix. No published savings figure comes from it. |
+| Arm | How it reaches the model |
+|---|---|
+| **A · direct** | Claude Code straight to Anthropic. No gateway, hooks or MCP. |
+| **B · through Anyray** | The same Claude Code session via an Anyray gateway, sending only the client key. When this machine's `anyray-connect` is enrolled on that gateway, its hooks and MCP server are attached too. |
 
-Every number below comes from running the **real optimizer** — the same
-before-request hook that sits on the gateway's hot path — over these workloads
-and measuring the request it returns. `./run.sh` writes the JSON in each suite's
-`results/`; the headline is the sum of those files.
+Nothing is scripted. The model picks every step, with all of Claude Code's default
+tools, subagents included. Both arms get the same model, task, turn cap and upstream
+credential, and neither loads your own Claude Code settings.
 
-## Headline
+Per round it records:
 
-Whole-request token reduction, measured by running each workload's hero strategy
-through a live optimizer (accounting basis — see [Methodology](#methodology)):
+- **Cost:** Claude Code's billed total, with cache reads and writes, main agent and subagents.
+- **Turns, model requests, subagents** and their share of cost.
+- **Solved or not.** A bug-fix task must pass its test command in the session's checkout afterwards. A question must contain every key fact. An audit's `path:line` citations must resolve to real lines.
+- **Every model request:** cache read / write / uncached input, each tool call and its output.
+- **The gateway's own record,** when an admin key is set: which strategies were on for the run, and what each one did on each request (saved, stood down, held by the guard).
 
-| Suite | Workloads | Before (tok) | After (tok) | **Saved** |
-|---|--:|--:|--:|--:|
-| [`logs-and-data/`](logs-and-data/) | 6 | 160,123 | 28,817 | **82%** |
-| [`code-context/`](code-context/) | 7 | 23,499 | 10,431 | **56%** |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | 17,775 | 5,631 | **68%** |
-| [`agent-ops/`](agent-ops/) | 7 | 100,280 | 11,340 | **89%** |
-| [`memory-recall/`](memory-recall/) | 3 | 204,254 | 9,116 | **96%** |
-| **Total** | **29** | **505,931** | **65,335** | **87%** |
-| [`guardrails/`](guardrails/) | 10 | *special accounting* | | *see suite* |
+Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
+- **Win rate:** Anyray must be cheaper in clearly more rounds than the 53% noise floor (the bar is 63%).
+- **Q3 ratio below 1:** Anyray must still be cheaper at the third quartile, so no more than a quarter of rounds may cost more.
+- **Quality parity:** Anyray must solve as many rounds as direct.
 
-Four strategies carry most of this suite's input — `observation_mask`,
-`context_compression`, `window_budget` and `relevance_filter`, together ~88% of the
-tokens measured here.
-That is a property of **these fixtures**, not a measurement of production traffic;
-treat the per-strategy rows as "what each strategy does to a representative payload",
-not as a weighted forecast of a given deployment's bill. Token counts use a
-`chars / 4` estimate, so read the **percentage** as the headline (see
-[Methodology](#methodology)). Full per-workload and per-strategy breakdowns are in
-[RESULTS.md](RESULTS.md).
+A **control** comparison (`--compare control`) runs direct against direct to show how
+far two identical setups drift apart. A result inside that band proves nothing.
 
-### What a default install gets
+### Scenarios
 
-**The harness enables each workload's strategy before measuring it**, whatever the
-optimizer ships as its default. That is the right way to measure one strategy in
-isolation, and it means the total above is *not* what a stock deployment produces:
-
-| | Share of measured savings |
-|---|--:|
-| strategies **on** by default | **75%** |
-| strategies **off** by default (`window_budget` 18%, `output_externalize` 6%, `tool_pruning` 1%) | **25%** |
-
-On the default-on subset alone the suite reads 389,336 → 57,477 tok, **85%**. The
-opt-in strategies are off for reasons, not by oversight — `window_budget` crops whole
-messages against a client-supplied ceiling, so it stays operator-enabled — and each
-one is annotated in [`config.yaml`](config.yaml).
-
-### What the headline does and doesn't sum
-
-[COVERAGE.md](COVERAGE.md) shows this suite measures **21 of the 25** registered
-strategies. The headline above is **not** the sum of those 21 — it sums the **11**
-scored on whole-request bytes. The other 10 are measured on their own bases,
-because a whole-request percentage would be meaningless or misleading for them:
-
-| Scored how | Strategies | In the headline? |
-|---|---|:-:|
-| whole-request bytes (accounting) | `context_compression`, `window_budget`, `relevance_filter`, `output_externalize`, `code_graph`, `observation_mask`, `prompt_compression`, `tool_pruning`, `context_dedupe`, `command_digest`, `tool_schema_compression` | yes |
-| own basis (guardrail / cache / diagnostic) | `thinking_trim`, `cache_lint`, `cache_optimizer`, `semantic_cache`, `param_tuning`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `content_census`, `context_quality` | no |
-
-`thinking_trim` is the one to know about. It only touches replayed reasoning, so a
-whole-request figure would mostly measure how much unrelated file body a fixture
-carries; it is scored on replayed thinking tokens instead (**83%**, 719 → 121 tok in
-[`43-thinking-replay`](agent-ops/)). On Anyray's own fleet it is currently the
-**largest single source of optimizer savings** — so the headline omits the strategy
-that, in production, saves the most. That is a property of the accounting basis, not
-a gap in coverage, and it is the clearest reason to read this suite as *"what each
-strategy does to a representative payload"* rather than as a forecast of a bill.
-
-The one strategy with no workload at all is `audited_holdout`, which is not
-benchmarkable here by construction: it is the unoptimized control marker, so it
-transforms nothing and has no knob to pin.
-
-### What it actually does
-
-One real workload — [`logs-and-data/1-access-log`](logs-and-data/): paste a 500-line
-nginx log and ask *"which requests are failing with 500s?"* (lines below are verbatim
-from the payload, trimmed to width).
-
-**Before — 26,153 tok** · every line billed:
-
-```text
-203.0.113.1  - - [10/Jun/2026:10:00:00] "GET  /api/orders/90000 HTTP/1.1" 404 …
-198.51.100.7 - - [10/Jun/2026:10:00:03] "GET  /api/products      HTTP/1.1" 200 …
-203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout      HTTP/1.1" 500 …
-… 497 more lines, almost all 200/404 noise …
-```
-
-**After — 1,078 tok · 96% saved** · `relevance_filter` keeps the lines that answer it:
-
-```text
-203.0.113.21 - - [10/Jun/2026:10:24:30] "POST /api/checkout HTTP/1.1" 500 …
-192.0.2.95   - - [10/Jun/2026:10:24:44] "POST /api/checkout HTTP/1.1" 500 …
-… the failing 500 lines kept; the 200/404 noise elided (retrievable via /v1/retrieve) …
-```
-
-The model still names the failing endpoint, the `10:24:30`–`10:29:10` window, and the
-client IPs — confirmed at 100% key-fact survival in [QUALITY.md](QUALITY.md).
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/quality-vs-savings.dark.svg" />
-    <img alt="Scatter of token savings against key facts kept, for the 29 accounting-tier workloads; all 29 keep 100% of the answer" src="assets/quality-vs-savings.light.svg" width="720" />
-  </picture>
-  <br />
-  <sub>Savings buy nothing if the answer dies — so we check. Plotted: the 29 accounting-tier workloads, scored by strict key-fact survival. All 29 keep 100%. The other four quality rows are guardrail-basis and have no whole-request savings figure to plot against.</sub>
-</p>
-
-## Quality — does the answer survive?
-
-Savings are only worth it if the model can still answer. For every workload we
-define the **answer-bearing key facts** and check how many survive:
-
-| | Workloads | PASS | MARGINAL | FAIL |
-|---|--:|--:|--:|--:|
-| Key-fact survival (strict substring, model-free) | 33 | 33 | 0 | 0 |
-
-**The answer survives on all 33.** Key facts are fixed per workload before a
-strategy runs, so a trim cannot be scored by moving the answer into whatever it
-kept; a workload that starts failing stays failing until the optimizer is fixed,
-at whatever lower saving the fix costs. The per-workload table is in
-**[QUALITY.md](QUALITY.md)**.
-
-The strict check is the floor, and it is the one that needs no model: `run_quality.mjs`
-scores it against the optimizer alone, so anyone can reproduce it. The optional
-semantic-judge lane (`--judge`) has **not** been re-run against the current optimizer,
-so no judge verdicts are committed — an old verdict describes a differently-trimmed
-context and would be worse than none.
-
-## Why these workloads
-
-These aren't synthetic stress tests picked to make an optimizer look good. Every
-one is a token-waste pattern that the 2025–2026 AI-cost literature consistently
-ranks as among the most common — and most expensive — things developers and
-coding agents do. **79% of enterprises overran their AI budgets last year**, and
-the same culprits show up every time. We benchmark Anyray on exactly those.
-
-| Waste pattern — what devs / agents actually do | What the cost research reports | Suite |
-|---|---|---|
-| Paste a whole log or data dump and ask one question | the single most common thing engineers do with an assistant — the file is billed in full, every turn | `logs-and-data` |
-| Agents re-read entire files when the question needs signatures, not bodies | **~70%** of a coding agent's tokens are irrelevant file reads | `code-context` |
-| MCP tool-schema bloat rides along every call | **55k+ tokens** of tool definitions before the first message | `tools-and-rag` |
-| RAG over-retrieval | **3–5×** more chunks fetched than the answer uses | `tools-and-rag` |
-| The same instruction block re-pasted per item | repeated boilerplate billed once per item | `tools-and-rag` |
-| Agents resend the whole history every turn (context re-accumulation) | the **#1** researched waste pattern — agents use **4–15×** chat tokens; a 50-turn coding session bills ~**25:1** input:output | `agent-ops` |
-| Command / test output read back verbatim | runner output is mostly passing lines + banners | `agent-ops` |
-| Recall a large store (sessions, decisions, notes) for a narrow question | recall-heavy assistant + agent usage | `memory-recall` |
-| Redundant / near-duplicate requests | **40–60%** of enterprise LLM traffic is repetitive (**18%** exact duplicates, **~47%** semantically similar) | `guardrails` (cache) |
-| Runaway output ceilings / over-generation | uncapped `max_tokens` inflates worst-case spend | `guardrails` (param) |
-
-*(Figures are the patterns the 2025–2026 industry cost research surfaces
-repeatedly; they motivate the workload selection, they are not themselves Anyray
-measurements. Anyray's measurements are the [headline](#headline) and
-[RESULTS.md](RESULTS.md).)*
-
-Waste patterns we **don't** yet have a strategy for — named so the scope is honest:
-model overkill (routing trivial calls to cheaper models), retry storms /
-duplicate-call debouncing, and provider prompt-cache shaping.
-
-## Benchmarks
-
-Each suite is a directory of payloads plus the strategy that targets that waste
-pattern. The "hero strategy" is the one Anyray reaches for first on that shape of
-request.
-
-| Suite | Workloads | Hero strategies | What it measures |
+| Scenario | Repo | Task | Graded by |
 |---|---|---|---|
-| [`logs-and-data/`](logs-and-data/) | 6 | `context_compression`, `relevance_filter` | A log/data/JSON blob (often a tool result) + a narrow question → minify, array-cap, keep the lines that answer it |
-| [`code-context/`](code-context/) | 7 | `code_graph`, `relevance_filter`, `context_compression` | Source/diff/search read back (file reads via tool results) → keep the navigable reference graph, elide bodies |
-| [`tools-and-rag/`](tools-and-rag/) | 6 | `tool_pruning`, `tool_schema_compression`, `relevance_filter`, `prompt_compression` | Tool-schema bloat, verbose schema prose, over-fetched chunks, re-pasted boilerplate |
-| [`agent-ops/`](agent-ops/) | 8 | `window_budget`, `relevance_filter`, `command_digest`, `context_dedupe`, `thinking_trim` | Triage dumps, long tool-call sessions that overflow the window, verbatim test output, re-read files, replayed reasoning |
-| [`memory-recall/`](memory-recall/) | 3 | `relevance_filter`, `observation_mask`, `output_externalize` | A large recalled store + a "remember this for me" question; stale trajectories; durable blobs |
-| [`guardrails/`](guardrails/) | 10 | `semantic_cache`, `param_tuning`, `cache_optimizer`, `context_quality`, `content_census`, `provider_context_trim`, `reasoning_budget`, `output_shaping`, `cache_lint` | Repeated calls, pasted screenshots, runaway ceilings, cache-prefix stability, context health, content census, provider-side trim, reasoning downshift, output shaping, prefix churn |
+| `cobra-flag-groups` | spf13/cobra (pinned) | Fix a planted bug in mutually exclusive flags | `go test ./...` passes |
+| `cobra-dispatch` | spf13/cobra (pinned) | Explain how a command line is dispatched | Key facts in the answer |
+| `gin-doc-audit` | gin-gonic/gin (pinned) | Audit 2,700 lines of docs against 24k lines of Go | Path:line citations resolve |
 
-The optimizer is **reversible**: every elided span is stashed behind a retrieval
-handle (`POST /v1/retrieve`), so the model can pull
-back anything it turns out to need. Most strategies re-rank and elide rather than
-paraphrase — so the saving comes from dropping what the live question doesn't
-touch, not from lossy rewriting; a few (`command_digest`, `tool_schema_compression`)
-rewrite deterministically and idempotently. See [Does it preserve the
-answer?](#does-it-preserve-the-answer)
+Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
+is capped at `timeoutMin` (6 minutes by default) and `maxTurns`.
 
-## Methodology
+### Running it
 
-The harness turns each workload into two configs — the Anyray analog of a
-compression benchmark's `control` vs `model--aggressiveness`:
-
-- **`control`** — the raw request, optimizer bypassed. Establishes the baseline token count.
-- **`optimized`** — the suite's hero strategy, pinned at a single knob, run by a live optimizer.
-
-For each workload the harness:
-
-1. `PUT /admin/optimizer/settings` to pin exactly one strategy at one knob (so the
-   saving is attributable to a named strategy, not the whole pipeline).
-2. `POST /v1/optimize` with the payload, and reads back the transformed request.
-3. Measures **whole-request size**: the character length of every message body
-   plus the tools schema, before and after.
-
-The token figure is `chars / 4` (the basis the optimizer itself uses; set in
-`config.yaml`). The **savings percentage is the reliable signal** — it's confirmed
-against a real BPE tokenizer (`tiktoken`) and the optimizer's own calibrated
-estimator; the absolute counts are a conservative estimate (~1.2–1.8× below real
-provider tokens on dense logs/JSON). A real-provider cross-check is in
-[RESULTS.md](RESULTS.md); a built-in `--live-bill` mode is on the
-[roadmap](RESULTS.md#roadmap).
-
-**Content-free, by construction.** The harness records only sizes and the
-optimizer's own one-line decision strings — never message bodies. That mirrors
-Anyray's core invariant: prompt/response *content* is never logged.
-
-This describes the synthetic suite. The public-corpora replay scores
-differently: no strategy is pinned, no knob is tuned per corpus, and the full
-default pipeline runs over every turn — which is why it returns 23.1% where a
-matched workload returns 59%. Corpora, licences, per-corpus numbers, and what is
-evaluated but not publishable are in **[DATASETS.md](DATASETS.md)**.
-
-## Prerequisites
-
-- Node.js 20+
-- A reachable Anyray optimizer (the before-request hook). The Anyray stack brings
-  one up in-network on `:8088` — `docker compose up` from the
-  [Anyray install repo](https://github.com/anyrayHQ/install). Any reachable
-  instance works.
-- The optimizer's admin token (`ANYRAY_ADMIN_TOKEN`) — the same key that gates the
-  Anyray console. The harness uses it to pin one strategy per workload.
-
-## Setup
+Requirements: Node.js 20+, the `claude` CLI signed in to a Claude subscription (the
+upstream credential for both arms), `git`, and Go for the cobra/gin checks.
 
 ```bash
-cp .env.example .env
-# Edit .env: ANYRAY_OPTIMIZER_URL and ANYRAY_ADMIN_TOKEN
+cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
+
+npm run agent -- --scenario cobra-flag-groups                       # 1 round, ~1 min
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
+npm run agent -- --scenario cobra-flag-groups --rounds 6
+npm run agent:report     # → results/agent/report.html
 ```
 
-`./run.sh` installs dependencies (`js-yaml`) and loads `.env` on first run.
+Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so re-running adds
+rounds. `--label <name>` keeps a run in its own file (e.g. a single-strategy run). `results/` is local only, because transcripts hold tool output. Share the
+report instead.
 
-## Configuration
-
-All settings live in [`config.yaml`](config.yaml):
-
-- **`shared`** — optimizer URL, admin-token env var (and an optional
-  optimizer-token env var for hardened optimizers that gate `/v1/optimize`), the
-  chars-per-token accounting basis, request timeout.
-- **`benchmarks`** — one entry per suite; each lists its workloads, and each
-  workload names its `strategy` and `params` (the knob). To benchmark a strategy
-  at a different aggressiveness, change its `params` and re-run.
-
-## Running a benchmark
+### Turning strategies on for benchmark traffic only
 
 ```bash
-cd memory-recall && ./run.sh          # one suite
-./run.sh --all                        # every suite
+npm run bench-rule -- show           # what the gateway has on and off
+npm run bench-rule -- enable [kind…] # default: every strategy that is off
+npm run bench-rule -- only <kind…>   # just these on, every other strategy off
+                                     # either takes --params '{"<kind>":{…}}'
+npm run bench-rule -- remove
 ```
 
-### Options
+This adds one override rule to the gateway's optimizer config. The rule matches
+`metadata.tool == "anyray-bench"`, which only this harness sends, so other traffic on
+the gateway keeps its config. The config as it was before the change is saved to
+`results/optimizer-config.before.json`. Gateways listed in `config.yaml`
+`run.blocked_gateways` are refused by both the runner and this tool.
+
+## The replay suite (secondary)
+
+`run.mjs` sends 38 fixed payloads (`<suite>/payloads/*.json`) once directly and once
+through the gateway, and compares the billed tokens, cost and a judge's view of the two
+answers. It is a quick way to check that a gateway change does something on a known
+request shape. It is **not** evidence of savings:
+- **Payload design:** each payload was built around a pattern the optimizer targets.
+- **No caching:** nothing is ever served from cache, so every trimmed token counts at full price.
+- **Single requests:** there are no turns, subagents or cache writes to pay for.
 
 ```bash
-./run.sh --suite code-context                      # one suite by name
-./run.sh --suite code-context --workload 15-multifile-graph   # one workload
-./run.sh --all --limit 2                           # first 2 workloads per suite (smoke test)
+npm run replay -- --suite code-context --workload 27-read-service-ts
+node show.mjs code-context/27-read-service-ts    # one workload, printed in full
+npm run replay:report                              # → RESULTS.md (local)
 ```
 
-### Resume support
+## On your own traffic
 
-Interrupted? Re-run the same command. Workloads already present in
-`results/optimized.json` are skipped.
+The scenarios here are ours, not yours. [`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator)
+points at your own gateway with a client key, sends each of your own captured prompts
+twice (once with `x-anyray-optimize: off`, once the ordinary way) and reports the
+input-token delta from your provider's `usage` field, plus whether the facts you marked
+as required survive. Its results stay with you and are never committed anywhere.
 
-## Results
+## Layout
 
-Each suite writes `results/control.json` and `results/optimized.json` — an array
-over the suite's workloads, re-saved per item (so a run resumes cleanly). Each
-`optimized` row carries the strategy, knob, before/after chars and tokens, percent
-saved, and the optimizer's decision strings. These files are **committed** — they
-are the real, reproducible scores. The aggregate is [RESULTS.md](RESULTS.md).
-
-## Does it preserve the answer?
-
-Usually, and the suite is built to show where it does not. The
-[**quality benchmark**](QUALITY.md) defines the answer-bearing key facts for each
-workload and checks how many survive: **33 of 33 by strict substring**.
-
-The check is designed so that a strategy cannot buy savings with the answer. Key
-facts are fixed per workload **before** a strategy runs, and a workload that starts
-failing is kept failing until the optimizer is fixed — never re-tuned, and never
-rewritten to move the answer somewhere the trim happens to keep. Scoring a workload
-by editing the payload measures nothing.
-
-Anyray's strategies are also reversible — every elided span is retrievable on demand
-(`POST /v1/retrieve`) — so even a partial trim is recoverable.
-
-Run it with `node run_quality.mjs --all` (strict survival, needs only the optimizer)
-and `--judge` for the optional semantic pass, which needs a model.
-
-## What this does and doesn't measure
-
-- **Does:** input-token reduction per workload, per strategy, reproducibly — **and**
-  answer-quality (key-fact survival) per workload.
-- **Doesn't (yet):** latency added by the hook (the optimizer fails open past
-  `ANYRAY_OPTIMIZER_TIMEOUT_MS`); output-token cost (except the `param_tuning`
-  guardrail, which clamps the output ceiling). See [RESULTS.md](RESULTS.md#roadmap).
-
-## Want these numbers on your own traffic?
-
-This repo is credible because its results are **committed**: the fixtures are in
-the tree, `./run.sh --all` regenerates them, and anyone gets the same figures.
-That is also its limit — they are our workloads, not yours.
-
-[`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator) answers the other
-question. You point it at your own gateway, your own coding agent captures your
-own prompts, and it sends each one twice — once with `x-anyray-optimize: off`,
-once the ordinary way — reporting the input-token delta from your provider's own
-`usage` field and whether the facts you declared as required still survive. Its
-results are yours alone and are never committed anywhere.
-
-| | this repo | simulator |
-| --- | --- | --- |
-| Points at | the optimizer on `:8088` | your gateway |
-| Credential | admin token | a client key |
-| Payloads | synthetic, committed | yours, never committed |
-| Token counts | tokenizer estimate | provider's `usage` field |
-| Calls a provider | no | yes, on your bill |
-| Results | committed — anyone reproduces them | private, unique to you |
-
----
-
-Built on the Anyray optimizer. Learn more at [anyray.ai](https://anyray.ai) ·
-[docs](https://docs.anyray.ai).
+```
+run_agent.mjs         paired agent rounds → results/agent/*.json
+report_agent.mjs      → results/agent/report.html
+scenarios/            one directory per task: scenario.yaml (+ patch)
+tools/bench-rule.mjs  strategies on/off for benchmark traffic only
+lib/agentRun.mjs      checkout, headless Claude Code per arm, transcript parsing
+lib/stats.mjs         Rule 0 verdict
+lib/strategies.mjs    strategies on vs what each did, from gateway traces
+lib/traces.mjs        gateway admin API: optimizer config, per-request traces
+lib/cost.mjs          price usage, incl. cache reads and 5-minute/1-hour writes
+config.yaml           model, pricing, blocked gateways, replay workload list
+run.mjs · report.mjs · show.mjs · lib/client.mjs · lib/judge.mjs · lib/toAnthropic.mjs
+                      the replay suite
+```

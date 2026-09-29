@@ -1,0 +1,20 @@
+title: "Doc audit in gin-gonic/gin — check 2,700 lines of docs against 24k lines of Go"
+# A broad audit over a real Go repo: the kind of task Claude Code tends to split into
+# subagents on its own, which is where much of a real session's cost goes.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+task: >-
+  Audit this repository's documentation (README.md and docs/doc.md) against the actual
+  code. Find claims, examples or API references in the docs that are wrong, outdated,
+  or don't match the implementation. For each finding, cite the doc location and the
+  code location as path:line, and say what is wrong. Be thorough: cover the whole of
+  both documents.
+# Every finding must cite real code. Solved when at
+# least `min` path:line citations appear and at least `resolveRate` of them resolve
+# to an existing line in the checkout.
+citations:
+  min: 8
+  resolveRate: 0.9
+maxTurns: 25
+timeoutMin: 6
