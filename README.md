@@ -98,6 +98,14 @@ node show.mjs code-context/27-read-service-ts    # one workload, printed in full
 npm run replay:report                              # → RESULTS.md (local)
 ```
 
+## On your own traffic
+
+The scenarios here are ours, not yours. [`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator)
+points at your own gateway with a client key, sends each of your own captured prompts
+twice (once with `x-anyray-optimize: off`, once the ordinary way) and reports the
+input-token delta from your provider's `usage` field, plus whether the facts you marked
+as required survive. Its results stay with you and are never committed anywhere.
+
 ## Layout
 
 ```
