@@ -79,7 +79,7 @@ export function renderResults(cfg) {
   for (const { suite, rows } of bySuite) {
     for (const r of rows) {
       if (r.error) {
-        md += `| \`${suite}/${r.id}\` | error: ${r.error.replace(/\|/g, '\\|').slice(0, 80)} | | | | |\n`;
+        md += `| \`${suite}/${r.id}\` | error: ${r.error.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').slice(0, 80)} | | | | |\n`;
         continue;
       }
       const score = r.judge ? ` (${r.judge.score})` : '';
