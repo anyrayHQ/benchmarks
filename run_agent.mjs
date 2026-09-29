@@ -32,10 +32,11 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { rule0 } from './lib/stats.mjs';
+import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
@@ -54,22 +55,28 @@ function parseArgs(argv) {
   return a;
 }
 
+/** `--read-trim` applies to the Anyray arm only. */
+export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
+
+/** Both arms' setup, as recorded in the result file. */
+export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
+  const one = (arm) => describeSetup({
+    arm, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns,
+    readTrim: armReadTrim(args, arm), enrolled,
+  });
+  return { a: one(arms.a), b: one(arms.b) };
+}
+
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
   let mainIn = 0;
   let subIn = 0;
-  // A cache break: an agent's request reads less than 90% of what its previous request
-  // sent. Its history only grows, so the prefix changed under it and was re-billed as a
-  // cache write. Direct sessions read ~0; a gateway that edits history unevenly shows up here.
-  t.cacheBreaks = 0;
-  const lastInput = new Map();
+  // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
+  t.cacheBreaks = countCacheBreaks(session.requests);
   for (const r of session.requests) {
     const u = { ...(r.usage ?? {}), output_tokens: 0 };
     r.inputTotal = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    const prev = lastInput.get(r.agent);
-    if (prev && (u.cache_read_input_tokens ?? 0) < prev * 0.9) t.cacheBreaks++;
-    lastInput.set(r.agent, r.inputTotal);
     r.inputCostUsd = costOfAnthropicUsage(pricing, r.model, u);
     delete r.usage.output_tokens; // message-start snapshot, not the real count
     if (r.agent === 'main') mainIn += r.inputCostUsd ?? 0;
@@ -133,10 +140,7 @@ async function main() {
   record.gateway = run.gatewayUrl;
   record.readTrim = args.readTrim;
   record.arms = arms;
-  record.setup = {
-    a: describeSetup({ arm: arms.a, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns }),
-    b: describeSetup({ arm: arms.b, model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, readTrim: args.readTrim }),
-  };
+  record.setup = armSetups(args, arms, run, scenario);
   if (args.compare === 'anyray') {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
@@ -146,7 +150,7 @@ async function main() {
     const runTag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${Date.now()}`, tool: 'anyray-bench', intent: args.scenario };
     if (args.strategy) runTag.experiment = args.strategy;
     console.log(`${args.scenario} [${args.compare}] round ${round}: ${arms.a} ‖ ${arms.b} (concurrent)…`);
-    const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag, readTrim: arm === 'anyray' && args.readTrim });
+    const run1 = (arm) => runAgent({ arm, scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag, readTrim: armReadTrim(args, arm) });
     const [sa, sb] = await Promise.allSettled([run1(arms.a), run1(arms.b)]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
@@ -197,7 +201,7 @@ async function main() {
   );
 }
 
-main().catch((e) => {
+if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
   console.error(e.message ?? e);
   process.exit(1);
 });
