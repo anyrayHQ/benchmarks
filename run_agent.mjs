@@ -81,6 +81,10 @@ export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
   return { a: one('a'), b: one('b') };
 }
 
+/** What each arm was actually configured with this round (the Anyray arm by anyray-connect) over the planned setup. */
+export const withSessionSetups = (setup, sessions) =>
+  Object.fromEntries(Object.entries(setup).map(([slot, planned]) => [slot, sessions[slot]?.setup ? { ...planned, ...sessions[slot].setup } : planned]));
+
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
@@ -178,6 +182,7 @@ async function main() {
     }
     const sessions = { a: sa.value, b: sb.value };
     for (const s of Object.values(sessions)) s.totals = summarize(s, pricing);
+    record.setup = withSessionSetups(record.setup, sessions);
     const r = {
       round,
       runTag,
@@ -203,7 +208,7 @@ async function main() {
     const tb = sessions.b.totals;
     console.log(
       `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
-        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
+        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${tb.hookTrimmed} hook-trimmed · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
         `  ratio B/A ${r.ratio?.toFixed(3)}`
     );
     record.stats = rule0(record.rounds.filter((x) => !x.error));
