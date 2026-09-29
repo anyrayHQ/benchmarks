@@ -1,0 +1,20 @@
+title: "Document saltstack/salt — how a command reaches a minion and runs a module"
+# Writing docs for a large, unfamiliar Python codebase: lots of file reads and searches,
+# the shape of work where re-sent context and tool output dominate a session's cost.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  Write developer documentation for this codebase, for an engineer joining the team.
+  Cover how `salt '*' test.ping` travels from the CLI through the master to a minion,
+  how the loader discovers and loads execution modules (and what __virtual__ and the
+  dunder globals like __salt__ and __opts__ do), and how the return gets back to the
+  CLI. Output the documentation as Markdown in your final answer, with a section per
+  stage, and cite the code for every claim as path:line.
+# Every claim must cite real code. Solved when at least `min` path:line citations
+# appear and at least `resolveRate` of them resolve to an existing line in the checkout.
+citations:
+  min: 10
+  resolveRate: 0.9
+maxTurns: 30
+timeoutMin: 10
