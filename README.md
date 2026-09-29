@@ -61,15 +61,39 @@ upstream credential for both arms), `git`, and Go for the cobra/gin checks.
 ```bash
 cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
 
-npm run agent -- --scenario cobra-flag-groups                       # 1 round, ~1 min
+npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
 npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
-npm run agent -- --scenario cobra-flag-groups --rounds 6
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mask,code_graph
 npm run agent:report     # → results/agent/report.html
 ```
 
 Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so re-running adds
 rounds. `--label <name>` keeps a run in its own file (e.g. a single-strategy run). `results/` is local only, because transcripts hold tool output. Share the
 report instead.
+
+### Which strategies the Anyray arm runs
+
+`--compare anyray` needs `--kinds <k1,k2>` (or `--strategy <kind>`, which means
+`--kinds <kind>`). The Anyray arm sends them as `x-anyray-optimization-kinds`, so the
+gateway runs exactly those strategies, off-by-default ones included, unless an admin
+rule disables one. A run never inherits the tenant's defaults, which drift. The
+requested kinds are recorded in the result's setup.
+
+Claude Code does not surface response headers, so the Anyray arm's model traffic goes
+through a local pass-through proxy that reads `x-anyray-optimization-result` on each
+response. Each round records, per requested kind, how many requests applied it, skipped
+it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
+
+### Keeping benchmark traffic in its own tenant
+
+The gateway keeps regret-guard verdicts, session cooloffs and holdouts per tenant, and a
+request's tenant comes from its client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose
+tenant only benchmarks use, and `ANYRAY_BENCH_TENANT` to that tenant's id. The Anyray
+arm (harness- or connect-configured) then uses it instead of `ANYRAY_CLIENT_KEY`, and
+the result records `tenant: { tenant, keyVar, dedicated }` (never the key). Without it
+the run warns and records the shared `default` tenant. A separate tenant needs a
+multi-tenant gateway (`ANYRAY_MULTI_TENANT=true`, tenants and keys from the control
+plane): on a single-tenant deployment every key is in `default`.
 
 ### Turning strategies on for benchmark traffic only
 
