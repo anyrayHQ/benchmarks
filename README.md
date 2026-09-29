@@ -84,6 +84,17 @@ through a local pass-through proxy that reads `x-anyray-optimization-result` on 
 response. Each round records, per requested kind, how many requests applied it, skipped
 it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
 
+### Keeping benchmark traffic in its own tenant
+
+The gateway keeps regret-guard verdicts, session cooloffs and holdouts per tenant, and a
+request's tenant comes from its client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose
+tenant only benchmarks use, and `ANYRAY_BENCH_TENANT` to that tenant's id. The Anyray
+arm (harness- or connect-configured) then uses it instead of `ANYRAY_CLIENT_KEY`, and
+the result records `tenant: { tenant, keyVar, dedicated }` (never the key). Without it
+the run warns and records the shared `default` tenant. A separate tenant needs a
+multi-tenant gateway (`ANYRAY_MULTI_TENANT=true`, tenants and keys from the control
+plane): on a single-tenant deployment every key is in `default`.
+
 ### Turning strategies on for benchmark traffic only
 
 ```bash
