@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import yaml from 'js-yaml';
 import { join } from 'node:path';
 
 import { countCacheBreaks } from '../lib/cacheBreaks.mjs';
-import { armConfig, describeSetup } from '../lib/agentRun.mjs';
+import { armConfig, checkCitations, describeSetup } from '../lib/agentRun.mjs';
 import { parseArgs, armSetups, armReadTrim } from '../run_agent.mjs';
 
 // ---- cache-break counter ---------------------------------------------------
@@ -194,4 +195,85 @@ test('describeSetup: the direct arm ignores readTrim', () => {
   const a = describeSetup({ arm: 'direct', model: 'm', gatewayUrl: GW, runTag: 't', maxTurns: 1, readTrim: true, enrolled: true });
   const b = describeSetup({ arm: 'direct', model: 'm', gatewayUrl: GW, runTag: 't', maxTurns: 1, readTrim: false, enrolled: true });
   assert.deepEqual(a, b);
+});
+
+// ---- more coverage (ANY-712 follow-up) ------------------------------------------
+
+test('countCacheBreaks: requests with no agent form their own stream, never compared with main', () => {
+  const noAgent = (read, write) => ({ usage: { cache_read_input_tokens: read, cache_creation_input_tokens: write } });
+  // A small agent-less request between two main requests is not a drop for main.
+  assert.equal(countCacheBreaks([req('main', 0, 40000), noAgent(0, 500), req('main', 40000, 800)]), 0);
+  // Two agent-less requests are compared with each other.
+  assert.equal(countCacheBreaks([noAgent(0, 20000), noAgent(2000, 18000)]), 1);
+});
+
+test('countCacheBreaks: missing usage fields count as zero on both sides of the comparison', () => {
+  // Previous sent 10000 as plain input only; the next reads 8000 from cache: below 90%.
+  assert.equal(countCacheBreaks([{ agent: 'main', usage: { input_tokens: 10000 } }, { agent: 'main', usage: { cache_read_input_tokens: 8000 } }]), 1);
+  // Previous wrote 10000; the next has no cache read at all: a break.
+  assert.equal(countCacheBreaks([{ agent: 'main', usage: { cache_creation_input_tokens: 10000 } }, { agent: 'main', usage: {} }]), 1);
+});
+
+test('countCacheBreaks: after a break the baseline is the rebuilt request, not the old peak', () => {
+  // 20000 sent → break (reads 3000, writes 12000: a shorter 15000 prefix) → reads 14000 of
+  // that 15000: fine, even though 14000 is under 90% of the old 20000 peak.
+  assert.equal(countCacheBreaks([req('main', 0, 20000), req('main', 3000, 12000), req('main', 14000, 500)]), 1);
+});
+
+test('parseArgs: --read-trim before --compare control is still rejected', () => {
+  assert.throws(() => parseArgs(['--read-trim', '--compare', 'control', '--scenario', 's']), /--read-trim needs --compare anyray/);
+});
+
+test('armConfig: the private HOME never touches the real ~/.anyray or ~/.claude', () => withCfg((cfgDir) => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'any712-home-'));
+  const oldHome = process.env.HOME;
+  process.env.HOME = fakeHome; // homedir() follows $HOME
+  try {
+    mkdirSync(join(fakeHome, '.anyray'), { recursive: true });
+    const realProfile = join(fakeHome, '.anyray', 'connect.json');
+    const original = JSON.stringify({ ...PROFILE, gateway: GW });
+    writeFileSync(realProfile, original);
+    const liveLike = { ...deps(GW), connect: () => JSON.parse(readFileSync(join(homedir(), '.anyray', 'connect.json'), 'utf8')) };
+    for (const [readTrim, d] of [[true, liveLike], [false, { ...liveLike, connect: () => ({ gateway: 'https://elsewhere.example' }) }]]) {
+      const c = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, readTrim, cfgDir, deps: d });
+      if (c.trimHome) assert.ok(c.trimHome.home.startsWith(cfgDir));
+      const home = c.mcp.mcpServers.anyray.env.HOME;
+      assert.ok(home.startsWith(cfgDir), `MCP HOME ${home} is outside the session dir`);
+    }
+    assert.equal(readFileSync(realProfile, 'utf8'), original); // readTrim was not written back
+    assert.deepEqual(readdirSync(fakeHome).sort(), ['.anyray']); // no .claude/, .claude.json
+    assert.deepEqual(readdirSync(join(fakeHome, '.anyray')), ['connect.json']);
+  } finally {
+    process.env.HOME = oldHome;
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+}));
+
+// ---- pyrepo-docs scenario ------------------------------------------------------------
+
+test('pyrepo-docs scenario: loads, pins a commit and is graded by citations', () => {
+  const s = yaml.load(readFileSync(new URL('../scenarios/pyrepo-docs/scenario.yaml', import.meta.url), 'utf8'));
+  assert.match(s.repo.git, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/);
+  assert.match(s.repo.ref, /^[0-9a-f]{40}$/);
+  assert.ok(Number.isInteger(s.citations.min) && s.citations.min > 0);
+  assert.ok(s.citations.resolveRate > 0 && s.citations.resolveRate <= 1);
+  // Exactly one grading mode, so solved() takes the citations path.
+  assert.equal(s.check, undefined);
+  assert.equal(s.keyFacts, undefined);
+  assert.ok(Number.isInteger(s.maxTurns) && s.maxTurns > 0);
+  assert.ok(s.timeoutMin > 0);
+});
+
+test('checkCitations: resolves Python path:line citations (what pyrepo-docs is graded on)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'any712-cite-'));
+  try {
+    mkdirSync(join(dir, 'pkg', 'loader'), { recursive: true });
+    writeFileSync(join(dir, 'pkg', 'loader', 'lazy.py'), 'a\nb\nc\n');
+    const r = checkCitations('See pkg/loader/lazy.py:3 and ./pkg/loader/lazy.py:2, but not pkg/loader/lazy.py:99 or pkg/nope.py:1.', dir);
+    assert.equal(r.total, 4);
+    assert.equal(r.resolved, 2);
+    assert.deepEqual(r.unresolved.sort(), ['pkg/loader/lazy.py:99', 'pkg/nope.py:1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
