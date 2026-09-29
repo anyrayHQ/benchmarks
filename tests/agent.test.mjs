@@ -64,9 +64,9 @@ test('countCacheBreaks: missing usage counts as zero input and does not throw', 
 // ---- --read-trim: argument parsing ------------------------------------------
 
 test('parseArgs: --read-trim is off by default and on with the flag', () => {
-  assert.equal(parseArgs(['--scenario', 's']).readTrim, false);
-  assert.equal(parseArgs(['--scenario', 's', '--read-trim']).readTrim, true);
-  assert.equal(parseArgs(['--scenario', 's', '--compare', 'anyray', '--read-trim', '--label', 'x']).label, 'x');
+  assert.equal(parseArgs(['--scenario', 's', '--kinds', 'observation_mask']).readTrim, false);
+  assert.equal(parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim']).readTrim, true);
+  assert.equal(parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--compare', 'anyray', '--read-trim', '--label', 'x']).label, 'x');
 });
 
 test('parseArgs: --read-trim needs --compare anyray', () => {
@@ -76,10 +76,10 @@ test('parseArgs: --read-trim needs --compare anyray', () => {
 // ---- --read-trim: Anyray arm only -----------------------------------------------
 
 test('armReadTrim: only the anyray arm gets it', () => {
-  const on = parseArgs(['--scenario', 's', '--read-trim']);
+  const on = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim']);
   assert.equal(armReadTrim(on, 'anyray'), true);
   assert.equal(armReadTrim(on, 'direct'), false);
-  const off = parseArgs(['--scenario', 's']);
+  const off = parseArgs(['--scenario', 's', '--kinds', 'observation_mask']);
   assert.equal(armReadTrim(off, 'anyray'), false);
 });
 
@@ -170,17 +170,17 @@ const RUN = { model: 'm', gatewayUrl: GW };
 const SCN = { maxTurns: 40 };
 
 test('armSetups: records readTrim on the anyray arm only', () => {
-  const s = armSetups(parseArgs(['--scenario', 's', '--read-trim']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: true });
+  const s = armSetups(parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: true });
   assert.equal(s.a.readTrim, null);
   assert.match(s.b.readTrim, /^on for this session only/);
   assert.deepEqual(Object.keys(s.b.hooks).sort(), ['PostToolUse', 'PostToolUseFailure']);
 });
 
 test('armSetups: without the flag the anyray arm records the fleet policy', () => {
-  const s = armSetups(parseArgs(['--scenario', 's']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: true });
+  const s = armSetups(parseArgs(['--scenario', 's', '--kinds', 'observation_mask']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: true });
   assert.equal(s.a.readTrim, null);
   assert.match(s.b.readTrim, /^fleet policy/);
-  const off = armSetups(parseArgs(['--scenario', 's']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: false });
+  const off = armSetups(parseArgs(['--scenario', 's', '--kinds', 'observation_mask']), { a: 'direct', b: 'anyray' }, RUN, SCN, { enrolled: false });
   assert.match(off.b.readTrim, /^off/);
 });
 
@@ -321,15 +321,15 @@ test('armConfig: --arm-env reaches the direct arm and the plain anyray arm too',
 test('--arm-env refuses keys that would reroute an arm or escape its private HOME', () => withCfg((dir) => {
   for (const key of ['HOME', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS', 'ANYRAY_REFRESH_DISABLE']) {
     assert.throws(() => armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: TAG, readTrim: true, cfgDir: dir, env: { [key]: 'x' }, deps: deps(GW) }), /--arm-env cannot set/);
-    assert.throws(() => parseArgs(['--scenario', 's', '--arm-env', `b:${key}=x`]), /--arm-env cannot set/);
+    assert.throws(() => parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--arm-env', `b:${key}=x`]), /--arm-env cannot set/);
   }
 }));
 
 test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slot', () => {
-  const args = parseArgs(['--scenario', 's', '--read-trim', '--arm-env', 'b:K=v']);
+  const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim', '--arm-env', 'b:K=v']);
   const arms = { a: 'direct', b: 'anyray' };
-  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {} });
-  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' } });
+  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {}, kinds: null, kindsSource: null });
+  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' }, kinds: ['observation_mask'], kindsSource: '--kinds' });
   const control = parseArgs(['--scenario', 's', '--compare', 'control', '--arm-env', 'b:K=v']);
   const both = { a: 'direct', b: 'direct' };
   assert.deepEqual(slotOptions(control, both, 'a').env, {});
