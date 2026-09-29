@@ -13,13 +13,15 @@
 // rate vs the 53% noise floor, median, Q3 and max ratio, quality parity.
 //
 // Usage:
-//   node run_agent.mjs --scenario cobra-flag-groups --rounds 1
+//   node run_agent.mjs --scenario cobra-flag-groups --rounds 1 --kinds observation_mask,code_graph
+//     (--compare anyray needs --kinds or --strategy: the Anyray arm sends
+//      x-anyray-optimization-kinds and records each response's x-anyray-optimization-result)
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 6 --compare control
-//   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --label observation_mask
+//   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --kinds observation_mask --label observation_mask
 //   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --strategy thinking_trim
 //     (tags the Anyray arm's x-anyray-metadata with experiment=<kind>; needs
 //      `bench-rule per-experiment <kind>`; each round fails if another strategy acted)
-//   node run_agent.mjs --scenario salt-docs --rounds 3 --label read-trim --read-trim
+//   node run_agent.mjs --scenario salt-docs --rounds 3 --kinds observation_mask --label read-trim --read-trim
 //     (Anyray arm only: anyray-connect's Read trim on for that session, without
 //      touching the shared connect policy; see readTrimHome in lib/agentRun.mjs)
 //   node run_agent.mjs --scenario salt-docs --compare control --label max-ctx \
@@ -40,9 +42,10 @@ import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
+import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds.mjs';
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [] };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -51,12 +54,21 @@ export function parseArgs(argv) {
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
     else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
+    else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (!['anyray', 'control'].includes(a.compare)) throw new Error('--compare anyray|control');
   if (a.strategy && a.compare !== 'anyray') throw new Error('--strategy needs --compare anyray');
   if (a.readTrim && a.compare !== 'anyray') throw new Error('--read-trim needs --compare anyray');
+  if (a.kinds && a.compare !== 'anyray') throw new Error('--kinds needs --compare anyray');
+  // The Anyray arm always names the strategies it measures: the tenant's defaults drift
+  // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
+  if (a.strategy && a.kinds && !a.kinds.includes(a.strategy)) throw new Error(`--strategy ${a.strategy} must be one of --kinds`);
+  if (a.strategy && !a.kinds) [a.kinds, a.kindsSource] = [parseKinds(a.strategy), '--strategy'];
+  if (a.compare === 'anyray' && !a.kinds) {
+    throw new Error('--compare anyray needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults');
+  }
   a.label ??= a.strategy;
   a.env = parseArmEnv(a.armEnv);
   assertArmEnvSafe(a.env.a);
@@ -71,7 +83,13 @@ export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
  * --arm-env follows the SLOT (a/b): under --compare control both slots are 'direct'.
  */
-export const slotOptions = (args, arms, slot) => ({ arm: arms[slot], readTrim: armReadTrim(args, arms[slot]), env: args.env?.[slot] ?? {} });
+export const slotOptions = (args, arms, slot) => ({
+  arm: arms[slot],
+  readTrim: armReadTrim(args, arms[slot]),
+  env: args.env?.[slot] ?? {},
+  kinds: arms[slot] === 'anyray' ? args.kinds ?? null : null,
+  kindsSource: arms[slot] === 'anyray' ? args.kindsSource ?? null : null,
+});
 
 /** Both arms' setup, as recorded in the result file. */
 export function armSetups(args, arms, run, scenario, { enrolled } = {}) {
@@ -160,6 +178,7 @@ async function main() {
   record.label = args.label;
   record.gateway = run.gatewayUrl;
   record.readTrim = args.readTrim;
+  record.kinds = args.kinds; // what the Anyray arm requested (x-anyray-optimization-kinds)
   record.arms = arms;
   record.setup = armSetups(args, arms, run, scenario);
   if (args.compare === 'anyray') {
@@ -196,6 +215,8 @@ async function main() {
       // the gateway recorded doing on each request.
       r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
       r.traces = await sessionTraces(run.gatewayUrl, runTag.sessionId, { waitMs: 30000 });
+      // What the gateway reported doing with the requested kinds, per request.
+      r.optimization = sessions.b.optimization?.tally ?? null;
       if (args.strategy) {
         // Isolation check: nothing but the named strategy may have acted on this session.
         const others = new Set((r.traces?.traces ?? []).flatMap((t) => (t.decisions ?? []).map((d) => d.kind)).filter((k) => k !== args.strategy && k !== 'mint_economics')); // mint_economics = the strategy's own admission estimate
@@ -209,7 +230,8 @@ async function main() {
     console.log(
       `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
         `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${tb.hookTrimmed} hook-trimmed · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
-        `  ratio B/A ${r.ratio?.toFixed(3)}`
+        `  ratio B/A ${r.ratio?.toFixed(3)}` +
+        (r.optimization ? `\n  ${formatKindTally(r.optimization)}` : '')
     );
     record.stats = rule0(record.rounds.filter((x) => !x.error));
     writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
@@ -221,6 +243,8 @@ async function main() {
     `\n${args.scenario} [${args.compare}] after ${s.n} round(s): wins ${s.wins}/${s.n}, median ${s.median?.toFixed(2)}, Q3 ${s.q3?.toFixed(2)}, max ${s.max?.toFixed(2)} → ${s.verdict}` +
       (s.reasons.length ? `\n  ${s.reasons.join('\n  ')}` : '')
   );
+  const feedback = record.rounds.flatMap((x) => x.sessions?.b?.optimization?.results ?? []);
+  if (args.kinds && feedback.length) console.log(`  all rounds, ${formatKindTally(tallyKinds(feedback, args.kinds))}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
