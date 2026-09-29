@@ -54,9 +54,17 @@ function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0 };
   let mainIn = 0;
   let subIn = 0;
+  // A cache break: an agent's request reads less than 90% of what its previous request
+  // sent. Its history only grows, so the prefix changed under it and was re-billed as a
+  // cache write. Direct sessions read ~0; a gateway that edits history unevenly shows up here.
+  t.cacheBreaks = 0;
+  const lastInput = new Map();
   for (const r of session.requests) {
     const u = { ...(r.usage ?? {}), output_tokens: 0 };
     r.inputTotal = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    const prev = lastInput.get(r.agent);
+    if (prev && (u.cache_read_input_tokens ?? 0) < prev * 0.9) t.cacheBreaks++;
+    lastInput.set(r.agent, r.inputTotal);
     r.inputCostUsd = costOfAnthropicUsage(pricing, r.model, u);
     delete r.usage.output_tokens; // message-start snapshot, not the real count
     if (r.agent === 'main') mainIn += r.inputCostUsd ?? 0;
@@ -160,8 +168,8 @@ async function main() {
     const ta = sessions.a.totals;
     const tb = sessions.b.totals;
     console.log(
-      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
-        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
+      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
+        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
         `  ratio B/A ${r.ratio?.toFixed(3)}`
     );
     record.stats = rule0(record.rounds.filter((x) => !x.error));
