@@ -13,7 +13,10 @@
 // Per round: cost (Claude Code's billed total, cache-aware), turns, model requests,
 // subagents and their share, whether the task was solved (a check command, or key
 // facts in the answer), and the ratio B ÷ A. Across rounds: the Rule 0 verdict — win
-// rate vs the 53% noise floor, median, Q3 and max ratio, quality parity.
+// rate vs the 53% noise floor, median, Q3 and max ratio — over SOLVED PAIRS only (both
+// arms solved; fewer than 3 is insufficient). Rounds one arm solved are quality events,
+// never cost wins; timeouts/crashes (no cost) are excluded and listed. The old
+// all-rounds line is still printed below it.
 //
 // Usage:
 //   node run_agent.mjs --scenario cobra-flag-groups --rounds 1 --kinds observation_mask,code_graph
@@ -31,6 +34,11 @@
 //     --arm-env b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
 //     (extra Claude Code settings env on arm a, b, or both with no prefix; repeatable.
 //      Combines with --read-trim: the env goes into the session settings, not the private HOME)
+//   node run_agent.mjs --scenario saltstack-docs --rounds 5 --kinds observation_mask --no-subagents --max-turns 80 --with-control
+//     (--max-turns N: both arms' turn cap instead of the scenario's, recorded in setup;
+//      --with-control: a direct-vs-direct control runs in parallel, same scenario, rounds,
+//      turn cap and subagent setting, into <scenario>--control--<label|compare>-control.json;
+//      its solved-pair median and range are printed as the noise band beside the verdict)
 //   node run_agent.mjs --scenario cobra-3pause --kinds observation_mask --no-subagents --experiment idle-kw
 //     (--no-subagents: both arms run without Task/Workflow; --experiment <name>: the Anyray
 //      arm sends experiment=<name> in x-anyray-metadata, for a gateway rule keyed on it)
@@ -49,7 +57,7 @@ import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
-import { rule0 } from './lib/stats.mjs';
+import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
@@ -72,8 +80,13 @@ export const gatewaySlots = (arms) => ['a', 'b'].filter((slot) => arms[slot] ===
  */
 const carriesExtraHeaders = (arms, slot) => slot === 'b' && arms.b === 'anyray';
 
+function parseMaxTurns(v) {
+  if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--max-turns needs a positive integer, got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  return Number(v);
+}
+
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -85,6 +98,8 @@ export function parseArgs(argv) {
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
+    else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
+    else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -93,6 +108,7 @@ export function parseArgs(argv) {
   for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
   }
+  if (a.withControl && a.compare === 'control') throw new Error('--with-control adds a direct-vs-direct control; --compare control already is one');
   if (a.experiment && a.strategy) throw new Error('--experiment and --strategy both set the experiment tag: use one');
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
@@ -107,6 +123,29 @@ export function parseArgs(argv) {
   assertArmEnvSafe(a.env.b);
   return a;
 }
+
+/** The scenario as both arms run it: --max-turns replaces its turn cap. */
+export const effectiveScenario = (scenario, args) => (args.maxTurns ? { ...scenario, maxTurns: args.maxTurns } : scenario);
+
+/**
+ * --with-control: the direct-vs-direct run beside the main one. Same scenario, rounds,
+ * turn cap and subagent setting; nothing gateway-side, no per-arm env (a treatment);
+ * its own result file (label suffixed -control).
+ */
+export const controlArgs = (args) => ({
+  ...args,
+  compare: 'control',
+  label: `${args.label ?? args.compare}-control`,
+  kinds: null,
+  kindsSource: null,
+  strategy: null,
+  experiment: null,
+  readTrim: false,
+  armEnv: [],
+  env: { a: {}, b: {} },
+  extraHeaders: [],
+  withControl: false,
+});
 
 /** `--read-trim` applies to the Anyray arm only. */
 export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
@@ -174,9 +213,10 @@ export function roundTag(args, round, now = Date.now()) {
 
 /** Both arms' setup, as recorded in the result file. */
 export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) {
-  const one = (slot) => describeSetup({
+  const describe = (slot) => describeSetup({
     ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled, tenant,
   });
+  const one = (slot) => ({ ...describe(slot), maxTurnsSource: args.maxTurns ? '--max-turns' : 'scenario' });
   return { a: one('a'), b: one('b') };
 }
 
@@ -251,19 +291,91 @@ function solved(scenario, session) {
   return (scenario.keyFacts ?? []).every((f) => text.includes(f));
 }
 
+const x2 = (v) => (v == null ? 'n/a' : v.toFixed(2));
+
+const BAND_SAYS = {
+  below: 'is below the noise band: cheaper beyond direct-vs-direct noise',
+  inside: 'is inside the noise band: not distinguishable from noise',
+  above: 'is above the noise band: costs more beyond direct-vs-direct noise',
+};
+
+/**
+ * The end-of-run printout. First the Rule 0 verdict over solved pairs (both arms solved),
+ * the rounds only one arm solved (quality events), the rounds without a cost (timeouts,
+ * crashes); then, with --with-control, the control's noise band; last, the pre-ANY-733
+ * all-rounds line unchanged, so earlier outputs stay comparable.
+ */
+export function formatVerdict({ scenario, compare, rounds, controlRounds }) {
+  const kept = rounds.filter((x) => !x.gatewayRestarted);
+  const v = solvedPairVerdict(kept);
+  const p = v.stats;
+  const out = [
+    `\n${scenario} [${compare}] solved pairs ${v.k}/${v.n}: wins ${p.wins}/${v.k}, median ${x2(p.median)}, Q3 ${x2(p.q3)}, max ${x2(p.max)} → ${v.verdict}`,
+  ];
+  if (v.insufficient) out.push(`  verdict insufficient: ${v.reasons[0]}`);
+  out.push(...v.reasons.slice(v.insufficient ? 1 : 0).map((x) => `  ${x}`));
+  if (v.qualityEvents.length) out.push(`  quality events (one arm solved): ${v.qualityEvents.map((e) => `round ${e.round} ${e.solvedBy.toUpperCase()} only`).join(', ')}`);
+  if (v.neither.length) out.push(`  neither arm solved: round(s) ${v.neither.join(', ')}`);
+  if (v.noCost.length) out.push(`  no cost (timeout/crash), excluded: ${v.noCost.map((e) => `round ${e.round} (${e.reason})`).join(', ')}`);
+  if (controlRounds) {
+    const band = noiseBand(solvedPairVerdict(controlRounds.filter((x) => !x.gatewayRestarted)));
+    if (!band) out.push('  noise band (control): n/a, no solved pairs');
+    else {
+      out.push(`  noise band (control, ${band.k} solved pairs): median ${x2(band.median)}, range ${x2(band.min)}–${x2(band.max)}`);
+      const pos = bandPosition(p.median, band);
+      out.push(`  median ${x2(p.median)} ${pos ? BAND_SAYS[pos] : 'n/a: no solved pairs to compare'}`);
+    }
+  }
+  const s = rule0(scoredRounds(rounds));
+  const dropped = rounds.filter((x) => x.gatewayRestarted).map((x) => x.round);
+  out.push(
+    `  all rounds (pre-ANY-733 verdict, unsolved sessions included): ${scenario} [${compare}] after ${s.n} round(s): wins ${s.wins}/${s.n}, median ${s.median?.toFixed(2)}, Q3 ${s.q3?.toFixed(2)}, max ${s.max?.toFixed(2)} → ${s.verdict}` +
+      (dropped.length ? `\n  dropped (gateway restarted): round(s) ${dropped.join(', ')}` : '') +
+      (s.reasons.length ? `\n    ${s.reasons.join('\n    ')}` : '')
+  );
+  return out.join('\n');
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const cfg = loadConfig();
+  // --with-control: the control runs at the same time as the main comparison, so both
+  // see the same upstream conditions; its rounds give the noise band.
+  // Their round lines interleave, so each carries its comparison's tag.
+  const jobs = [runComparison(args, cfg, { prefix: args.withControl ? `[${args.compare}] ` : '' })];
+  if (args.withControl) jobs.push(runComparison(controlArgs(args), cfg, { prefix: '[control] ' }));
+  const [main, control] = await Promise.allSettled(jobs);
+  if (main.status === 'rejected') throw main.reason;
+  if (control?.status === 'rejected') console.log(`control run failed: ${control.reason?.message ?? control.reason}`);
+  const { record, file, viaGateway } = main.value;
+  const controlRecord = control?.status === 'fulfilled' ? control.value.record : null;
+  if (controlRecord) console.log(formatVerdict({ scenario: args.scenario, compare: 'control', rounds: controlRecord.rounds }).replace(/\n(?!$)/g, '\n[control] '));
+  if (controlRecord) {
+    record.control = { file: resultFileName(controlArgs(args)) };
+    record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
+    writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
+  }
+  console.log(formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds }));
+  for (const slot of viaGateway) {
+    const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
+    if (args.kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, args.kinds))}`);
+  }
+}
+
+/** One comparison's rounds, into its own result file. Returns the record. */
+async function runComparison(args, cfg, { prefix = '' } = {}) {
+  const log = (msg) => console.log(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   if (args.compare === 'gateway' && !args.extraHeaders.length) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
-  const cfg = loadConfig();
   const { run, pricing } = cfg;
   if (viaGateway.length && !run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
   const dir = join(cfg.root, 'scenarios', args.scenario);
-  const scenario = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenario = effectiveScenario(scenarioFile, args); // what both arms run (--max-turns)
 
   const out = join(cfg.root, 'results', 'agent');
   mkdirSync(out, { recursive: true });
@@ -272,7 +384,7 @@ async function main() {
 
   // Static context: the repo, both arms' setup, what Anyray has turned on.
   const probe = prepareRepo(scenario, dir);
-  record.scenario = { name: args.scenario, ...scenario, repoInfo: describeRepo(probe, scenario) };
+  record.scenario = { name: args.scenario, ...scenarioFile, repoInfo: describeRepo(probe, scenario) };
   rmSync(probe, { recursive: true, force: true });
   record.compare = args.compare;
   record.label = args.label;
@@ -293,7 +405,7 @@ async function main() {
   for (let k = 0; k < args.rounds; k++) {
     const round = record.rounds.length + 1;
     const runTags = roundTags(args, round);
-    console.log(`${args.scenario} [${args.compare}] round ${round}: ${armLabel(args, arms, 'a')} ‖ ${armLabel(args, arms, 'b')} (concurrent)…`);
+    log(`${args.scenario} [${args.compare}] round ${round}: ${armLabel(args, arms, 'a')} ‖ ${armLabel(args, arms, 'b')} (concurrent)…`);
     const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag: runTags[slot] });
     // Replica start times around the round: a gateway restart under it spoils the pair.
     const replicasBefore = viaGateway.length ? await gatewayReplicaStarts(run.gatewayUrl) : null;
@@ -302,7 +414,7 @@ async function main() {
     const endedAt = new Date().toISOString();
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
-      console.log(`  round ${round} failed: ${err}`);
+      log(`  round ${round} failed: ${err}`);
       record.rounds.push({ round, error: err });
       writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
       continue;
@@ -317,7 +429,7 @@ async function main() {
     const spend = {};
     for (const slot of viaGateway) {
       spend[slot] = await sessionGatewaySpend(run.gatewayUrl, sessions[slot].init?.sessionId);
-      if (spend[slot].unavailable) console.log(`  warning: gateway ping cost unavailable (${spend[slot].unavailable}); ${slot.toUpperCase()} cost is the client figure only`);
+      if (spend[slot].unavailable) log(`  warning: gateway ping cost unavailable (${spend[slot].unavailable}); ${slot.toUpperCase()} cost is the client figure only`);
       sessions[slot].totals = addGatewayPings(sessions[slot].totals, spend[slot]);
     }
     // --compare anyray keeps its one-arm shape; gateway records both slots.
@@ -338,7 +450,7 @@ async function main() {
     if (viaGateway.length) {
       r.gatewayReplicas = { before: replicasBefore, after: await gatewayReplicaStarts(run.gatewayUrl) };
       r.gatewayRestarted = restartedDuring(r.gatewayReplicas.before, r.gatewayReplicas.after);
-      if (r.gatewayRestarted) console.log('  WARNING: the gateway restarted during this round; drop it from the comparison');
+      if (r.gatewayRestarted) log('  WARNING: the gateway restarted during this round; drop it from the comparison');
       // Config as it stood for this round (org strategies + the bench rule), and what
       // the gateway recorded doing on each request.
       r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
@@ -358,7 +470,7 @@ async function main() {
         for (const slot of viaGateway) {
           const others = new Set((traces[slot]?.traces ?? []).flatMap((t) => (t.decisions ?? []).map((d) => d.kind)).filter((k) => k !== args.strategy && k !== 'mint_economics')); // mint_economics = the strategy's own admission estimate
           iso[slot] = others.size ? { ok: false, otherKinds: [...others] } : { ok: true };
-          if (others.size) console.log(`  ISOLATION BROKEN on ${slot.toUpperCase()}: ${[...others].join(', ')} also acted`);
+          if (others.size) log(`  ISOLATION BROKEN on ${slot.toUpperCase()}: ${[...others].join(', ')} also acted`);
         }
         r.isolation = iso.b;
         if (args.compare === 'gateway') r.isolationA = iso.a;
@@ -371,28 +483,20 @@ async function main() {
       `  ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
-    console.log(
+    log(
       `${line('a', ta)}\n${line('b', tb)}\n` +
         `  ratio B/A ${r.ratio?.toFixed(3)}` +
         (r.optimizationA ? `\n  A ${formatKindTally(r.optimizationA)}` : '') +
         (r.optimization ? `\n  ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds));
+    record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
     writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
   }
-  const s = rule0(scoredRounds(record.rounds));
-  const dropped = record.rounds.filter((x) => x.gatewayRestarted).map((x) => x.round);
-  record.stats = s;
+  record.stats = rule0(scoredRounds(record.rounds)); // all rounds, as before (the report reads it)
+  record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // solved pairs only
   writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
-  console.log(
-    `\n${args.scenario} [${args.compare}] after ${s.n} round(s): wins ${s.wins}/${s.n}, median ${s.median?.toFixed(2)}, Q3 ${s.q3?.toFixed(2)}, max ${s.max?.toFixed(2)} → ${s.verdict}` +
-      (dropped.length ? `\n  dropped (gateway restarted): round(s) ${dropped.join(', ')}` : '') +
-      (s.reasons.length ? `\n  ${s.reasons.join('\n  ')}` : '')
-  );
-  for (const slot of viaGateway) {
-    const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
-    if (args.kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, args.kinds))}`);
-  }
+  return { record, file, viaGateway };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
