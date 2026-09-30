@@ -53,3 +53,8 @@ test('parseSession records each compaction with its trigger and pre-compaction s
   assert.deepEqual(parseSession(lines).compactions, [{ trigger: 'auto', preTokens: 190000 }]);
   assert.deepEqual(parseSession(lines.filter((l) => !l.includes('compact'))).compactions, []);
 });
+
+test('withArmEnv: a value of "-" removes the key, so an arm can run without a setting connect writes', () => {
+  const connect = { env: { ANTHROPIC_BASE_URL: 'http://gw', ENABLE_TOOL_SEARCH: 'auto:20' } };
+  assert.deepEqual(withArmEnv(connect, { ENABLE_TOOL_SEARCH: '-' }), { env: { ANTHROPIC_BASE_URL: 'http://gw' } });
+});
