@@ -157,10 +157,13 @@ const usd = (n, d = 3) => (n == null ? '—' : '$' + n.toFixed(d));
 const secs = (ms) => (ms == null ? '—' : (ms / 1000).toFixed(0) + ' s');
 const x2 = (n) => (n == null ? '—' : n.toFixed(2) + '×');
 const NS = 'http://www.w3.org/2000/svg';
-const armName = (arm) => (arm === 'anyray' ? 'Through Anyray' : 'Direct');
-const label = (r) => r.scenario.name + (r.compare === 'control' ? ' · control' : ' · Anyray') + (r.label ? ' · ' + r.label : '');
+// Under --compare gateway both slots go through Anyray; B adds ANYRAY_BENCH_EXTRA_HEADERS.
+const armName = (r, key) => r.compare === 'gateway'
+  ? 'Through Anyray' + (key === 'b' && r.request?.extraHeaders?.length ? ' + ' + r.request.extraHeaders.join(', ') : ' (baseline)')
+  : r.arms[key] === 'anyray' ? 'Through Anyray' : 'Direct';
+const label = (r) => r.scenario.name + ({ control: ' · control', gateway: ' · gateway A/B' }[r.compare] ?? ' · Anyray') + (r.label ? ' · ' + r.label : '');
 const verdictChip = (v) => '<span class="chip ' + ({ PASS: 'good', FAIL: 'bad', INCONCLUSIVE: 'warn' }[v] || '') + '">' + esc(v) + '</span>';
-const okRounds = (r) => r.rounds.filter((x) => !x.error);
+const okRounds = (r) => r.rounds.filter((x) => !x.error && !x.gatewayRestarted);
 
 function svg(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
 function text(parent, x, y, s, attrs) { const t = svg('text', Object.assign({ x, y, 'font-size': 12 }, attrs || {}), parent); t.textContent = s; return t; }
@@ -231,7 +234,7 @@ function setupCard(r, key) {
   const mcp = Object.entries(s.mcpServers || {});
   const headers = Object.entries(s.headers || {});
   const cls = key === 'b' && s.arm === 'anyray' ? 'b' : 'a';
-  return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(s.arm) + '</h2></div><dl class="kv">' +
+  return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2></div><dl class="kv">' +
     '<dt>Client</dt><dd>' + esc(s.client) + '</dd><dt>Model</dt><dd class="mono">' + esc(s.model) + '</dd>' +
     '<dt>Endpoint</dt><dd class="mono">' + esc(s.endpoint) + '</dd><dt>Auth</dt><dd>' + esc(s.auth) + '</dd>' +
     '<dt>Headers</dt><dd>' + (headers.length ? headers.map(([k, v]) => '<div class="mono">' + esc(k) + ': ' + esc(typeof v === 'string' ? v : JSON.stringify(v)) + '</div>').join('') : '<span class="muted">none</span>') + '</dd>' +
@@ -283,7 +286,7 @@ function requestsCard(r, round, key) {
   }).join('');
   const t = s.totals;
   const cls = key === 'b' && r.arms.b === 'anyray' ? 'b' : 'a';
-  return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r.arms[key]) + '</h2></div>' +
+  return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2></div>' +
     '<div class="muted num">' + t.turns + ' turns · ' + t.requests + ' model requests · ' + t.subagents + ' subagents (' + Math.round(t.subagentInputShare * 100) + '% of input cost) · ' + t.toolCalls + ' tool calls' + (t.hookTrimmed ? ' · ' + t.hookTrimmed + ' trimmed' : '') + '</div>' + rows + '</div>';
 }
 
@@ -291,7 +294,7 @@ function resultCard(r, round, key) {
   const s = round.sessions[key];
   const cls = key === 'b' && r.arms.b === 'anyray' ? 'b' : 'a';
   const ok = round.quality[key];
-  return '<div class="panel stack"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r.arms[key]) + '</h2><span class="chip ' + (ok ? 'good' : 'bad') + '">' + (ok ? 'solved' : 'not solved') + '</span></div>' +
+  return '<div class="panel stack"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2><span class="chip ' + (ok ? 'good' : 'bad') + '">' + (ok ? 'solved' : 'not solved') + '</span></div>' +
     (r.scenario.check ? '<div><h3>Check · <span class="mono">' + esc(r.scenario.check) + '</span></h3><pre class="scroll" style="max-height:140px">' + esc(s.check?.output || '') + '</pre></div>' : '') +
     (s.citations ? '<div><h3>Citations</h3><div class="num">' + s.citations.resolved + ' of ' + s.citations.total + ' path:line citations resolve to real lines' + (s.citations.unresolved.length ? '<div class="muted mono">unresolved: ' + esc(s.citations.unresolved.join(', ')) + '</div>' : '') + '</div></div>' : '') +
     (s.diff ? '<div><h3>Changes it made</h3><pre class="scroll" style="max-height:220px">' + esc(s.diffPatch || s.diff) + '</pre></div>' : '<div class="muted">No file changes.</div>') +
@@ -324,8 +327,8 @@ function renderDetail() {
 
   h += '<section class="stack"><h3>Harness setup</h3><div class="duo">' + setupCard(r, 'a') + setupCard(r, 'b') + '</div></section>';
 
-  h += '<section class="panel stack"><div class="row between"><h2>Rounds</h2><span class="muted">Select a round to inspect it.</span></div><div class="tablewrap"><table><thead><tr><th>Round</th><th class="r">Cost A → B</th><th class="r">Ratio</th><th class="r">Turns A → B</th><th class="r">Subagents A → B</th><th class="r">Input A → B</th><th>Solved A / B</th>' + (r.compare === 'anyray' ? '<th>Saved by</th>' : '') + '</tr></thead><tbody>' +
-    rounds.map((x, k) => { const a = x.sessions.a.totals, b = x.sessions.b.totals; return '<tr class="pick" tabindex="0" data-k="' + k + '" aria-selected="' + (x === round) + '"><td class="num">' + x.round + '</td><td class="r">' + usd(a.costUsd) + ' → ' + usd(b.costUsd) + '</td><td class="r ' + (x.ratio < 0.999 ? 'good-t' : x.ratio > 1.001 ? 'bad-t' : '') + '">' + x2(x.ratio) + '</td><td class="r">' + a.turns + ' → ' + b.turns + '</td><td class="r">' + a.subagents + ' → ' + b.subagents + '</td><td class="r">' + int(a.input) + ' → ' + int(b.input) + '</td><td>' + (x.quality.a ? '✓' : '✕') + ' / ' + (x.quality.b ? '✓' : '✕') + '</td>' + (r.compare === 'anyray' ? '<td>' + workedChips(x.traces?.traces ?? [], !!x.traces?.traces) + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div></section>';
+  h += '<section class="panel stack"><div class="row between"><h2>Rounds</h2><span class="muted">Select a round to inspect it.</span></div><div class="tablewrap"><table><thead><tr><th>Round</th><th class="r">Cost A → B</th><th class="r">Ratio</th><th class="r">Turns A → B</th><th class="r">Subagents A → B</th><th class="r">Input A → B</th><th>Solved A / B</th>' + (r.compare !== 'control' ? '<th>Saved by</th>' : '') + '</tr></thead><tbody>' +
+    rounds.map((x, k) => { const a = x.sessions.a.totals, b = x.sessions.b.totals; return '<tr class="pick" tabindex="0" data-k="' + k + '" aria-selected="' + (x === round) + '"><td class="num">' + x.round + '</td><td class="r">' + usd(a.costUsd) + ' → ' + usd(b.costUsd) + '</td><td class="r ' + (x.ratio < 0.999 ? 'good-t' : x.ratio > 1.001 ? 'bad-t' : '') + '">' + x2(x.ratio) + '</td><td class="r">' + a.turns + ' → ' + b.turns + '</td><td class="r">' + a.subagents + ' → ' + b.subagents + '</td><td class="r">' + int(a.input) + ' → ' + int(b.input) + '</td><td>' + (x.quality.a ? '✓' : '✕') + ' / ' + (x.quality.b ? '✓' : '✕') + '</td>' + (r.compare !== 'control' ? '<td>' + workedChips(x.traces?.traces ?? [], !!x.traces?.traces) + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div></section>';
 
   if (!round) { $('#detail').innerHTML = h; return; }
   const a = round.sessions.a.totals, b = round.sessions.b.totals;
@@ -333,7 +336,7 @@ function renderDetail() {
     kpi('Cost', a.costUsd, b.costUsd, (n) => usd(n)) + kpi('Input tokens', a.input, b.input, int) + kpi('Output tokens', a.output, b.output, int) +
     kpi('Turns', a.turns, b.turns, int) + kpi('Subagents', a.subagents, b.subagents, int) + kpi('Wall time', a.wallMs, b.wallMs, secs) + '</div>' +
     '<div class="legend"><span><i style="background:var(--read)"></i>cache read (0.1×)</span><span><i style="background:var(--write)"></i>cache write (2× for 1h)</span><span><i style="background:var(--fresh)"></i>uncached input</span><span><i style="background:var(--sub)"></i>subagent request</span></div></section>';
-  if (r.compare === 'anyray') {
+  if (r.compare !== 'control') {
     h += anyrayCard(r, round);
     h += '<section class="panel stack"><div class="row between"><h2>Gateway strategies in round ' + round.round + '</h2><span class="muted">On for this test, and what each one did across the round\'s requests</span></div>' + strategyPanel(r, round) + '</section>';
   }
