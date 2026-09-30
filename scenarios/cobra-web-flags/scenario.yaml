@@ -1,0 +1,21 @@
+title: "cobra + web lookup — how cobra hands flags to spf13/pflag (needs WebFetch mid-session)"
+# The agent reads local code first, then has to fetch upstream docs, so a web tool
+# is first used mid-session (~30-50k context), not on the opening turn.
+repo:
+  git: https://github.com/spf13/cobra.git
+  ref: adbc8813901bba65827259daa8e22ff94ec1f30e
+task: >-
+  First read this repo to find where cobra parses a command's flags and which
+  pflag APIs it calls. Then fetch the upstream pflag README
+  (https://raw.githubusercontent.com/spf13/pflag/master/README.md) with your web
+  fetch tool and explain, citing both, how cobra's flag handling relies on
+  pflag's interspersed-argument and shorthand behavior. Cite file and function
+  names from the repo and quote the README section names you used.
+keyFacts:
+  - "ParseFlags"
+  - "command.go"
+  - "FlagSet"
+  - "Interspersed"
+  - "shorthand"
+maxTurns: 25
+timeoutMin: 8
