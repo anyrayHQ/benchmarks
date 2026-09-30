@@ -36,8 +36,20 @@ Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
 - **Q3 ratio below 1:** Anyray must still be cheaper at the third quartile, so no more than a quarter of rounds may cost more.
 - **Quality parity:** Anyray must solve as many rounds as direct.
 
+The verdict counts **solved pairs only**: rounds where both arms solved the task. A
+session that didn't solve it (e.g. it hit the turn cap) measured cost, not quality, so a
+cheap failure is never a win. Rounds only one arm solved are listed as quality events
+(who solved), rounds neither solved are listed apart, and rounds where an arm timed out
+or crashed (no cost) are excluded and listed. With fewer than 3 solved pairs the verdict
+is `INSUFFICIENT`. The earlier all-rounds line is still printed below it, and saved as
+`stats` (the solved-pair verdict is `verdict`).
+
 A **control** comparison (`--compare control`) runs direct against direct to show how
 far two identical setups drift apart. A result inside that band proves nothing.
+`--with-control` runs one alongside the main comparison, in parallel, with the same
+scenario, rounds, `--max-turns` and `--no-subagents`, into its own file (label suffixed
+`-control`), and prints its solved-pair median and range next to the verdict as the
+noise band, saying whether the main median falls below, inside or above it.
 
 A **gateway** comparison (`--compare gateway`) runs the Anyray arm in both slots and
 sends `ANYRAY_BENCH_EXTRA_HEADERS` on B only. Both arms carry everything the gateway
@@ -114,6 +126,8 @@ it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
 
 ### Other run options
 
+- `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in
+  each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`).
 - `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
   neither can spawn subagents. Recorded in the result's `request.noSubagents`.
 - `--experiment <name>` (`--compare anyray`): the Anyray arm sends `experiment=<name>` in
