@@ -136,6 +136,16 @@ export const requestRecord = (args) => ({
 /** results/agent/<scenario>--<compare>[--<label>].json */
 export const resultFileName = (args) => `${args.scenario}--${args.compare}${args.label ? `--${args.label}` : ''}.json`;
 
+/**
+ * B ÷ A cost. An arm that ended without a result event (timed out, killed) has no
+ * cost: the round is an error, never a ratio of 0 or ∞.
+ */
+export function roundRatio(a, b) {
+  const missing = [['A', a], ['B', b]].filter(([, s]) => s.totals.costUsd == null).map(([n]) => n);
+  if (missing.length) return { ratio: null, error: `${missing.join(' and ')} ended without a result (no cost)` };
+  return { ratio: a.totals.costUsd ? b.totals.costUsd / a.totals.costUsd : null };
+}
+
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
 export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gatewayRestarted);
 
@@ -321,7 +331,7 @@ async function main() {
       startedAt,
       endedAt,
       sessions,
-      ratio: sessions.a.totals.costUsd ? sessions.b.totals.costUsd / sessions.a.totals.costUsd : null,
+      ...roundRatio(sessions.a, sessions.b),
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
       gatewaySpend,
     };

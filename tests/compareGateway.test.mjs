@@ -10,6 +10,7 @@ import {
   parseArgs,
   requestRecord,
   resultFileName,
+  roundRatio,
   roundTags,
   scoredRounds,
   slotOptions,
@@ -103,4 +104,11 @@ test('parallelToolTurns: counts main-agent requests with more than one tool call
   const rq = (agent, n) => ({ agent, blocks: Array.from({ length: n }, () => ({ type: 'tool_use' })) });
   assert.equal(parallelToolTurns([rq('main', 1), rq('main', 3), rq('main', 2), rq('sub', 4), rq('main', 0)]), 2);
   assert.equal(parallelToolTurns([]), 0);
+});
+
+test('roundRatio: an arm with no result (timed out, killed) makes the round unscorable, not ratio 0', () => {
+  const s = (costUsd) => ({ totals: { costUsd } });
+  assert.deepEqual(roundRatio(s(2), s(1)), { ratio: 0.5 });
+  assert.deepEqual(roundRatio(s(2), s(null)), { ratio: null, error: 'B ended without a result (no cost)' });
+  assert.deepEqual(roundRatio(s(null), s(1)), { ratio: null, error: 'A ended without a result (no cost)' });
 });
