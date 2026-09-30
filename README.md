@@ -107,6 +107,17 @@ npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mas
 npm run agent:report     # → results/agent/report.html
 ```
 
+`--parallel N` runs up to N rounds at once (default 2, max 4). Each round is still a
+pair of concurrent sessions, so N rounds means up to 2N Claude Code sessions, all on the
+one subscription, which is why the cap is low. `--parallel 1` runs rounds one after
+another. Rounds are numbered when the run starts, each is saved as soon as it finishes
+(an interrupted run keeps every finished round), and the result file stays in round
+order whichever finishes first. Round lines print as each round finishes, prefixed with
+its round number. With `--with-control`, the main comparison and the control share the
+one budget: at most N rounds in flight across both (at most 2N sessions), half the slots
+each (rounded up) while both are running. The default of 2 therefore runs one main and
+one control round side by side. The value is recorded as `parallel` in each arm's setup.
+
 Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so re-running adds
 rounds. `--label <name>` keeps a run in its own file (e.g. a single-strategy run). `results/` is local only, because transcripts hold tool output. Share the
 report instead.
