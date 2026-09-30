@@ -21,13 +21,18 @@
 //   node run_agent.mjs --scenario cobra-dispatch --rounds 6 --strategy thinking_trim
 //     (tags the Anyray arm's x-anyray-metadata with experiment=<kind>; needs
 //      `bench-rule per-experiment <kind>`; each round fails if another strategy acted)
-//   node run_agent.mjs --scenario salt-docs --rounds 3 --kinds observation_mask --label read-trim --read-trim
+//   node run_agent.mjs --scenario saltstack-docs --rounds 3 --kinds observation_mask --label read-trim --read-trim
 //     (Anyray arm only: anyray-connect's Read trim on for that session, without
 //      touching the shared connect policy; see readTrimHome in lib/agentRun.mjs)
-//   node run_agent.mjs --scenario salt-docs --compare control --label max-ctx \
+//   node run_agent.mjs --scenario saltstack-docs --compare control --label max-ctx \
 //     --arm-env b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
 //     (extra Claude Code settings env on arm a, b, or both with no prefix; repeatable.
 //      Combines with --read-trim: the env goes into the session settings, not the private HOME)
+//   node run_agent.mjs --scenario cobra-3pause --kinds observation_mask --no-subagents --experiment idle-kw
+//     (--no-subagents: both arms run without Task/Workflow; --experiment <name>: the Anyray
+//      arm sends experiment=<name> in x-anyray-metadata, for a gateway rule keyed on it)
+//   ANYRAY_BENCH_EXTRA_HEADERS=$'x-example: 1' node run_agent.mjs …
+//     (extra "name: value" gateway headers on the Anyray arm, newline-separated)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -35,18 +40,18 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { rule0 } from './lib/stats.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
-import { connectPolicy, optimizerConfig, sessionTraces } from './lib/traces.mjs';
+import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -56,6 +61,8 @@ export function parseArgs(argv) {
     else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
+    else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
+    else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -63,6 +70,8 @@ export function parseArgs(argv) {
   if (a.strategy && a.compare !== 'anyray') throw new Error('--strategy needs --compare anyray');
   if (a.readTrim && a.compare !== 'anyray') throw new Error('--read-trim needs --compare anyray');
   if (a.kinds && a.compare !== 'anyray') throw new Error('--kinds needs --compare anyray');
+  if (a.experiment && a.compare !== 'anyray') throw new Error('--experiment needs --compare anyray');
+  if (a.experiment && a.strategy) throw new Error('--experiment and --strategy both set the experiment tag: use one');
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
   if (a.strategy && a.kinds && !a.kinds.includes(a.strategy)) throw new Error(`--strategy ${a.strategy} must be one of --kinds`);
@@ -90,7 +99,24 @@ export const slotOptions = (args, arms, slot) => ({
   env: args.env?.[slot] ?? {},
   kinds: arms[slot] === 'anyray' ? args.kinds ?? null : null,
   kindsSource: arms[slot] === 'anyray' ? args.kindsSource ?? null : null,
+  extraHeaders: arms[slot] === 'anyray' ? args.extraHeaders ?? [] : [],
+  noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
 });
+
+/** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
+export const requestRecord = (args) => ({
+  noSubagents: !!args.noSubagents,
+  experiment: args.experiment ?? null,
+  extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
+});
+
+/** One round's x-anyray-metadata tag. */
+export function roundTag(args, round, now = Date.now()) {
+  const tag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${now}`, tool: 'anyray-bench', intent: args.scenario };
+  const experiment = args.strategy ?? args.experiment;
+  if (experiment) tag.experiment = experiment;
+  return tag;
+}
 
 /** Both arms' setup, as recorded in the result file. */
 export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) {
@@ -147,6 +173,12 @@ function summarize(session, pricing) {
   return t;
 }
 
+/** The round line's gateway-ping part: '' for a direct arm, 'n/a' when unreadable. */
+export const pingNote = (t) =>
+  t.gatewayPingCount === undefined ? ''
+    : t.gatewayPingCount === null ? ' · pings n/a'
+    : ` · ${t.gatewayPingCount} pings $${t.gatewayPingCostUsd.toFixed(3)} (client $${t.clientCostUsd?.toFixed(3)})`;
+
 function solved(scenario, session) {
   if (scenario.check) return !!session.check?.passed;
   if (scenario.citations) {
@@ -159,6 +191,7 @@ function solved(scenario, session) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  args.extraHeaders = args.compare === 'anyray' ? benchExtraHeaders() : [];
   const cfg = loadConfig();
   const { run, pricing } = cfg;
   if (args.compare === 'anyray' && !run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
@@ -181,6 +214,7 @@ async function main() {
   record.readTrim = args.readTrim;
   record.kinds = args.kinds; // what the Anyray arm requested (x-anyray-optimization-kinds)
   record.arms = arms;
+  record.request = requestRecord(args);
   // The Anyray arm's key decides its tenant (warns here, once, on the shared fallback).
   const tenant = args.compare === 'anyray' ? benchTenantSetup(resolveBenchKey()) : null;
   record.tenant = tenant;
@@ -191,10 +225,11 @@ async function main() {
 
   for (let k = 0; k < args.rounds; k++) {
     const round = record.rounds.length + 1;
-    const runTag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${Date.now()}`, tool: 'anyray-bench', intent: args.scenario };
-    if (args.strategy) runTag.experiment = args.strategy;
+    const runTag = roundTag(args, round);
     console.log(`${args.scenario} [${args.compare}] round ${round}: ${arms.a} ‖ ${arms.b} (concurrent)…`);
     const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag });
+    // Replica start times around the round: a gateway restart under it spoils the pair.
+    const replicasBefore = args.compare === 'anyray' ? await gatewayReplicaStarts(run.gatewayUrl) : null;
     const [sa, sb] = await Promise.allSettled([run1('a'), run1('b')]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
@@ -206,6 +241,17 @@ async function main() {
     const sessions = { a: sa.value, b: sb.value };
     for (const s of Object.values(sessions)) s.totals = summarize(s, pricing);
     record.setup = withSessionSetups(record.setup, sessions);
+    // The gateway's keep-warm pings are billed but absent from Claude Code's total:
+    // add them to the Anyray arm's cost, so the ratio compares what each arm cost.
+    let gatewaySpend = null;
+    for (const slot of ['a', 'b']) {
+      if (arms[slot] !== 'anyray') continue;
+      // `gatewaySettleSec`: e.g. a walk-away scenario waits out the keep-warm window first.
+      if (scenario.gatewaySettleSec) await new Promise((res) => setTimeout(res, scenario.gatewaySettleSec * 1000));
+      gatewaySpend = await sessionGatewaySpend(run.gatewayUrl, sessions[slot].init?.sessionId);
+      if (gatewaySpend.unavailable) console.log(`  warning: gateway ping cost unavailable (${gatewaySpend.unavailable}); ${slot.toUpperCase()} cost is the client figure only`);
+      sessions[slot].totals = addGatewayPings(sessions[slot].totals, gatewaySpend);
+    }
     const r = {
       round,
       runTag,
@@ -213,8 +259,12 @@ async function main() {
       sessions,
       ratio: sessions.a.totals.costUsd ? sessions.b.totals.costUsd / sessions.a.totals.costUsd : null,
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
+      gatewaySpend,
     };
     if (args.compare === 'anyray') {
+      r.gatewayReplicas = { before: replicasBefore, after: await gatewayReplicaStarts(run.gatewayUrl) };
+      r.gatewayRestarted = restartedDuring(r.gatewayReplicas.before, r.gatewayReplicas.after);
+      if (r.gatewayRestarted) console.log('  WARNING: the gateway restarted during this round; drop it from the comparison');
       // Config as it stood for this round (org strategies + the bench rule), and what
       // the gateway recorded doing on each request.
       r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
@@ -232,8 +282,8 @@ async function main() {
     const ta = sessions.a.totals;
     const tb = sessions.b.totals;
     console.log(
-      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
-        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${tb.hookTrimmed} hook-trimmed · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
+      `  A ${arms.a}: $${ta.costUsd?.toFixed(3)} · ${ta.turns} turns · ${ta.subagents} subagents · ${ta.cacheBreaks} cache breaks${pingNote(ta)} · ${r.quality.a ? 'solved' : 'NOT solved'}\n` +
+        `  B ${arms.b}: $${tb.costUsd?.toFixed(3)} · ${tb.turns} turns · ${tb.subagents} subagents · ${tb.cacheBreaks} cache breaks · ${tb.hookTrimmed} hook-trimmed${pingNote(tb)} · ${r.quality.b ? 'solved' : 'NOT solved'}\n` +
         `  ratio B/A ${r.ratio?.toFixed(3)}` +
         (r.optimization ? `\n  ${formatKindTally(r.optimization)}` : '')
     );
