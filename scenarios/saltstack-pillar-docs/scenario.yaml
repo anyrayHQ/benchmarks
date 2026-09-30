@@ -1,0 +1,20 @@
+title: "Document saltstack/salt — how grains and pillar data reach a minion"
+# Same shape as saltstack-docs (docs for a large Python codebase, read-heavy), a different
+# subsystem: grains collection and pillar compilation.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  Write developer documentation for this codebase, for an engineer joining the team.
+  Cover how a minion collects its grains (core grains and custom grain modules, and
+  when they are refreshed), how the master compiles pillar for a minion (the pillar
+  top file, ext_pillar modules, and merging), how the compiled pillar is delivered to
+  and cached on the minion, and how both are exposed to execution modules and
+  templates (__grains__, __pillar__). Output the documentation as Markdown in your
+  final answer, with a section per stage, and cite the code for every claim as
+  path:line.
+citations:
+  min: 10
+  resolveRate: 0.9
+maxTurns: 30
+timeoutMin: 10

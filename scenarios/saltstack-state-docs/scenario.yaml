@@ -1,0 +1,20 @@
+title: "Document saltstack/salt — how state.apply turns SLS files into executed states"
+# Same shape as saltstack-docs (docs for a large Python codebase, read-heavy), a different
+# subsystem: the state compiler and runner.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  Write developer documentation for this codebase, for an engineer joining the team.
+  Cover what happens when a minion runs `salt '*' state.apply`: how the top file is
+  read and matched, how SLS files are rendered (the renderer pipeline, e.g. jinja|yaml),
+  how the result becomes high data and then low chunks, how requisites (require,
+  watch, onchanges) order and gate execution, and how an individual state function
+  such as file.managed is invoked and its return assembled. Output the documentation
+  as Markdown in your final answer, with a section per stage, and cite the code for
+  every claim as path:line.
+citations:
+  min: 10
+  resolveRate: 0.9
+maxTurns: 30
+timeoutMin: 10
