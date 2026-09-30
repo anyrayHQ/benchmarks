@@ -39,6 +39,16 @@
 //      --with-control: a direct-vs-direct control runs in parallel, same scenario, rounds,
 //      turn cap and subagent setting, into <scenario>--control--<label|compare>-control.json;
 //      its solved-pair median and range are printed as the noise band beside the verdict)
+//   node run_agent.mjs --scenario saltstack-docs --rounds 6 --kinds observation_mask --parallel 3
+//     (--parallel N: up to N rounds at once, default 2, max 4; each round is still A ‖ B,
+//      so N rounds is up to 2N Claude sessions on the one subscription. --parallel 1 runs
+//      rounds one after another. Rounds are numbered up front, saved to the result file
+//      as each finishes and kept in round order; their lines print as they finish,
+//      each prefixed with its round number. With --with-control the budget is SHARED:
+//      at most N rounds in flight across main and control together (≤ 2N sessions),
+//      each taking half the slots (rounded up) while both run and all of them once the
+//      other is done. So the default 2 runs one main and one control round side by
+//      side, as before --parallel; --parallel 1 --with-control alternates them)
 //   node run_agent.mjs --scenario cobra-3pause --kinds observation_mask --no-subagents --experiment idle-kw
 //     (--no-subagents: both arms run without Task/Workflow; --experiment <name>: the Anyray
 //      arm sends experiment=<name> in x-anyray-metadata, for a gateway rule keyed on it)
@@ -80,13 +90,24 @@ export const gatewaySlots = (arms) => ['a', 'b'].filter((slot) => arms[slot] ===
  */
 const carriesExtraHeaders = (arms, slot) => slot === 'b' && arms.b === 'anyray';
 
+/** --parallel's ceiling: every session shares one Claude subscription, and its rate limits bite. */
+export const MAX_PARALLEL = 4;
+
+function parseParallel(v) {
+  if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--parallel needs a positive integer, got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  if (Number(v) > MAX_PARALLEL) {
+    throw new Error(`--parallel ${v} is above the cap of ${MAX_PARALLEL}: every session shares one Claude subscription, and its rate limits bite`);
+  }
+  return Number(v);
+}
+
 function parseMaxTurns(v) {
   if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--max-turns needs a positive integer, got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
   return Number(v);
 }
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2 };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -100,6 +121,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
+    else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -216,7 +238,7 @@ export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) 
   const describe = (slot) => describeSetup({
     ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled, tenant,
   });
-  const one = (slot) => ({ ...describe(slot), maxTurnsSource: args.maxTurns ? '--max-turns' : 'scenario' });
+  const one = (slot) => ({ ...describe(slot), maxTurnsSource: args.maxTurns ? '--max-turns' : 'scenario', parallel: args.parallel ?? 1 });
   return { a: one('a'), b: one('b') };
 }
 
@@ -336,15 +358,98 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds }) {
   return out.join('\n');
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const cfg = loadConfig();
+/**
+ * A concurrency budget: at most `limit` tasks run at once. Each caller takes a lane.
+ * While more than one lane is open, each may hold at most its fair share of the
+ * slots (limit ÷ open lanes, rounded up) and free slots go to the lanes in turn, so with
+ * --with-control the main comparison and the control run side by side instead of one
+ * queuing behind the other. `close()` a lane when its caller is done: the others then
+ * share its slots.
+ */
+export function createPool(limit) {
+  const lanes = []; // { queue: [{ task, resolve, reject }], active, closed }
+  let active = 0;
+  let turn = 0;
+  const pump = () => {
+    while (active < limit) {
+      const share = Math.ceil(limit / Math.max(1, lanes.filter((l) => !l.closed).length));
+      const k = lanes.findIndex((_, i) => {
+        const l = lanes[(turn + i) % lanes.length];
+        return l.queue.length && (l.closed || l.active < share);
+      });
+      if (k < 0) return;
+      const lane = lanes[(turn + k) % lanes.length];
+      turn = (turn + k + 1) % lanes.length;
+      const { task, resolve, reject } = lane.queue.shift();
+      active++;
+      lane.active++;
+      Promise.resolve()
+        .then(task)
+        .then(resolve, reject)
+        .finally(() => {
+          active--;
+          lane.active--;
+          pump();
+        });
+    }
+  };
+  return {
+    lane() {
+      const lane = { queue: [], active: 0, closed: false };
+      lanes.push(lane);
+      const schedule = (task) => new Promise((resolve, reject) => {
+        lane.queue.push({ task, resolve, reject });
+        pump();
+      });
+      schedule.close = () => {
+        lane.closed = true;
+        pump();
+      };
+      return schedule;
+    },
+  };
+}
+
+/** Put a finished round in its index place: the result file stays in round order whatever finishes first. */
+export function insertRound(rounds, r) {
+  const at = rounds.findIndex((x) => x.round > r.round);
+  rounds.splice(at < 0 ? rounds.length : at, 0, r);
+}
+
+/**
+ * Serialised saves of one result file. Every save writes the whole record as it stands
+ * then, queued behind the previous one, so concurrent rounds never land a stale snapshot
+ * over a newer one.
+ */
+function recordSaver(file, record, write) {
+  let queue = Promise.resolve();
+  return () => (queue = queue.then(() => write(file, JSON.stringify(record, null, 2) + '\n')));
+}
+
+/**
+ * The main comparison and, with --with-control, the control beside it. Both draw on ONE
+ * --parallel budget: at most N rounds in flight in total (so at most 2N Claude sessions),
+ * the two taking turns for free slots.
+ */
+export async function runAll(args, cfg, { runComparison: compare = runComparison, log = console.log, deps } = {}) {
+  const pool = createPool(args.parallel);
+  if (args.withControl) log(`--parallel ${args.parallel} is shared with the control: at most ${args.parallel} round(s), ${2 * args.parallel} sessions, in flight across both`);
   // --with-control: the control runs at the same time as the main comparison, so both
   // see the same upstream conditions; its rounds give the noise band.
   // Their round lines interleave, so each carries its comparison's tag.
-  const jobs = [runComparison(args, cfg, { prefix: args.withControl ? `[${args.compare}] ` : '' })];
-  if (args.withControl) jobs.push(runComparison(controlArgs(args), cfg, { prefix: '[control] ' }));
+  const runs = [[args, args.withControl ? `[${args.compare}] ` : '']];
+  if (args.withControl) runs.push([controlArgs(args), '[control] ']);
+  // Every lane exists before either comparison queues a round, so neither takes the whole budget first.
+  const lanes = runs.map(() => pool.lane());
+  const jobs = runs.map(([a, prefix], i) => compare(a, cfg, { prefix, schedule: lanes[i], deps }).finally(lanes[i].close)); // its slots pass to the other
   const [main, control] = await Promise.allSettled(jobs);
+  return { main, control };
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const cfg = loadConfig();
+  const { main, control } = await runAll(args, cfg);
   if (main.status === 'rejected') throw main.reason;
   if (control?.status === 'rejected') console.log(`control run failed: ${control.reason?.message ?? control.reason}`);
   const { record, file, viaGateway } = main.value;
@@ -362,9 +467,17 @@ async function main() {
   }
 }
 
-/** One comparison's rounds, into its own result file. Returns the record. */
-async function runComparison(args, cfg, { prefix = '' } = {}) {
-  const log = (msg) => console.log(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
+/** What runComparison reaches outside the process through; tests stub them. */
+const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log };
+
+/**
+ * One comparison's rounds, into its own result file. Returns the record. Up to
+ * --parallel rounds run at once through `schedule` (a pool lane; runAll shares one
+ * pool with the control); each is saved as it finishes, in round order.
+ */
+export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
+  const { runAgent, prepareRepo, describeRepo, write, log: print } = { ...LIVE, ...deps };
+  const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
@@ -381,6 +494,7 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
   mkdirSync(out, { recursive: true });
   const file = join(out, resultFileName(args));
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
+  const save = recordSaver(file, record, write);
 
   // Static context: the repo, both arms' setup, what Anyray has turned on.
   const probe = prepareRepo(scenario, dir);
@@ -402,8 +516,13 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
 
-  for (let k = 0; k < args.rounds; k++) {
-    const round = record.rounds.length + 1;
+  // Round numbers are fixed up front (after any rounds already in the file), so they
+  // and each round's session id stay unique however the rounds overlap.
+  const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
+  const numbers = Array.from({ length: args.rounds }, (_, k) => first + k);
+  log(`${args.scenario} [${args.compare}] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1} (up to ${args.parallel ?? 1} round(s) at once, each A ‖ B)`);
+
+  const runRound = async (round) => {
     const runTags = roundTags(args, round);
     log(`${args.scenario} [${args.compare}] round ${round}: ${armLabel(args, arms, 'a')} ‖ ${armLabel(args, arms, 'b')} (concurrent)…`);
     const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag: runTags[slot] });
@@ -415,9 +534,9 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
       log(`  round ${round} failed: ${err}`);
-      record.rounds.push({ round, error: err });
-      writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
-      continue;
+      insertRound(record.rounds, { round, error: err });
+      await save();
+      return;
     }
     const sessions = { a: sa.value, b: sb.value };
     for (const s of Object.values(sessions)) s.totals = summarize(s, pricing);
@@ -429,7 +548,7 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
     const spend = {};
     for (const slot of viaGateway) {
       spend[slot] = await sessionGatewaySpend(run.gatewayUrl, sessions[slot].init?.sessionId);
-      if (spend[slot].unavailable) log(`  warning: gateway ping cost unavailable (${spend[slot].unavailable}); ${slot.toUpperCase()} cost is the client figure only`);
+      if (spend[slot].unavailable) log(`  round ${round} warning: gateway ping cost unavailable (${spend[slot].unavailable}); ${slot.toUpperCase()} cost is the client figure only`);
       sessions[slot].totals = addGatewayPings(sessions[slot].totals, spend[slot]);
     }
     // --compare anyray keeps its one-arm shape; gateway records both slots.
@@ -450,7 +569,7 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
     if (viaGateway.length) {
       r.gatewayReplicas = { before: replicasBefore, after: await gatewayReplicaStarts(run.gatewayUrl) };
       r.gatewayRestarted = restartedDuring(r.gatewayReplicas.before, r.gatewayReplicas.after);
-      if (r.gatewayRestarted) log('  WARNING: the gateway restarted during this round; drop it from the comparison');
+      if (r.gatewayRestarted) log(`  round ${round} WARNING: the gateway restarted during this round; drop it from the comparison`);
       // Config as it stood for this round (org strategies + the bench rule), and what
       // the gateway recorded doing on each request.
       r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
@@ -470,32 +589,41 @@ async function runComparison(args, cfg, { prefix = '' } = {}) {
         for (const slot of viaGateway) {
           const others = new Set((traces[slot]?.traces ?? []).flatMap((t) => (t.decisions ?? []).map((d) => d.kind)).filter((k) => k !== args.strategy && k !== 'mint_economics')); // mint_economics = the strategy's own admission estimate
           iso[slot] = others.size ? { ok: false, otherKinds: [...others] } : { ok: true };
-          if (others.size) log(`  ISOLATION BROKEN on ${slot.toUpperCase()}: ${[...others].join(', ')} also acted`);
+          if (others.size) log(`  round ${round} ISOLATION BROKEN on ${slot.toUpperCase()}: ${[...others].join(', ')} also acted`);
         }
         r.isolation = iso.b;
         if (args.compare === 'gateway') r.isolationA = iso.a;
       }
     }
-    record.rounds.push(r);
+    insertRound(record.rounds, r);
     const ta = sessions.a.totals;
     const tb = sessions.b.totals;
     const line = (slot, t) =>
-      `  ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
+      `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +
-        `  ratio B/A ${r.ratio?.toFixed(3)}` +
-        (r.optimizationA ? `\n  A ${formatKindTally(r.optimizationA)}` : '') +
-        (r.optimization ? `\n  ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
+        `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
+        (r.optimizationA ? `\n  round ${round} A ${formatKindTally(r.optimizationA)}` : '') +
+        (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds));
     record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
-    writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
+    await save();
+  };
+
+  // Every round is queued at once; the pool lets --parallel of them run. All settle
+  // (and are saved) before the first unexpected error, if any, is rethrown.
+  const settled = await Promise.allSettled(numbers.map((round) => schedule(() => runRound(round))));
+  const failed = settled.find((x) => x.status === 'rejected');
+  if (failed) {
+    await save();
+    throw failed.reason;
   }
   record.stats = rule0(scoredRounds(record.rounds)); // all rounds, as before (the report reads it)
   record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // solved pairs only
-  writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
+  await save();
   return { record, file, viaGateway };
 }
 
