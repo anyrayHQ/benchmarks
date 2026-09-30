@@ -287,7 +287,9 @@ async function main() {
     const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag: runTags[slot] });
     // Replica start times around the round: a gateway restart under it spoils the pair.
     const replicasBefore = viaGateway.length ? await gatewayReplicaStarts(run.gatewayUrl) : null;
+    const startedAt = new Date().toISOString();
     const [sa, sb] = await Promise.allSettled([run1('a'), run1('b')]);
+    const endedAt = new Date().toISOString();
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
       console.log(`  round ${round} failed: ${err}`);
@@ -314,7 +316,10 @@ async function main() {
       round,
       runTag: runTags.b,
       ...(args.compare === 'gateway' ? { runTags } : {}),
-      startedAt: new Date().toISOString(),
+      // Both ends of the agent runs, to check a round against a deploy window by hand
+      // (a redeploy doesn't always change the replica start times the restart check reads).
+      startedAt,
+      endedAt,
       sessions,
       ratio: sessions.a.totals.costUsd ? sessions.b.totals.costUsd / sessions.a.totals.costUsd : null,
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
