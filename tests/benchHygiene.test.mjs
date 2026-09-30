@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
@@ -196,3 +196,33 @@ test('saltstack scenarios: named after the project, pinned, one grading mode eac
     assert.equal([s.check, s.citations, s.keyFacts].filter(Boolean).length, 1, name);
   }
 });
+
+// ---- the connect arm's HOME matches a real user's ------------------------------------
+
+const connectDeps = (realClaudeJson) => ({
+  ...deps(({ home }) => {
+    writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_BASE_URL: GW, ENABLE_TOOL_SEARCH: 'auto:20' } }));
+    return {
+      configured: true,
+      settings: { env: { ANTHROPIC_BASE_URL: GW, ANTHROPIC_CUSTOM_HEADERS: `x-anyray-api-key: ${KEY}`, ENABLE_TOOL_SEARCH: 'auto:20' } },
+      mcpServers: {},
+      setup: { env: {} },
+    };
+  }),
+  realClaudeJson: () => realClaudeJson,
+});
+
+test('armConfig: the connect arm carries the account identity a real user has, and nothing else from ~/.claude.json', () => withCfg((dir) => {
+  const real = { userID: 'u1', oauthAccount: { accountUuid: 'a1' }, projects: { '/x': {} }, mcpServers: { s: {} } };
+  const c = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: { sessionId: 's' }, cfgDir: dir, kinds: ['k'], deps: connectDeps(real) });
+  const written = JSON.parse(readFileSync(join(c.home, '.claude.json'), 'utf8'));
+  assert.deepEqual(written, { userID: 'u1', oauthAccount: { accountUuid: 'a1' } });
+  assert.deepEqual(c.setup.identity, ['userID', 'oauthAccount']);
+}));
+
+test('armConfig: unsetting a connect setting removes it from the user settings the session reads too', () => withCfg((dir) => {
+  const c = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: { sessionId: 's' }, cfgDir: dir, kinds: ['k'], env: { ENABLE_TOOL_SEARCH: '-' }, deps: connectDeps({}) });
+  assert.equal(c.settings.env.ENABLE_TOOL_SEARCH, undefined);
+  const user = JSON.parse(readFileSync(join(c.home, '.claude', 'settings.json'), 'utf8'));
+  assert.equal(user.env.ENABLE_TOOL_SEARCH, undefined);
+}));
