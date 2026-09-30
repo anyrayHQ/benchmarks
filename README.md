@@ -39,6 +39,20 @@ Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
 A **control** comparison (`--compare control`) runs direct against direct to show how
 far two identical setups drift apart. A result inside that band proves nothing.
 
+A **gateway** comparison (`--compare gateway`) runs the Anyray arm in both slots and
+sends `ANYRAY_BENCH_EXTRA_HEADERS` on B only. Both arms carry everything the gateway
+brings (e.g. Claude Code's behaviour behind a custom base URL, the shared tenant), so the
+ratio isolates the one header-selected feature. Kinds, strategy, metadata and client
+setup are the same in both slots; each slot gets its own session id (`…-a`, `…-b`) so the
+gateway keeps their traces, spend and session state apart. Gateway ping cost is added to
+both arms. Rounds the harness flags as run across a gateway restart are left out of the
+Rule 0 stats.
+
+```bash
+ANYRAY_BENCH_EXTRA_HEADERS='x-example-feature: on' \
+  npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare gateway --strategy thinking_trim --label feature-ab
+```
+
 ### Scenarios
 
 | Scenario | Repo | Task | Graded by |
@@ -87,7 +101,7 @@ report instead.
 
 ### Which strategies the Anyray arm runs
 
-`--compare anyray` needs `--kinds <k1,k2>` (or `--strategy <kind>`, which means
+`--compare anyray` (and `gateway`) needs `--kinds <k1,k2>` (or `--strategy <kind>`, which means
 `--kinds <kind>`). The Anyray arm sends them as `x-anyray-optimization-kinds`, so the
 gateway runs exactly those strategies, off-by-default ones included, unless an admin
 rule disables one. A run never inherits the tenant's defaults, which drift. The
@@ -108,7 +122,9 @@ it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
   be combined. Recorded in `request.experiment`.
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
-  kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`).
+  kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
+  and which slots sent them in `request.extraHeadersOn`). Under `--compare gateway` they go
+  to B only.
 - `--arm-env b:DISABLE_PROMPT_CACHING=1` (`--compare anyray`): the Anyray arm's Claude Code
   sends no `cache_control` markers of its own, leaving prompt caching to the gateway.
 
