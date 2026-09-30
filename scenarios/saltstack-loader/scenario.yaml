@@ -1,0 +1,18 @@
+title: "Codebase question in saltstack/salt — how an execution module gets loaded"
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  I'm new to this codebase. Explain how salt decides which execution modules are
+  available on a minion and loads one on first use: which classes and functions are
+  involved, in which files, and what the __virtual__ function and __virtualname__ do.
+  Cite file names and function names.
+# Graded by the answer containing each of these.
+keyFacts:
+  - "LazyLoader"
+  - "__virtual__"
+  - "__virtualname__"
+  - "lazy.py"
+  - "minion_mods"
+maxTurns: 25
+timeoutMin: 8

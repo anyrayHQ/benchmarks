@@ -1,0 +1,21 @@
+title: "Paused session in spf13/cobra — pauses of 6, 15 and 40 minutes between four questions"
+# Exercises prompt-cache lifetime and keep-warm policies against realistic human pauses:
+# one inside a 5m keep-warm window's reach (6 min), one inside the default idle window
+# (15 min), and one beyond it (40 min).
+repo:
+  git: https://github.com/spf13/cobra.git
+  ref: adbc8813901bba65827259daa8e22ff94ec1f30e
+task: >-
+  I'm new to this codebase. Explain how cobra goes from os.Args to running a
+  command's Run function: which functions are involved, in which files, and how
+  flags are separated from the subcommand path. Cite file names and function names.
+followups:
+  - "Now explain how persistent flags from a parent command reach a subcommand. Cite file names and function names."
+  - "How does cobra generate shell completions for a command? Cite file names and function names."
+  - "Finally, summarise in five bullets what a new contributor should read first, citing file names."
+followupDelaySec: [360, 900, 2400]
+keyFacts:
+  - "ExecuteC"
+  - "command.go"
+maxTurns: 40
+timeoutMin: 90

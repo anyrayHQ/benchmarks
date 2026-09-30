@@ -28,6 +28,8 @@ Per round it records:
 - **Solved or not.** A bug-fix task must pass its test command in the session's checkout afterwards. A question must contain every key fact. An audit's `path:line` citations must resolve to real lines.
 - **Every model request:** cache read / write / uncached input, each tool call and its output.
 - **The gateway's own record,** when an admin key is set: which strategies were on for the run, and what each one did on each request (saved, stood down, held by the guard).
+- **Gateway pings,** when an admin key with `spend:read` is set: requests the gateway sends on the session's behalf (keep-warm pings) are billed but never reach Claude Code's total. After the Anyray arm finishes, the harness reads `GET /admin/v1/spend/sessions/<Claude Code session id>?includeSubagents=true` (re-reading for up to 30 s until the counts settle) and records `gatewayPingCount` and `gatewayPingCostUsd`. The arm's `costUsd`, which the ratio uses, becomes Claude Code's figure (kept as `clientCostUsd`) plus the ping cost. A gateway without that endpoint gives a one-line warning and null ping fields, and the cost stays the client figure.
+- **Gateway restarts:** the admin health report's replica start times before and after the round. A replica that is new or started again (60 s tolerance) sets `gatewayRestarted` and prints a warning, since such a round is not a fair pair.
 
 Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
 - **Win rate:** Anyray must be cheaper in clearly more rounds than the 53% noise floor (the bar is 63%).
@@ -46,12 +48,24 @@ far two identical setups drift apart. A result inside that band proves nothing.
 | `gin-doc-audit` | gin-gonic/gin (pinned) | Audit 2,700 lines of docs against 24k lines of Go | Path:line citations resolve |
 | `gin-test-triage` | gin-gonic/gin (pinned) | Fix two hidden regressions from ~80 KB of verbose test output | `go test ./...` passes |
 | `gin-long-session` | gin-gonic/gin (pinned) | Six user turns in one session: triage, fix, re-test, two code walkthroughs, recap | `go test ./...` passes |
+| `cobra-pause` | spf13/cobra (pinned) | Two questions with a 6-minute pause between them | Key facts in the answer |
+| `cobra-3pause` | spf13/cobra (pinned) | Four questions with pauses of 6, 15 and 40 minutes | Key facts in the answer |
+| `cobra-walkaway` | spf13/cobra (pinned) | One question, then the user never returns; ping cost read after the gateway's idle window | Key facts in the answer |
+| `saltstack-docs` | saltstack/salt (pinned) | Developer docs: how a command reaches a minion and runs a module | Path:line citations resolve |
+| `saltstack-pillar-docs` | saltstack/salt (pinned) | Developer docs: how grains and pillar data reach a minion | Path:line citations resolve |
+| `saltstack-state-docs` | saltstack/salt (pinned) | Developer docs: how `state.apply` turns SLS files into executed states | Path:line citations resolve |
+| `saltstack-loader` | saltstack/salt (pinned) | Explain how an execution module is found and loaded | Key facts in the answer |
+| `saltstack-long-session` | saltstack/salt (pinned) | Five user turns of code walkthroughs over one large Python codebase | Path:line citations resolve |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
 is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
 `followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
 when the previous answer is done. `hidePatch: true` re-imports the patched checkout as a
 single commit, so the planted bug can't be found with `git diff` or `git log`.
+`followupDelaySec` idles before each follow-up, the way a person pausing would: one
+number for every follow-up, or a list with one per follow-up (the last repeats).
+`gatewaySettleSec` waits that long after the session before reading the gateway's ping
+cost for the Anyray arm, e.g. to let a keep-warm window run out.
 
 ### Running it
 
@@ -83,6 +97,20 @@ Claude Code does not surface response headers, so the Anyray arm's model traffic
 through a local pass-through proxy that reads `x-anyray-optimization-result` on each
 response. Each round records, per requested kind, how many requests applied it, skipped
 it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
+
+### Other run options
+
+- `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
+  neither can spawn subagents. Recorded in the result's `request.noSubagents`.
+- `--experiment <name>` (`--compare anyray`): the Anyray arm sends `experiment=<name>` in
+  `x-anyray-metadata`, so a gateway rule matching that experiment applies to this run
+  only. Unlike `--strategy` it does not imply a kind or an isolation check; the two can't
+  be combined. Recorded in `request.experiment`.
+- `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
+  `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
+  kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`).
+- `--arm-env b:DISABLE_PROMPT_CACHING=1` (`--compare anyray`): the Anyray arm's Claude Code
+  sends no `cache_control` markers of its own, leaving prompt caching to the gateway.
 
 ### Keeping benchmark traffic in its own tenant
 

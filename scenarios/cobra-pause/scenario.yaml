@@ -1,0 +1,19 @@
+title: "Paused session in spf13/cobra — one question, a 6-minute pause, then a follow-up"
+# Exercises an idle gap longer than a 5-minute prompt-cache lifetime: the follow-up
+# either reads the conversation from cache (1h entries still warm) or writes it again
+# (5m entries expired).
+repo:
+  git: https://github.com/spf13/cobra.git
+  ref: adbc8813901bba65827259daa8e22ff94ec1f30e
+task: >-
+  I'm new to this codebase. Explain how cobra goes from os.Args to running a
+  command's Run function: which functions are involved, in which files, and how
+  flags are separated from the subcommand path. Cite file names and function names.
+followups:
+  - "Now explain how persistent flags from a parent command reach a subcommand. Cite file names and function names."
+followupDelaySec: 360
+keyFacts:
+  - "ExecuteC"
+  - "command.go"
+maxTurns: 30
+timeoutMin: 20

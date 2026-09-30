@@ -50,7 +50,7 @@ test('countCacheBreaks: the first request of each agent never counts', () => {
   assert.equal(countCacheBreaks([]), 0);
 });
 
-test('countCacheBreaks: the salt-docs round-1 shape (masked 63590, then unmasked 102816 reading 7660) is 1 break', () => {
+test('countCacheBreaks: the saltstack-docs round-1 shape (masked 63590, then unmasked 102816 reading 7660) is 1 break', () => {
   const rs = [req('main', 60000, 3590), req('main', 7660, 95156)];
   assert.equal(rs[0].usage.cache_read_input_tokens + rs[0].usage.cache_creation_input_tokens, 63590);
   assert.equal(rs[1].usage.cache_read_input_tokens + rs[1].usage.cache_creation_input_tokens, 102816);
@@ -266,10 +266,10 @@ test('armConfig: refuses a HOME outside the session directory before writing', (
   }
 }));
 
-// ---- salt-docs scenario ------------------------------------------------------------
+// ---- saltstack-docs scenario ------------------------------------------------------------
 
-test('salt-docs scenario: loads, pins a commit and is graded by citations', () => {
-  const s = yaml.load(readFileSync(new URL('../scenarios/salt-docs/scenario.yaml', import.meta.url), 'utf8'));
+test('saltstack-docs scenario: loads, pins a commit and is graded by citations', () => {
+  const s = yaml.load(readFileSync(new URL('../scenarios/saltstack-docs/scenario.yaml', import.meta.url), 'utf8'));
   assert.match(s.repo.git, /^https:\/\/github\.com\/saltstack\/salt(\.git)?$/);
   assert.match(s.repo.ref, /^[0-9a-f]{40}$/);
   assert.ok(Number.isInteger(s.citations.min) && s.citations.min > 0);
@@ -281,7 +281,7 @@ test('salt-docs scenario: loads, pins a commit and is graded by citations', () =
   assert.ok(s.timeoutMin > 0);
 });
 
-test('checkCitations: resolves Python path:line citations (what salt-docs is graded on)', () => {
+test('checkCitations: resolves Python path:line citations (what saltstack-docs is graded on)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'any712-cite-'));
   try {
     mkdirSync(join(dir, 'salt', 'loader'), { recursive: true });
@@ -328,8 +328,8 @@ test('--arm-env refuses keys that would reroute an arm or escape its private HOM
 test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slot', () => {
   const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim', '--arm-env', 'b:K=v']);
   const arms = { a: 'direct', b: 'anyray' };
-  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {}, kinds: null, kindsSource: null });
-  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' }, kinds: ['observation_mask'], kindsSource: '--kinds' });
+  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {}, kinds: null, kindsSource: null, extraHeaders: [], noSubagents: false });
+  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' }, kinds: ['observation_mask'], kindsSource: '--kinds', extraHeaders: [], noSubagents: false });
   const control = parseArgs(['--scenario', 's', '--compare', 'control', '--arm-env', 'b:K=v']);
   const both = { a: 'direct', b: 'direct' };
   assert.deepEqual(slotOptions(control, both, 'a').env, {});
