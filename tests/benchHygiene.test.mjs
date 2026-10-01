@@ -115,7 +115,7 @@ test('slotOptions: extra headers follow the Anyray arm only', () => {
 
 test('requestRecord: what the run asked for, extra header names only (values may be secret)', () => {
   const args = { ...parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--no-subagents', '--experiment', 'e1']), extraHeaders: ['x-anyray-cache-ttl: 1h'] };
-  assert.deepEqual(requestRecord(args), { noSubagents: true, experiment: 'e1', extraHeaders: ['x-anyray-cache-ttl'], extraHeadersOn: ['b'] });
+  assert.deepEqual(requestRecord(args), { noSubagents: true, bare: false, experiment: 'e1', extraHeaders: ['x-anyray-cache-ttl'], extraHeadersOn: ['b'] });
 });
 
 // ---- followupDelaySec ---------------------------------------------------------------
