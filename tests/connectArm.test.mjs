@@ -28,6 +28,7 @@ fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ argv, home, key: proc
 const mode = ${JSON.stringify(mode)};
 if (mode === 'fail') { process.stderr.write('gateway unreachable (${KEY})'); process.exit(1); }
 if (mode === 'error-event') { console.log(JSON.stringify({ event: 'error', message: 'enrollment requires SSO' })); process.exit(3); }
+if (argv[0] === 'print-key') { console.log(process.env.ANYRAY_CLIENT_KEY); process.exit(0); }
 if (argv[0] === 'status') {
   console.log(JSON.stringify({ connectVersion: '9.9.9', keyKind: 'service', hookPolicies: { greenCollapse: false, rereadStub: false }, clientTools: { readBatch: 'enabled' } }));
   process.exit(0);
@@ -37,15 +38,22 @@ fs.mkdirSync(path.join(home, '.anyray'), { recursive: true });
 fs.writeFileSync(path.join(home, '.anyray', 'connect.json'), JSON.stringify({ gateway: gw, clientKey: process.env.ANYRAY_CLIENT_KEY, fleetHookPolicy: { digest: 'on' }, hookPolicies: { x: 1 } }));
 fs.mkdirSync(path.join(home, '.claude', 'skills', 'anyray'), { recursive: true });
 fs.writeFileSync(path.join(home, '.claude', 'skills', 'anyray', 'SKILL.md'), '# anyray');
+const hook = [{ matcher: '*', hooks: [{ type: 'command', command: '/somewhere/.anyray/bin/anyray-connect __anyray-hook' }] }];
+const org = argv.includes('--org'); // the org lane: gateway key as bearer, no provider pin
 fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({
   env: {
     ANTHROPIC_BASE_URL: gw,
-    ANTHROPIC_CUSTOM_HEADERS: 'x-anyray-provider: anthropic\\nx-anyray-api-key: ' + process.env.ANYRAY_CLIENT_KEY + '\\nx-anyray-metadata: {"tool":"claude-code"}',
+    ANTHROPIC_CUSTOM_HEADERS: org
+      ? 'x-anyray-metadata: {"tool":"claude-code"}'
+      : 'x-anyray-provider: anthropic\\nx-anyray-auth-mode: passthrough\\nx-anyray-api-key: ' + process.env.ANYRAY_CLIENT_KEY + '\\nx-anyray-metadata: {"tool":"claude-code"}',
+    ...(org ? { ANTHROPIC_AUTH_TOKEN: '' } : {}),
     ENABLE_TOOL_SEARCH: 'auto:20',
   },
+  ...(org ? { apiKeyHelper: process.argv[1] + ' print-key' } : {}),
   hooks: {
     SessionStart: [{ hooks: [{ type: 'command', command: '/somewhere/.anyray/bin/anyray-connect refresh', async: true }] }],
-    PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: '/somewhere/.anyray/bin/anyray-connect __anyray-hook' }] }],
+    PostToolUse: hook,
+    PostToolUseFailure: hook,
   },
   permissions: { allow: ['mcp__anyray__anyray_retrieve'] },
 }));
@@ -114,8 +122,8 @@ test('captures what connect wrote (env names, hooks, hook policy, skills, MCP) w
     ANTHROPIC_CUSTOM_HEADERS: '<redacted>',
     ENABLE_TOOL_SEARCH: 'auto:20',
   });
-  assert.deepEqual(r.setup.headers, ['x-anyray-provider', 'x-anyray-api-key', 'x-anyray-metadata']);
-  assert.deepEqual(r.setup.hooks, { SessionStart: ['anyray-connect refresh'], PostToolUse: ['anyray-connect __anyray-hook'] });
+  assert.deepEqual(r.setup.headers, ['x-anyray-provider', 'x-anyray-auth-mode', 'x-anyray-api-key', 'x-anyray-metadata']);
+  assert.deepEqual(r.setup.hooks, { SessionStart: ['anyray-connect refresh'], PostToolUse: ['anyray-connect __anyray-hook'], PostToolUseFailure: ['anyray-connect __anyray-hook'] });
   assert.deepEqual(r.setup.hookPolicy, { greenCollapse: false, rereadStub: false });
   assert.deepEqual(r.setup.skills, ['anyray']);
   assert.deepEqual(Object.keys(r.setup.mcpServers), ['anyray', 'anyray-connectors']);
@@ -292,4 +300,19 @@ test('a HOME redirected out of the session dir is refused before connect runs', 
   }
   assert.equal(called, false);
   assert.deepEqual(readdirSync(outside), []);
+});
+
+test('lane org: connect is run with --org, and the key helper it installs must print a gateway key', () => {
+  const { bin, calls } = fakeConnect();
+  const r = configureWithConnect({ home: armHome(), gatewayUrl: GATEWAY, clientKey: KEY, lane: 'org', bin, realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
+  assert.ok(calls()[0].argv.includes('--org') && !calls()[0].argv.includes('--subscription'));
+  assert.equal(r.setup.lane, 'org');
+  assert.equal(r.settings.env.ANTHROPIC_AUTH_TOKEN, '');
+  assert.deepEqual(r.checks.filter((c) => c.required && !c.ok), []);
+  assert.match(r.checks.find((c) => c.name.startsWith('auth:')).detail, /apiKeyHelper prints a gateway key/);
+  assert.ok(!JSON.stringify([r.setup, r.checks]).includes(KEY));
+  // The default lane is unchanged: the subscription pass-through.
+  const sub = configureWithConnect({ home: armHome(), gatewayUrl: GATEWAY, clientKey: KEY, bin, realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
+  assert.ok(calls().at(-2).argv.includes('--subscription'));
+  assert.deepEqual(sub.checks.filter((c) => c.required && !c.ok), []);
 });
