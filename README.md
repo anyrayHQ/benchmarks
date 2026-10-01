@@ -135,6 +135,53 @@ through a local pass-through proxy that reads `x-anyray-optimization-result` on 
 response. Each round records, per requested kind, how many requests applied it, skipped
 it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
 
+### On AWS Bedrock
+
+`--provider bedrock` bills both arms to AWS instead of a Claude subscription:
+
+| Arm | How it reaches the model |
+|---|---|
+| **A · direct** | Claude Code's own Bedrock client (`CLAUDE_CODE_USE_BEDROCK=1`), signed with an AWS profile on this machine. |
+| **B · through Anyray** | Claude Code connected by `anyray-connect --org`: the gateway key authenticates, and the gateway's routing sends the request to Bedrock with the credentials it holds. Nothing on the client names a provider. |
+
+The gateway must have Bedrock as its provider. Before the first round the harness sends
+one 1-token request the way arm B will, checks that Bedrock served it, and gives arm A
+the Bedrock model id it was served as, so both arms call the same model. Neither arm
+carries a subscription token. Rounds go to their own file (label `bedrock` by default).
+
+```bash
+npm run agent -- --scenario saltstack-docs --rounds 4 --provider bedrock --kinds observation_mask,code_graph
+```
+
+`ANYRAY_BEDROCK_PROFILE` (default: `AWS_PROFILE`, else `default`) and
+`ANYRAY_BEDROCK_REGION` (default `us-east-1`) choose arm A's AWS profile and region;
+`ANYRAY_BEDROCK_MODEL` pins its model id instead of the one read back from the gateway.
+A gateway that answers with the client's own model id (it passes the request to Bedrock
+untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
+Use the gateway's region, or the arms are priced and served differently.
+
+### Is the Anyray arm connected correctly?
+
+The Anyray arm is set up by `anyray-connect` in a private HOME, and every round checks
+the result twice (`lib/connectChecks.mjs`), recording both lists in the arm's setup
+(`connectChecks`, `sessionChecks`) and printing how many passed:
+
+- **What connect wrote**, before the session starts: `ANTHROPIC_BASE_URL` is the gateway,
+  no direct-cloud switch is set, the metadata header is there, the auth matches the lane
+  (subscription: passthrough headers and no auth token; org: the gateway key as the auth
+  token and no provider pin), the `PostToolUse` / `PostToolUseFailure` hooks, the
+  `anyray` MCP server, its tool permission and the `anyray` skill are installed.
+- **What the session loaded**, from Claude Code's init event: the `anyray` MCP server is
+  connected and its retrieve tool is available.
+
+A failed required check fails the round instead of measuring a half-connected client.
+Advisory checks (tool search setting, connectors MCP) are reported only.
+
+`--arm-env b:KEY=-` removes a key connect wrote. connect re-applies its configuration
+when its MCP server starts, which would write the key straight back, so such a session
+runs with connect's refresh off, and the round fails if the key is back in the arm's
+settings afterwards.
+
 ### Other run options
 
 - `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in

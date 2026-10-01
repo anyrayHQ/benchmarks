@@ -328,8 +328,8 @@ test('--arm-env refuses keys that would reroute an arm or escape its private HOM
 test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slot', () => {
   const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--read-trim', '--arm-env', 'b:K=v']);
   const arms = { a: 'direct', b: 'anyray' };
-  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {}, kinds: null, kindsSource: null, extraHeaders: [], noSubagents: false });
-  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' }, kinds: ['observation_mask'], kindsSource: '--kinds', extraHeaders: [], noSubagents: false });
+  assert.deepEqual(slotOptions(args, arms, 'a'), { arm: 'direct', readTrim: false, env: {}, kinds: null, kindsSource: null, extraHeaders: [], noSubagents: false, provider: 'anthropic', bedrock: null });
+  assert.deepEqual(slotOptions(args, arms, 'b'), { arm: 'anyray', readTrim: true, env: { K: 'v' }, kinds: ['observation_mask'], kindsSource: '--kinds', extraHeaders: [], noSubagents: false, provider: 'anthropic', bedrock: null });
   const control = parseArgs(['--scenario', 's', '--compare', 'control', '--arm-env', 'b:K=v']);
   const both = { a: 'direct', b: 'direct' };
   assert.deepEqual(slotOptions(control, both, 'a').env, {});
