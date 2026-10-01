@@ -39,6 +39,9 @@
 //      --with-control: a direct-vs-direct control runs in parallel, same scenario, rounds,
 //      turn cap and subagent setting, into <scenario>--control--<label|compare>-control.json;
 //      its solved-pair median and range are printed as the noise band beside the verdict)
+//   node run_agent.mjs --scenario pyrepo-docs --rounds 4 --kinds observation_mask --provider bedrock
+//     (--provider bedrock: direct = Claude Code's own Bedrock client on an AWS profile;
+//      anyray = connect's org lane, the gateway routing to Bedrock; see lib/bedrock.mjs)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 6 --kinds observation_mask --parallel 3
 //     (--parallel N: up to N rounds at once, default 2, max 4; each round is still A ‖ B,
 //      so N rounds is up to 2N Claude sessions on the one subscription. --parallel 1 runs
@@ -74,6 +77,8 @@ import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
+import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
+import { formatChecks } from './lib/connectChecks.mjs';
 
 const COMPARES = ['anyray', 'control', 'gateway'];
 
@@ -107,7 +112,7 @@ function parseMaxTurns(v) {
 }
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2 };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic' };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -122,10 +127,12 @@ export function parseArgs(argv) {
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
+    else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
+  if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
   const gateway = a.compare !== 'control';
   for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
@@ -140,6 +147,7 @@ export function parseArgs(argv) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
   a.label ??= a.strategy;
+  if (a.provider === 'bedrock') a.label ??= 'bedrock'; // never mixed into a seat run's file
   a.env = parseArmEnv(a.armEnv);
   assertArmEnvSafe(a.env.a);
   assertArmEnvSafe(a.env.b);
@@ -184,6 +192,8 @@ export const slotOptions = (args, arms, slot) => ({
   kindsSource: arms[slot] === 'anyray' ? args.kindsSource ?? null : null,
   extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : [],
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
+  provider: args.provider ?? 'anthropic',
+  bedrock: args.bedrock ?? null,
 });
 
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
@@ -467,8 +477,24 @@ async function main() {
   }
 }
 
+/**
+ * --provider bedrock: the direct arm's AWS profile and region, and the Bedrock model id
+ * both arms end up on. Unless ANYRAY_BEDROCK_MODEL pins it, the id is read back from one
+ * 1-token request through the gateway's org lane, which must be served by Bedrock.
+ */
+export async function resolveBedrock(run, { env = process.env, probe = probeGatewayRoute } = {}) {
+  const opts = bedrockOptions(env);
+  if (!run.gatewayUrl) {
+    if (!opts.model) throw new Error('--provider bedrock without a gateway needs ANYRAY_BEDROCK_MODEL (the Bedrock model id)');
+    return { ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' };
+  }
+  const route = await probe({ gatewayUrl: run.gatewayUrl, clientKey: resolveBenchKey(env, () => {}).key, model: run.model });
+  const served = assertBedrockRoute(route, { pinned: opts.model });
+  return { ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model };
+}
+
 /** What runComparison reaches outside the process through; tests stub them. */
-const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log };
+const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock };
 
 /**
  * One comparison's rounds, into its own result file. Returns the record. Up to
@@ -476,7 +502,7 @@ const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: c
  * pool with the control); each is saved as it finishes, in round order.
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
-  const { runAgent, prepareRepo, describeRepo, write, log: print } = { ...LIVE, ...deps };
+  const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock } = { ...LIVE, ...deps };
   const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
@@ -506,6 +532,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   record.readTrim = args.readTrim;
   record.kinds = args.kinds; // what the Anyray arm requested (x-anyray-optimization-kinds)
   record.arms = arms;
+  record.provider = args.provider ?? 'anthropic';
+  if (args.provider === 'bedrock') {
+    args.bedrock ??= await resolveBedrock(run);
+    record.bedrock = args.bedrock;
+    log(`provider bedrock: direct arm on AWS profile "${args.bedrock.profile}" (${args.bedrock.region}) as ${args.bedrock.model}` + (args.bedrock.gatewayServedAs ? `; the gateway serves ${run.model} as ${args.bedrock.gatewayServedAs}` : ''));
+    if (/anthropic\./.test(args.bedrock.gatewayServedAs ?? '') && args.bedrock.gatewayServedAs !== args.bedrock.model) log(`  WARNING: the arms are on different Bedrock ids (${args.bedrock.model} vs ${args.bedrock.gatewayServedAs})`);
+  }
   record.request = requestRecord(args);
   // The Anyray arm's key decides its tenant (warns here, once, on the shared fallback).
   // Under --compare gateway both slots use the same key, so the same tenant.
@@ -541,6 +574,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     const sessions = { a: sa.value, b: sb.value };
     for (const s of Object.values(sessions)) s.totals = summarize(s, pricing);
     record.setup = withSessionSetups(record.setup, sessions);
+    // How anyray-connect set the Anyray arm up, and what the session loaded of it.
+    for (const slot of viaGateway) {
+      const checks = [...(sessions[slot].setup?.connectChecks ?? []), ...(sessions[slot].setup?.sessionChecks ?? [])];
+      if (checks.length) log(`  round ${round} ${slot.toUpperCase()} connect checks (${sessions[slot].setup.lane} lane): ${checks.filter((c) => c.ok).length}/${checks.length} ok\n${formatChecks(checks.filter((c) => !c.ok))}`.trimEnd());
+    }
     // The gateway's keep-warm pings are billed but absent from Claude Code's total:
     // add them to each gateway arm's cost, so the ratio compares what each arm cost.
     // `gatewaySettleSec`: e.g. a walk-away scenario waits out the keep-warm window first.
