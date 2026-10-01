@@ -79,6 +79,7 @@ import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
+import { createBenchLevel, LEVELS, redactLevelError } from './lib/benchLevel.mjs';
 
 const COMPARES = ['anyray', 'control', 'gateway'];
 
@@ -112,7 +113,7 @@ function parseMaxTurns(v) {
 }
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic' };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -120,6 +121,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
     else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
+    else if (argv[i] === '--integration-level') a.integrationLevel = argv[++i] ?? '';
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
@@ -134,9 +136,11 @@ export function parseArgs(argv) {
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
   const gateway = a.compare !== 'control';
-  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment]]) {
+  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
   }
+  if (a.integrationLevel !== null && !LEVELS.includes(a.integrationLevel)) throw new Error(`--integration-level must be ${LEVELS.join('|')}`);
+  if (a.readTrim && a.integrationLevel && a.integrationLevel !== 'gateway_hooks_mcp') throw new Error('--read-trim needs --integration-level gateway_hooks_mcp: lower levels cannot retrieve');
   if (a.withControl && a.compare === 'control') throw new Error('--with-control adds a direct-vs-direct control; --compare control already is one');
   if (a.experiment && a.strategy) throw new Error('--experiment and --strategy both set the experiment tag: use one');
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
@@ -171,6 +175,7 @@ export const controlArgs = (args) => ({
   strategy: null,
   experiment: null,
   readTrim: false,
+  integrationLevel: null,
   armEnv: [],
   env: { a: {}, b: {} },
   extraHeaders: [],
@@ -194,6 +199,7 @@ export const slotOptions = (args, arms, slot) => ({
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
+  ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
 });
 
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
@@ -202,6 +208,7 @@ export const requestRecord = (args) => ({
   experiment: args.experiment ?? null,
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
+  ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
 });
 
 /** results/agent/<scenario>--<compare>[--<label>].json */
@@ -248,7 +255,7 @@ export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) 
   const describe = (slot) => describeSetup({
     ...slotOptions(args, arms, slot), model: run.model, gatewayUrl: run.gatewayUrl, runTag: '<per round>', maxTurns: scenario.maxTurns, enrolled, tenant,
   });
-  const one = (slot) => ({ ...describe(slot), maxTurnsSource: args.maxTurns ? '--max-turns' : 'scenario', parallel: args.parallel ?? 1 });
+  const one = (slot) => ({ ...describe(slot), ...(args.integrationLevel ? { integrationLevel: arms[slot] === 'anyray' ? args.integrationLevel : null } : {}), maxTurnsSource: args.maxTurns ? '--max-turns' : 'scenario', parallel: args.parallel ?? 1 });
   return { a: one('a'), b: one('b') };
 }
 
@@ -456,10 +463,36 @@ export async function runAll(args, cfg, { runComparison: compare = runComparison
   return { main, control };
 }
 
+/** The policy assignment covers the whole comparison and is restored on every exit. */
+export async function withIntegrationLevel(requested, work, { level, signal = process } = {}) {
+  if (!requested) return work();
+  let interruptedRun = false;
+  const setting = level.set(requested);
+  let cleaned;
+  const cleanup = () => (cleaned ??= setting.then((change) => level.clear(change), () => undefined));
+  const interrupted = () => {
+    interruptedRun = true;
+    cleanup().then(() => { signal.exit?.(130); }, (error) => {
+      console.error(`integration-level cleanup failed: ${redactLevelError(error)}`);
+      signal.exit?.(130);
+    });
+  };
+  signal.once?.('SIGINT', interrupted);
+  try {
+    await setting;
+    if (interruptedRun) throw new Error('integration-level run interrupted');
+    return await work();
+  } finally {
+    signal.off?.('SIGINT', interrupted);
+    await cleanup();
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cfg = loadConfig();
-  const { main, control } = await runAll(args, cfg);
+  const level = args.integrationLevel ? createBenchLevel({ gatewayUrl: cfg.run.gatewayUrl, adminKey: process.env.ANYRAY_ADMIN_KEY, clientKey: resolveBenchKey(process.env, () => {}).key, agent: process.env.ANYRAY_BENCH_AGENT_ID, user: process.env.ANYRAY_BENCH_USER_ID }) : null;
+  const { main, control } = await withIntegrationLevel(args.integrationLevel, () => runAll(args, cfg), { level });
   if (main.status === 'rejected') throw main.reason;
   if (control?.status === 'rejected') console.log(`control run failed: ${control.reason?.message ?? control.reason}`);
   const { record, file, viaGateway } = main.value;
@@ -666,6 +699,6 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
-  console.error(e.message ?? e);
+  console.error(redactLevelError(e));
   process.exit(1);
 });
