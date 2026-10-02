@@ -130,6 +130,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
+    else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -147,11 +148,16 @@ export function parseArgs(argv) {
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
   if (a.strategy && a.kinds && !a.kinds.includes(a.strategy)) throw new Error(`--strategy ${a.strategy} must be one of --kinds`);
   if (a.strategy && !a.kinds) [a.kinds, a.kindsSource] = [parseKinds(a.strategy), '--strategy'];
-  if (gateway && !a.kinds) {
+  // --bare measures the seat that changed only its base URL: nothing client-side, nothing optimized.
+  if (a.bare && !gateway) throw new Error('--bare needs --compare anyray or gateway');
+  if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
+  if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
+  if (gateway && !a.kinds && !a.bare) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
   a.label ??= a.strategy;
   if (a.provider === 'bedrock') a.label ??= 'bedrock'; // never mixed into a seat run's file
+  if (a.bare) a.label = a.label ? `bare-${a.label}` : 'bare'; // never mixed into a connect-configured run's file
   a.env = parseArmEnv(a.armEnv);
   assertArmEnvSafe(a.env.a);
   assertArmEnvSafe(a.env.b);
@@ -180,6 +186,7 @@ export const controlArgs = (args) => ({
   env: { a: {}, b: {} },
   extraHeaders: [],
   withControl: false,
+  bare: false,
 });
 
 /** `--read-trim` applies to the Anyray arm only. */
@@ -200,11 +207,13 @@ export const slotOptions = (args, arms, slot) => ({
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
+  bare: !!args.bare && arms[slot] === 'anyray',
 });
 
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
 export const requestRecord = (args) => ({
   noSubagents: !!args.noSubagents,
+  bare: !!args.bare,
   experiment: args.experiment ?? null,
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
@@ -672,6 +681,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     const line = (slot, t) =>
       `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
+      (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +

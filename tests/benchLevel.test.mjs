@@ -54,6 +54,7 @@ test('integration level arguments validate comparison, value and retrieval optio
   assert.throws(() => parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--integration-level', 'bad']), /--integration-level/);
   assert.throws(() => parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--integration-level']), /--integration-level/);
   assert.throws(() => parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--integration-level', 'gateway_hooks', '--read-trim']), /--read-trim.*gateway_hooks_mcp/);
+  assert.throws(() => parseArgs(['--scenario', 's', '--bare', '--integration-level', 'gateway']), /--bare runs without anyray-connect/);
 });
 
 test('set and clear preserve other policy fields, use revisions, and save no key', async () => {
