@@ -71,6 +71,7 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
+import { benchVerdict, formatVerdictBlock } from './lib/benchVerdict.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
@@ -529,13 +530,13 @@ async function main() {
   if (control?.status === 'rejected') console.log(`control run failed: ${control.reason?.message ?? control.reason}`);
   const { record, file, viaGateway } = main.value;
   const controlRecord = control?.status === 'fulfilled' ? control.value.record : null;
-  if (controlRecord) console.log(formatVerdict({ scenario: args.scenario, compare: 'control', rounds: controlRecord.rounds }).replace(/\n(?!$)/g, '\n[control] '));
+  if (controlRecord) console.log(`${formatVerdict({ scenario: args.scenario, compare: 'control', rounds: controlRecord.rounds })}\n${formatVerdictBlock(controlRecord.verdict)}`.replace(/\n(?!$)/g, '\n[control] '));
   if (controlRecord) {
     record.control = { file: resultFileName(controlArgs(args)) };
     record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
     writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
   }
-  console.log(formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds }));
+  console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds })}\n${formatVerdictBlock(record.verdict)}`);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
     if (args.kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, args.kinds))}`);
@@ -715,7 +716,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds));
-    record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
+    record.verdict = benchVerdict(record.rounds);
     await save();
   };
 
@@ -728,7 +730,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     throw failed.reason;
   }
   record.stats = rule0(scoredRounds(record.rounds)); // all rounds, as before (the report reads it)
-  record.verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // solved pairs only
+  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // historical Rule 0 summary
+  record.verdict = benchVerdict(record.rounds);
   await save();
   return { record, file, viaGateway };
 }
