@@ -160,6 +160,35 @@ A gateway that answers with the client's own model id (it passes the request to 
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
 
+### Choosing a Claude Code integration level
+
+`--integration-level gateway|gateway_hooks|gateway_hooks_mcp` assigns that level to the
+benchmark key before the first round and restores its previous assignment after the
+run, including a failed run or Ctrl-C. It is available with `--compare anyray` and
+`--compare gateway`. Leave it unset to keep the current behavior. `--read-trim` needs
+`gateway_hooks_mcp`, because the lower levels have no retrieval tool. The requested
+level is recorded in the result, and each Anyray arm must report the same applied
+level and pass the matching hooks, MCP, permission, skill, and session checks.
+
+Use a Connect build that reports `appliedIntegrationLevel` in `status --json`:
+
+```bash
+ANYRAY_CONNECT_BIN=/absolute/path/to/anyray-connect npm run agent -- \
+  --scenario cobra-flag-groups --kinds observation_mask --integration-level gateway_hooks
+npm run bench-level -- show
+npm run bench-level -- set gateway
+npm run bench-level -- clear
+```
+
+The override is used for enrollment, status, and fallback MCP commands; results
+record only its basename. `bench-level` uses `ANYRAY_GATEWAY_URL`,
+`ANYRAY_ADMIN_KEY`, and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`). It
+backs up the prior assignment under ignored `results/` and sends revision-checked
+team-policy writes that preserve the skills list and other policy fields. For a
+service key pass `--agent <id>` (the key's policy ID); for a user seat pass
+`--user <id>`. `ANYRAY_BENCH_AGENT_ID` / `ANYRAY_BENCH_USER_ID` set the same for
+`run_agent.mjs`. The tool never reads any key's secret.
+
 ### Is the Anyray arm connected correctly?
 
 The Anyray arm is set up by `anyray-connect` in a private HOME, and every round checks
@@ -169,10 +198,10 @@ the result twice (`lib/connectChecks.mjs`), recording both lists in the arm's se
 - **What connect wrote**, before the session starts: `ANTHROPIC_BASE_URL` is the gateway,
   no direct-cloud switch is set, the metadata header is there, the auth matches the lane
   (subscription: passthrough headers and no auth token; org: the gateway key as the auth
-  token and no provider pin), the `PostToolUse` / `PostToolUseFailure` hooks, the
-  `anyray` MCP server, its tool permission and the `anyray` skill are installed.
-- **What the session loaded**, from Claude Code's init event: the `anyray` MCP server is
-  connected and its retrieve tool is available.
+  token and no provider pin). Hooks, the `anyray` MCP server, its tool permission and
+  the `anyray` skill are checked against the requested integration level.
+- **What the session loaded**, from Claude Code's init event: the `anyray` MCP server
+  and retrieve tool are present at `gateway_hooks_mcp` and absent at lower levels.
 
 A failed required check fails the round instead of measuring a half-connected client.
 Advisory checks (tool search setting, connectors MCP) are reported only.

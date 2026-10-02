@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, statSync, symlinkSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { configureWithConnect, connectActivity } from '../lib/connectArm.mjs';
 import { armConfig } from '../lib/agentRun.mjs';
 import { parseArgs, armSetups, withSessionSetups } from '../run_agent.mjs';
@@ -26,18 +27,22 @@ const fs = require('node:fs'), path = require('node:path');
 const home = process.env.HOME, argv = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ argv, home, key: process.env.ANYRAY_CLIENT_KEY }) + '\\n');
 const mode = ${JSON.stringify(mode)};
+const level = ['gateway', 'gateway_hooks', 'gateway_hooks_mcp'].includes(mode) ? mode : 'gateway_hooks_mcp';
 if (mode === 'fail') { process.stderr.write('gateway unreachable (${KEY})'); process.exit(1); }
 if (mode === 'error-event') { console.log(JSON.stringify({ event: 'error', message: 'enrollment requires SSO' })); process.exit(3); }
 if (argv[0] === 'print-key') { console.log(process.env.ANYRAY_CLIENT_KEY); process.exit(0); }
 if (argv[0] === 'status') {
-  console.log(JSON.stringify({ connectVersion: '9.9.9', keyKind: 'service', hookPolicies: { greenCollapse: false, rereadStub: false }, clientTools: { readBatch: 'enabled' } }));
+  console.log(JSON.stringify({ connectVersion: '9.9.9', keyKind: 'service', ...(mode !== 'ok' ? { appliedIntegrationLevel: level } : {}), hookPolicies: { greenCollapse: false, rereadStub: false }, clientTools: { readBatch: 'enabled' } }));
   process.exit(0);
 }
 const gw = argv[argv.indexOf('--gateway') + 1];
 fs.mkdirSync(path.join(home, '.anyray'), { recursive: true });
+fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
 fs.writeFileSync(path.join(home, '.anyray', 'connect.json'), JSON.stringify({ gateway: gw, clientKey: process.env.ANYRAY_CLIENT_KEY, fleetHookPolicy: { digest: 'on' }, hookPolicies: { x: 1 } }));
-fs.mkdirSync(path.join(home, '.claude', 'skills', 'anyray'), { recursive: true });
-fs.writeFileSync(path.join(home, '.claude', 'skills', 'anyray', 'SKILL.md'), '# anyray');
+if (level === 'gateway_hooks_mcp') {
+  fs.mkdirSync(path.join(home, '.claude', 'skills', 'anyray'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'skills', 'anyray', 'SKILL.md'), '# anyray');
+}
 const hook = [{ matcher: '*', hooks: [{ type: 'command', command: '/somewhere/.anyray/bin/anyray-connect __anyray-hook' }] }];
 const org = argv.includes('--org'); // the org lane: gateway key as bearer, no provider pin
 fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({
@@ -50,15 +55,15 @@ fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({
     ENABLE_TOOL_SEARCH: 'auto:20',
   },
   ...(org ? { apiKeyHelper: process.argv[1] + ' print-key' } : {}),
-  hooks: {
+  ...(level !== 'gateway' ? { hooks: {
     SessionStart: [{ hooks: [{ type: 'command', command: '/somewhere/.anyray/bin/anyray-connect refresh', async: true }] }],
     PostToolUse: hook,
     PostToolUseFailure: hook,
-  },
-  permissions: { allow: ['mcp__anyray__anyray_retrieve'] },
+  } } : {}),
+  ...(level === 'gateway_hooks_mcp' ? { permissions: { allow: ['mcp__anyray__anyray_retrieve'] } } : {}),
 }));
 fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: {
-  anyray: { type: 'stdio', command: '/somewhere/.anyray/bin/anyray-connect', args: ['__anyray-mcp-server', 'claude'] },
+  ...(level === 'gateway_hooks_mcp' ? { anyray: { type: 'stdio', command: '/somewhere/.anyray/bin/anyray-connect', args: ['__anyray-mcp-server', 'claude'] } } : {}),
   'anyray-connectors': { type: 'http', url: gw + '/mcp/org', headers: { 'x-anyray-api-key': process.env.ANYRAY_CLIENT_KEY } },
 } }));
 console.log(JSON.stringify({ event: 'applied', keyKind: 'service', connected: ['claude-code'], failed: [] }));
@@ -315,4 +320,50 @@ test('lane org: connect is run with --org, and the key helper it installs must p
   const sub = configureWithConnect({ home: armHome(), gatewayUrl: GATEWAY, clientKey: KEY, bin, realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
   assert.ok(calls().at(-2).argv.includes('--subscription'));
   assert.deepEqual(sub.checks.filter((c) => c.required && !c.ok), []);
+});
+
+test('fake Connect applies every requested level and reports it in status', () => {
+  for (const level of ['gateway', 'gateway_hooks', 'gateway_hooks_mcp']) {
+    const { bin } = fakeConnect(level);
+    const result = configureWithConnect({ home: armHome(), gatewayUrl: GATEWAY, clientKey: KEY, lane: 'org', bin, integrationLevel: level, realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
+    assert.equal(result.configured, true, result.reason);
+    assert.equal(result.setup.appliedIntegrationLevel, level);
+    assert.equal(result.setup.connectBinary, 'anyray-connect');
+    assert.deepEqual(result.checks.filter((check) => check.required && !check.ok), []);
+    assert.equal(Boolean(result.mcpServers.anyray), level === 'gateway_hooks_mcp');
+    assert.equal(Boolean(result.settings.hooks?.PostToolUse), level !== 'gateway');
+  }
+  const old = fakeConnect('ok');
+  const result = configureWithConnect({ home: armHome(), gatewayUrl: GATEWAY, clientKey: KEY, bin: old.bin, integrationLevel: 'gateway_hooks_mcp', realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
+  assert.match(result.checks.find((check) => !check.ok).name, /applied integration level/);
+});
+
+test('a requested level never falls back to harness wiring when Connect fails', () => {
+  assert.throws(() => armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, integrationLevel: 'gateway', deps: deps({ configureArm: () => ({ configured: false, reason: 'old binary' }) }) }), /--integration-level needs a Connect binary/);
+  assert.throws(() => armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, integrationLevel: 'gateway', deps: deps({ configureArm: () => ({ configured: true, settings: { env: {} }, mcpServers: {}, setup: {} }) }) }), /did not report the requested integration level/);
+});
+
+test('ANYRAY_CONNECT_BIN is the binary used by enrollment and fallback MCP wiring', () => {
+  const { bin } = fakeConnect();
+  // The fallback wiring reads this machine's Connect profile: give the child its own
+  // HOME with one, so the test does not depend on the machine it runs on.
+  const home = mkdtempSync(join(tmpdir(), 'bin-home-'));
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  writeFileSync(join(home, '.anyray', 'connect.json'), JSON.stringify({ gateway: 'https://elsewhere.test.invalid', clientKey: KEY }));
+  const code = `import { ANYRAY_BIN } from './lib/connectArm.mjs'; import { armConfig } from './lib/agentRun.mjs';
+    const arm = armConfig({ arm: 'anyray', gatewayUrl: '${GATEWAY}', runTag: {}, cfgDir: process.env.TEST_CFG_DIR });
+    console.log(JSON.stringify({ binary: ANYRAY_BIN, mcp: arm.mcp.mcpServers.anyray?.command }));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: process.cwd(), env: { ...process.env, HOME: home, ANYRAY_CONNECT_BIN: bin, ANYRAY_CLIENT_KEY: '', ANYRAY_BENCH_CLIENT_KEY: '', TEST_CFG_DIR: cfg() }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { binary: bin, mcp: bin });
+});
+
+test('a lower-level session leaves refresh enabled unless an existing option disables it', () => {
+  const { bin } = fakeConnect('gateway_hooks');
+  const configureArm = (options) => configureWithConnect({ ...options, bin, realHome: mkdtempSync(join(tmpdir(), 'rh-')) });
+  const ordinary = armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, integrationLevel: 'gateway_hooks', deps: deps({ configureArm }) });
+  assert.deepEqual(ordinary.procEnv, {});
+  assert.equal(ordinary.mcp.mcpServers.anyray, undefined);
+  const unset = armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, integrationLevel: 'gateway_hooks', env: { ENABLE_TOOL_SEARCH: '-' }, deps: deps({ configureArm }) });
+  assert.deepEqual(unset.procEnv, { ANYRAY_REFRESH_DISABLE: 'true' });
 });
