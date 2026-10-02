@@ -93,6 +93,32 @@ ANYRAY_BENCH_EXTRA_HEADERS='x-example-feature: on' \
   npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare gateway --strategy thinking_trim --label feature-ab
 ```
 
+When the treatment is a gateway **rule** and not a header, tag arm B instead:
+`--experiment-b <name>` sends `experiment=<name>` in B's `x-anyray-metadata` only, and
+`bench-rule params <name> --params …` (below) adds a rule keyed on that tag. Both arms run
+the same strategies; B runs them with the rule's params.
+
+```bash
+npm run bench-rule -- params my-exp-b --params '{"observation_mask":{"mintPaybackTurns":2}}'
+npm run agent -- --scenario pyrepo-long-session --compare gateway \
+  --kinds relevance_filter,code_graph,observation_mask --experiment-b my-exp-b --label my-exp
+npm run bench-rule -- remove-params my-exp-b
+```
+
+The run says before it starts which rule B's tag matches (or that none does), and each
+round records the rule as it stood before and after (`experimentRule`, with `stable: false`
+when it was missing or changed: drop that round).
+
+A gateway may hold one strategy out of a session as its own control, drawn per session, so
+the two sessions of a round are drawn separately. Each round records which requested kinds
+were held out of each arm (`heldOut: { a, b, differs }`, from the `guard` the gateway names
+on a `safety_gate` skip) and prints a warning when the arms differ: that round compared two
+different strategy sets. `--redraw-holdout N` avoids spending a round on that: when either
+session reports a holdout on one of its first three responses, both are stopped and the
+pair starts again with fresh sessions (fresh draws), up to N times; the draws thrown away
+are recorded in the round's `redraws`. Name every kind the gateway may hold out in
+`--kinds`, since only requested kinds are watched.
+
 ### Scenarios
 
 | Scenario | Repo | Task | Graded by |
@@ -110,6 +136,7 @@ ANYRAY_BENCH_EXTRA_HEADERS='x-example-feature: on' \
 | `pyrepo-state-docs` | a large Python codebase (pinned) | Developer docs: how `state.apply` turns SLS files into executed states | Path:line citations resolve |
 | `pyrepo-loader` | a large Python codebase (pinned) | Explain how an execution module is found and loaded | Key facts in the answer |
 | `pyrepo-long-session` | a large Python codebase (pinned) | Five user turns of code walkthroughs over one large Python codebase | Path:line citations resolve |
+| `pyrepo-long-session-cold` | a large Python codebase (pinned) | The same five turns with three 62-minute pauses, so three turns start with the prompt cache expired (about 4 hours a round) | Path:line citations resolve |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
 is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
@@ -120,6 +147,18 @@ single commit, so the planted bug can't be found with `git diff` or `git log`.
 number for every follow-up, or a list with one per follow-up (the last repeats).
 `gatewaySettleSec` waits that long after the session before reading the gateway's ping
 cost for the Anyray arm, e.g. to let a keep-warm window run out.
+
+A session is handed the Claude seat's access token once and cannot refresh it, so a
+scenario with pauses refuses to start when the token expires before its pauses (plus 15
+minutes of work) are over. Start it again once Claude Code has renewed the token, or set
+`ANYRAY_UPSTREAM_TOKEN` to a long-lived one (`claude setup-token`).
+
+`npm run cold-turns -- results/agent/<file>.json` reads a pause-scenario round back: each
+arm's cost with pings, turns, requests, cache breaks, retrievals and held-out kinds, and
+for each turn that followed a long pause whether the gateway attested the cache expiry,
+the tokens each strategy removed, what the provider wrote and read, and why a strategy
+declined. It lists what makes a round unreadable as a comparison (a gateway restart,
+different kinds held out per arm, a rule that changed, a cold turn that was not attested).
 
 ### Running it
 
@@ -269,6 +308,11 @@ settings afterwards.
   `x-anyray-metadata`, so a gateway rule matching that experiment applies to this run
   only. Unlike `--strategy` it does not imply a kind or an isolation check; the two can't
   be combined. Recorded in `request.experiment`.
+- `--experiment-b <name>` (`--compare gateway`): arm B alone sends `experiment=<name>`; A
+  keeps `--experiment` if given, else no tag. For a treatment that is a gateway rule (see
+  `bench-rule params`). Recorded in `request.experimentB`.
+- `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
+  (see the gateway comparison above). Stopped attempts are not in the round's cost.
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
@@ -291,19 +335,32 @@ plane): on a single-tenant deployment every key is in `default`.
 ### Turning strategies on for benchmark traffic only
 
 ```bash
-npm run bench-rule -- show           # what the gateway has on and off
+npm run bench-rule -- show           # what the gateway has on and off, and what its regret guard suppresses now
 npm run bench-rule -- enable [kind…] # default: every strategy that is off
 npm run bench-rule -- only <kind…>   # just these on, every other strategy off
                                      # either takes --params '{"<kind>":{…}}'
 npm run bench-rule -- per-experiment <kind…>  # one rule per kind, selected per session
 npm run bench-rule -- remove
+npm run bench-rule -- params <experiment> --params '{"<kind>":{…}}'  # params for one experiment tag
+npm run bench-rule -- remove-params <experiment>                    # removes exactly that rule
 ```
 
 `per-experiment` adds one rule per strategy. A rule matches `tool == "anyray-bench"` and
 `experiment == <kind>`, turns that strategy on and every other one off. Pick the strategy
 for a run with `npm run agent -- --scenario <name> --strategy <kind>`: the Anyray arm
 sends `experiment=<kind>` in `x-anyray-metadata`, and each round records whether any
-other strategy acted (`isolation.ok`). `remove` deletes every rule this tool added.
+other strategy acted (`isolation.ok`). `remove` deletes every rule `enable`, `only` and
+`per-experiment` added.
+
+`params <experiment>` adds one rule that matches `tool == "anyray-bench"` and
+`experiment == <experiment>` and carries strategy params only: it turns nothing on or off,
+so a session with that tag runs the strategies it would have run anyway, with those
+params. Param names are checked against the strategies the deployed optimizer lists, since
+a misspelt one is accepted and then does nothing. The optimizer config is one document
+that other people edit too, so `params` and `remove-params` re-read it right before
+writing, send the revision they read (a concurrent change is refused and retried, never
+overwritten), and read it back to confirm every other rule is unchanged. `remove` and
+`per-experiment` do not touch these rules.
 
 This adds one override rule to the gateway's optimizer config. The rule matches
 `metadata.tool == "anyray-bench"`, which only this harness sends, so other traffic on
@@ -341,7 +398,8 @@ as required survive. Its results stay with you and are never committed anywhere.
 run_agent.mjs         paired agent rounds → results/agent/*.json
 report_agent.mjs      → results/agent/report.html
 scenarios/            one directory per task: scenario.yaml (+ patch)
-tools/bench-rule.mjs  strategies on/off for benchmark traffic only
+tools/bench-rule.mjs  strategies on/off for benchmark traffic only; params for one experiment tag
+tools/cold-turns.mjs  a pause-scenario round, read back per cold turn
 lib/agentRun.mjs      checkout, headless Claude Code per arm, transcript parsing
 lib/stats.mjs         Rule 0 verdict
 lib/benchVerdict.mjs  paired cost confidence interval and verdict
