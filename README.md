@@ -201,6 +201,9 @@ Use the gateway's region, or the arms are priced and served differently.
 - A session that reads, searches or `cd`s outside its own checkout is flagged
   `OUTSIDE CHECKOUT` with a count (`outsideCheckout` on the session). Another copy of the
   scenario's repo elsewhere on the machine is the usual cause: remove it.
+- Gateway rewrites that stood aside are counted by the reason their result header names
+  (`budgetNoticeReasons`, `toolDeferReasons` on the session, and in brackets on the round
+  line). A not-applied result with no reason is counted `unnamed`.
 - Citations: a path from the repository root resolves exactly; a path that names exactly
   one file by its tail also resolves and is counted apart (`bySuffix`); a tail that names
   several files is `ambiguous` and stays unresolved.

@@ -294,6 +294,12 @@ export function startTokens(requests) {
   return { agents: first.size, read, written };
 }
 
+/** ` (reason 12, other 3)` for a rewrite's stand-aside reasons, most frequent first; '' when there are none. */
+export const whyNot = (reasons) => {
+  const list = Object.entries(reasons ?? {}).sort((x, y) => y[1] - x[1]);
+  return list.length ? ` (${list.map(([r, n]) => `${r} ${n}`).join(', ')})` : '';
+};
+
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
@@ -708,6 +714,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
+      whyNot(sessions[slot].budgetNoticeReasons) +
+      (sessions[slot].toolDefer && sessions[slot].toolDefer.applied + sessions[slot].toolDefer.notApplied > 0 ? ` · tool defer applied ${sessions[slot].toolDefer.applied}/${Object.values(sessions[slot].toolDefer).reduce((x, y) => x + y, 0)}${whyNot(sessions[slot].toolDeferReasons)}` : '') +
       `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +

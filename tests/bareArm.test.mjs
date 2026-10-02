@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs, slotOptions, armsFor, resultFileName, controlArgs } from '../run_agent.mjs';
 import { armConfig, describeSetup } from '../lib/agentRun.mjs';
-import { tallyNotice } from '../lib/resultProxy.mjs';
+import { tallyNotice, tallyReason } from '../lib/resultProxy.mjs';
+import { whyNot } from '../run_agent.mjs';
 
 const deps = {
   connect: () => ({ gateway: 'https://gw.example', clientKey: 'ark_synthetic-profile' }),
@@ -82,4 +83,19 @@ test('the budget-notice outcome is counted per response', () => {
   tallyNotice(t, undefined);
   tallyNotice(t, 'not json');
   assert.deepEqual(t, { applied: 2, notApplied: 1, absent: 2 });
+});
+
+test('a rewrite that stood aside is counted by its named reason', () => {
+  const r = {};
+  tallyReason(r, '{"applied":false,"reason":"already_present"}');
+  tallyReason(r, '{"applied":false,"reason":"already_present"}');
+  tallyReason(r, '{"applied":false,"reason":"client_tool_search"}');
+  tallyReason(r, '{"applied":false}');
+  tallyReason(r, '{"applied":true,"deferred":3}');
+  tallyReason(r, undefined);
+  tallyReason(r, 'not json');
+  assert.deepEqual(r, { already_present: 2, client_tool_search: 1, unnamed: 1 });
+  assert.equal(whyNot(r), ' (already_present 2, client_tool_search 1, unnamed 1)');
+  assert.equal(whyNot({}), '');
+  assert.equal(whyNot(undefined), '');
 });
