@@ -42,7 +42,35 @@ cheap failure is never a win. Rounds only one arm solved are listed as quality e
 (who solved), rounds neither solved are listed apart, and rounds where an arm timed out
 or crashed (no cost) are excluded and listed. With fewer than 3 solved pairs the verdict
 is `INSUFFICIENT`. The earlier all-rounds line is still printed below it, and saved as
-`stats` (the solved-pair verdict is `verdict`).
+`stats` (the solved-pair Rule 0 summary is `rule0Verdict`).
+
+### Reading the paired cost verdict
+
+The final `verdict` in each result file tests whether B is cheaper than A across
+valid paired rounds. Only rounds where **both arms solved**, both costs and the ratio
+are positive and finite, and neither arm worked outside its checkout count. Failed
+rounds and rounds across a gateway restart are excluded. The printout lists the
+exclusion counts and each arm's mean cost and cost variation.
+
+The verdict uses the geometric mean of B/A ratios and a two-sided 95% Student t
+interval on their logarithms. `pass` requires at least 8 valid rounds and an upper
+interval bound below 1. `fail` means the lower bound is above 1. Otherwise it is
+`inconclusive`; below 8 valid rounds it also says how many more are needed. The
+minimum detectable ratio is the largest hypothetical B/A ratio below 1 whose 95%
+interval would clear 1 at the observed variation and sample size. It is a confidence
+threshold, not a power guarantee. One round has no variance estimate, so its ratio
+cannot establish a cost win.
+
+To recalculate from existing files, with no agent or model traffic:
+
+```bash
+node tools/bench-verdict.mjs results/agent/cobra-flag-groups--control*.json
+node tools/bench-verdict.mjs --json --min-rounds 12 results/agent/example.json
+```
+
+The tool checks scenario, compare mode, model, and provider before pooling. Use
+`--allow-mixed` to override that check; the output then names the differences.
+It exits 0 for pass, 1 for fail, and 2 for inconclusive.
 
 A **control** comparison (`--compare control`) runs direct against direct to show how
 far two identical setups drift apart. A result inside that band proves nothing.
@@ -313,6 +341,8 @@ scenarios/            one directory per task: scenario.yaml (+ patch)
 tools/bench-rule.mjs  strategies on/off for benchmark traffic only
 lib/agentRun.mjs      checkout, headless Claude Code per arm, transcript parsing
 lib/stats.mjs         Rule 0 verdict
+lib/benchVerdict.mjs  paired cost confidence interval and verdict
+tools/bench-verdict.mjs  recalculate verdict from result files
 lib/strategies.mjs    strategies on vs what each did, from gateway traces
 lib/traces.mjs        gateway admin API: optimizer config, per-request traces
 lib/cost.mjs          price usage, incl. cache reads and 5-minute/1-hour writes
