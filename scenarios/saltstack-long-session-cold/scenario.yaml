@@ -1,0 +1,32 @@
+title: "Long session in saltstack/salt with three pauses of 62 minutes: three cold turns"
+# The same five user turns as saltstack-long-session, with the user away for 62 minutes
+# before the second, third and fourth: longer than the 1-hour lifetime Claude Code asks for
+# on its prompt-cache entries, so each of those turns starts with the provider's cache
+# expired and re-writes the whole conversation. The last turn follows at once and reads
+# what the third cold turn wrote.
+#
+# What it exercises: anything a gateway does differently on a turn whose cache has expired
+# (how it prices an edit of history there), and what its keep-warm pings cost across long
+# pauses. The session takes about 3.4 hours; gatewaySettleSec then waits out the keep-warm
+# idle window before the ping cost is read, so a round is close to 4 hours.
+#
+# The arms are handed the Claude seat's access token once and cannot refresh it: the
+# harness refuses to start if the token expires before the pauses are over.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  I'm new to this codebase. Read salt/loader/lazy.py and explain how LazyLoader finds,
+  filters and loads a module, including what __virtual__ does. Cite path:line.
+followups:
+  - "Now read salt/minion.py around how a job is received and explain the path from the published payload to calling the execution function. Cite path:line."
+  - "Explain how the return gets back to the master and then to the CLI (salt/client/__init__.py). Cite path:line."
+  - "How are the dunder globals (__salt__, __opts__, __grains__) injected into a module? Cite path:line."
+  - "Finally: write one Markdown summary of the whole path from `salt '*' test.ping` to the printed result, with a section per stage, citing path:line for every claim."
+followupDelaySec: [3720, 3720, 3720, 0]
+gatewaySettleSec: 2100
+citations:
+  min: 10
+  resolveRate: 0.9
+maxTurns: 40
+timeoutMin: 240

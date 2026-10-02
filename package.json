@@ -10,6 +10,7 @@
     "agent:report": "node report_agent.mjs",
     "bench-rule": "node tools/bench-rule.mjs",
     "bench-level": "node tools/bench-level.mjs",
+    "cold-turns": "node tools/cold-turns.mjs",
     "replay": "node run.mjs",
     "replay:report": "node report.mjs"
   },
