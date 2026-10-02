@@ -9,6 +9,7 @@
     "agent": "node run_agent.mjs",
     "agent:report": "node report_agent.mjs",
     "bench-rule": "node tools/bench-rule.mjs",
+    "bench-level": "node tools/bench-level.mjs",
     "replay": "node run.mjs",
     "replay:report": "node report.mjs"
   },
