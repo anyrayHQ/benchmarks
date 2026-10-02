@@ -185,11 +185,9 @@ record only its basename. `bench-level` uses `ANYRAY_GATEWAY_URL`,
 `ANYRAY_ADMIN_KEY`, and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`). It
 backs up the prior assignment under ignored `results/` and sends revision-checked
 team-policy writes that preserve the skills list and other policy fields. For a
-service key, it compares sealed keys in memory using admin `keys:read` and
-`keys:secret` access to find the durable key ID. If that is unavailable, pass
-`--agent <id>`; human keys need `--user <id>`. The explicit ID must identify the
-benchmark key. `ANYRAY_BENCH_AGENT_ID` or `ANYRAY_BENCH_USER_ID` supplies that
-override to `run_agent.mjs`.
+service key pass `--agent <id>` (the key's policy ID); for a user seat pass
+`--user <id>`. `ANYRAY_BENCH_AGENT_ID` / `ANYRAY_BENCH_USER_ID` set the same for
+`run_agent.mjs`. The tool never reads any key's secret.
 
 ### Is the Anyray arm connected correctly?
 
