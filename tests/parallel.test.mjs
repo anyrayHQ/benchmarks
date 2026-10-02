@@ -141,7 +141,11 @@ test('runComparison: --parallel 1 runs rounds one after another, exactly as befo
   assert.deepEqual(s.events, ['start 1', 'start 1', 'end 1', 'end 1', 'start 2', 'start 2', 'end 2', 'end 2', 'start 3', 'start 3', 'end 3', 'end 3']);
   assert.equal(s.maxInFlight, 2); // A ‖ B only
   assert.deepEqual(record.rounds.map((x) => x.round), [1, 2, 3]);
-  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).rounds.map((x) => x.round), [1, 2, 3]);
+  const saved = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual(saved.rounds.map((x) => x.round), [1, 2, 3]);
+  assert.equal(saved.verdict.verdict, 'inconclusive');
+  assert.equal(saved.verdict.n, 3);
+  assert.equal(saved.verdict.moreRoundsNeeded, 5);
   assert.match(lines[0], /parallel 1/);
   rmSync(root, { recursive: true, force: true });
 });
