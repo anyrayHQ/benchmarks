@@ -160,6 +160,23 @@ A gateway that answers with the client's own model id (it passes the request to 
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
 
+### Keeping the pair like for like
+
+- `--warm-up` runs a throwaway one-turn session with each arm's exact setup before the
+  timed one, so both arms start with their stable prefix already in the provider's cache.
+  Without it, an arm whose setup changed since the previous run starts cold while the
+  other reads a prefix that run left warm. The warm-up's cost is recorded on the session
+  (`warmUp.costUsd`) and never added to the session's cost.
+- Each round line shows `start <read> read / <written> written`: what the first request of
+  each agent (main and subagents) read from the cache and wrote to it. A large difference
+  between the arms is a cold start, not the work.
+- A session that reads, searches or `cd`s outside its own checkout is flagged
+  `OUTSIDE CHECKOUT` with a count (`outsideCheckout` on the session). Another copy of the
+  scenario's repo elsewhere on the machine is the usual cause: remove it.
+- Citations: a path from the repository root resolves exactly; a path that names exactly
+  one file by its tail also resolves and is counted apart (`bySuffix`); a tail that names
+  several files is `ambiguous` and stays unresolved.
+
 ### Choosing a Claude Code integration level
 
 `--integration-level gateway|gateway_hooks|gateway_hooks_mcp` assigns that level to the

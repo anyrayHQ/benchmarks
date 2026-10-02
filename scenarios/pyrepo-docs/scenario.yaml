@@ -10,9 +10,12 @@ task: >-
   how the loader discovers and loads execution modules (and what __virtual__ and the
   dunder globals like __salt__ and __opts__ do), and how the return gets back to the
   CLI. Output the documentation as Markdown in your final answer, with a section per
-  stage, and cite the code for every claim as path:line.
+  stage, and cite the code for every claim as path:line, with each path written from
+  the repository root (salt/minion.py:120, not minion.py:120).
 # Every claim must cite real code. Solved when at least `min` path:line citations
 # appear and at least `resolveRate` of them resolve to an existing line in the checkout.
+# A path that names exactly one file by its tail (cli/main.py for pkg/cli/main.py) also
+# resolves; one that names several files does not.
 citations:
   min: 10
   resolveRate: 0.9
