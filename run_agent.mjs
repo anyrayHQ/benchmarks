@@ -75,7 +75,7 @@ import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
-import { parseKinds, tallyKinds, formatKindTally } from './lib/optimizationKinds.mjs';
+import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed } from './lib/optimizationKinds.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
@@ -633,9 +633,9 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         // Isolation check: nothing but the named strategy may have acted on either gateway arm.
         const iso = {};
         for (const slot of viaGateway) {
-          const others = new Set((traces[slot]?.traces ?? []).flatMap((t) => (t.decisions ?? []).map((d) => d.kind)).filter((k) => k !== args.strategy && k !== 'mint_economics')); // mint_economics = the strategy's own admission estimate
-          iso[slot] = others.size ? { ok: false, otherKinds: [...others] } : { ok: true };
-          if (others.size) log(`  round ${round} ISOLATION BROKEN on ${slot.toUpperCase()}: ${[...others].join(', ')} also acted`);
+          const others = otherKindsThatActed((traces[slot]?.traces ?? []).flatMap((t) => t.decisions ?? []), args.strategy);
+          iso[slot] = others.length ? { ok: false, otherKinds: others } : { ok: true };
+          if (others.length) log(`  round ${round} ISOLATION BROKEN on ${slot.toUpperCase()}: ${others.join(', ')} also acted`);
         }
         r.isolation = iso.b;
         if (args.compare === 'gateway') r.isolationA = iso.a;
