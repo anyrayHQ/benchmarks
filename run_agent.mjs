@@ -61,6 +61,11 @@
 //   ANYRAY_BENCH_EXTRA_HEADERS='x-example: on' node run_agent.mjs --scenario s --compare gateway --strategy thinking_trim
 //     (both slots are the anyray arm with the same kinds and metadata, each with its own
 //      session id so traces and spend stay apart; B alone sends the extra headers)
+//   node run_agent.mjs --scenario s --compare gateway --kinds observation_mask --experiment-b my-exp-b
+//     (--experiment-b <name>: arm B alone sends experiment=<name> in x-anyray-metadata, so a
+//      gateway rule keyed on it (`bench-rule params <name> --params …`) is the treatment: same
+//      strategies in both arms, the rule's params on B only. Each round records the rule as
+//      it stood before and after, and which kind the gateway's session gate held out of each arm)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -76,7 +81,8 @@ import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
-import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed } from './lib/optimizationKinds.mjs';
+import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
+import { experimentRules, sameRules, validExperimentName } from './lib/benchRule.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
@@ -113,8 +119,41 @@ function parseMaxTurns(v) {
   return Number(v);
 }
 
+function parseRedraw(v) {
+  if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--redraw-holdout needs a positive integer (how many restarts), got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  return Number(v);
+}
+
+/**
+ * Run a pair of sessions, and run it again when one of them reports that the gateway drew
+ * it into a holdout (its control arm: the session runs without one strategy). The gateway
+ * draws per session, so the two sessions of a pair are drawn separately; a pair where one
+ * is held out compares two different strategy sets. Each attempt gets its own stop signal:
+ * the arm that sees a holdout on one of its first responses reports it, which stops both.
+ * `startPair(redraw)` returns `{ settled, … }`; the result is the last attempt's, plus the
+ * draws that were thrown away. With `maxRedraws` 0 nothing is watched.
+ */
+export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => {}) {
+  const redraws = [];
+  for (;;) {
+    const controller = maxRedraws ? new AbortController() : null;
+    const drawn = {};
+    const report = (slot) => (held) => {
+      drawn[slot] = held;
+      controller.abort();
+    };
+    const result = await startPair(controller ? { signal: controller.signal, report } : null);
+    if (controller?.signal.aborted && redraws.length < maxRedraws) {
+      redraws.push(drawn);
+      onRedraw(drawn, redraws.length);
+      continue;
+    }
+    return { ...result, redraws };
+  }
+}
+
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -128,6 +167,8 @@ export function parseArgs(argv) {
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
+    else if (argv[i] === '--experiment-b') a.experimentB = argv[++i] ?? ''; // the same, on arm B only (--compare gateway)
+    else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
@@ -139,13 +180,19 @@ export function parseArgs(argv) {
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
   const gateway = a.compare !== 'control';
-  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel]]) {
+  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel], ['--redraw-holdout', a.redrawHoldout]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
   }
   if (a.integrationLevel !== null && !LEVELS.includes(a.integrationLevel)) throw new Error(`--integration-level must be ${LEVELS.join('|')}`);
   if (a.readTrim && a.integrationLevel && a.integrationLevel !== 'gateway_hooks_mcp') throw new Error('--read-trim needs --integration-level gateway_hooks_mcp: lower levels cannot retrieve');
   if (a.withControl && a.compare === 'control') throw new Error('--with-control adds a direct-vs-direct control; --compare control already is one');
   if (a.experiment && a.strategy) throw new Error('--experiment and --strategy both set the experiment tag: use one');
+  if (a.experimentB !== null) {
+    if (a.compare !== 'gateway') throw new Error('--experiment-b needs --compare gateway: it tags arm B of two gateway arms');
+    if (!validExperimentName(a.experimentB)) throw new Error(`--experiment-b must be a plain name (letters, digits, ".", "_", "-"), got ${JSON.stringify(a.experimentB)}`);
+    if (a.strategy) throw new Error('--experiment-b and --strategy both set the experiment tag: use --kinds with --experiment-b');
+    if (a.experimentB === a.experiment) throw new Error('--experiment-b must differ from --experiment: a rule keyed on it would match both arms');
+  }
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
   if (a.strategy && a.kinds && !a.kinds.includes(a.strategy)) throw new Error(`--strategy ${a.strategy} must be one of --kinds`);
@@ -182,6 +229,8 @@ export const controlArgs = (args) => ({
   kindsSource: null,
   strategy: null,
   experiment: null,
+  experimentB: null,
+  redrawHoldout: 0,
   readTrim: false,
   integrationLevel: null,
   armEnv: [],
@@ -219,6 +268,8 @@ export const requestRecord = (args) => ({
   bare: !!args.bare,
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
+  ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
+  ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
@@ -252,7 +303,21 @@ export const parallelToolTurns = (requests) =>
 export function roundTags(args, round, now = Date.now()) {
   const tag = roundTag(args, round, now);
   if (args.compare !== 'gateway') return { a: tag, b: tag };
-  return { a: { ...tag, sessionId: `${tag.sessionId}-a` }, b: { ...tag, sessionId: `${tag.sessionId}-b` } };
+  // --experiment-b: B alone carries that tag, so a gateway rule keyed on it reaches B only.
+  const b = args.experimentB ? { ...tag, experiment: args.experimentB } : tag;
+  return { a: { ...tag, sessionId: `${tag.sessionId}-a` }, b: { ...b, sessionId: `${tag.sessionId}-b` } };
+}
+
+/**
+ * Which requested kinds a gateway holdout withheld from each arm (from the arms' feedback
+ * tallies), and whether the arms differ. The gateway draws its control per session, so the
+ * two sessions of a round are drawn separately: a round where they differ compares two
+ * different strategy sets and should be discarded.
+ */
+export function heldOutRecord(tallies) {
+  const out = Object.fromEntries(Object.entries(tallies).map(([slot, t]) => [slot, heldOutKinds(t)]));
+  const lists = Object.values(out).map((k) => k.join(','));
+  return { ...out, differs: lists.length > 1 && new Set(lists).size > 1 };
 }
 
 /** One round's x-anyray-metadata tag. */
@@ -342,10 +407,11 @@ function summarize(session, pricing) {
 }
 
 /** How the round printout names a slot's arm; under gateway, B names its extra headers. */
-export const armLabel = (args, arms, slot) =>
-  args.compare === 'gateway'
-    ? `anyray${slot === 'b' && args.extraHeaders?.length ? ` + ${requestRecord(args).extraHeaders.join(', ')}` : ' (baseline)'}`
-    : arms[slot];
+export const armLabel = (args, arms, slot) => {
+  if (args.compare !== 'gateway') return arms[slot];
+  const treatment = slot === 'b' ? [...requestRecord(args).extraHeaders, ...(args.experimentB ? [`experiment=${args.experimentB}`] : [])] : [];
+  return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
+};
 
 /** The round line's gateway-ping part: '' for a direct arm, 'n/a' when unreadable. */
 export const pingNote = (t) =>
@@ -560,7 +626,7 @@ export async function resolveBedrock(run, { env = process.env, probe = probeGate
 }
 
 /** What runComparison reaches outside the process through; tests stub them. */
-const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock };
+const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock, readOptimizerConfig: optimizerConfig };
 
 /**
  * One comparison's rounds, into its own result file. Returns the record. Up to
@@ -568,12 +634,12 @@ const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: c
  * pool with the control); each is saved as it finishes, in round order.
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
-  const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock } = { ...LIVE, ...deps };
+  const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig } = { ...LIVE, ...deps };
   const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length) {
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;
@@ -614,6 +680,14 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   if (viaGateway.length) {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
+  // --experiment-b is only a treatment if a gateway rule is keyed on the tag: say so before
+  // the sessions start, not after.
+  if (args.experimentB) {
+    const rules = experimentRules(record.anyray?.optimizerConfig, args.experimentB);
+    if (rules === null) log(`WARNING: cannot read the gateway's optimizer config, so cannot confirm a rule matches experiment=${args.experimentB}`);
+    else if (!rules.length) log(`WARNING: no gateway rule matches experiment=${args.experimentB}: A and B are the same arm. Add one with \`bench-rule params ${args.experimentB} --params …\``);
+    else log(`arm B (experiment=${args.experimentB}) matches: ${rules.map((r) => `${r.label}${r.params ? ` params ${JSON.stringify(r.params)}` : ''}`).join('; ')}`);
+  }
 
   // Round numbers are fixed up front (after any rounds already in the file), so they
   // and each round's session id stay unique however the rounds overlap.
@@ -622,13 +696,27 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   log(`${args.scenario} [${args.compare}] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1} (up to ${args.parallel ?? 1} round(s) at once, each A ‖ B)`);
 
   const runRound = async (round) => {
-    const runTags = roundTags(args, round);
     log(`${args.scenario} [${args.compare}] round ${round}: ${armLabel(args, arms, 'a')} ‖ ${armLabel(args, arms, 'b')} (concurrent)…`);
-    const run1 = (slot) => runAgent({ ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag: runTags[slot] });
-    // Replica start times around the round: a gateway restart under it spoils the pair.
-    const replicasBefore = viaGateway.length ? await gatewayReplicaStarts(run.gatewayUrl) : null;
-    const startedAt = new Date().toISOString();
-    const [sa, sb] = await Promise.allSettled([run1('a'), run1('b')]);
+    // One attempt at the pair. --redraw-holdout starts it again (fresh sessions, so fresh
+    // draws) when the gateway held a kind out of either session.
+    const startPair = async (redraw) => {
+      const runTags = roundTags(args, round); // a new session id per attempt
+      const run1 = (slot) => runAgent({
+        ...slotOptions(args, arms, slot), scenario, scenarioDir: dir, model: run.model, gatewayUrl: run.gatewayUrl, runTag: runTags[slot],
+        redraw: redraw && arms[slot] === 'anyray' ? { signal: redraw.signal, report: redraw.report(slot) } : redraw && { signal: redraw.signal, report: () => {} },
+      });
+      // Replica start times around the round: a gateway restart under it spoils the pair.
+      const replicasBefore = viaGateway.length ? await gatewayReplicaStarts(run.gatewayUrl) : null;
+      const ruleBefore = args.experimentB ? experimentRules(await readOptimizerConfig(run.gatewayUrl), args.experimentB) : undefined;
+      const startedAt = new Date().toISOString();
+      const settled = await Promise.allSettled([run1('a'), run1('b')]);
+      return { settled, runTags, replicasBefore, ruleBefore, startedAt };
+    };
+    const { settled: [sa, sb], runTags, replicasBefore, ruleBefore, startedAt, redraws } = await runPairWithRedraw(
+      startPair,
+      viaGateway.length ? args.redrawHoldout ?? 0 : 0,
+      (drawn, n) => log(`  round ${round}: the gateway's session gate held out ${Object.entries(drawn).map(([slot, k]) => `${k.join(', ')} on ${slot.toUpperCase()}`).join('; ')}; starting the pair again (redraw ${n}/${args.redrawHoldout})`)
+    );
     const endedAt = new Date().toISOString();
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
@@ -687,6 +775,19 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         r.tracesA = traces.a ?? null;
         r.optimizationA = sessions.a.optimization?.tally ?? null;
       }
+      // The gateway's session gate draws a control per session: which kind (if any) each
+      // arm ran without, and whether that makes the two arms different strategy sets.
+      r.heldOut = heldOutRecord(Object.fromEntries(viaGateway.map((slot) => [slot, sessions[slot].optimization?.tally ?? null])));
+      if (redraws.length) r.redraws = redraws; // pairs thrown away because a session drew a holdout
+      if (r.heldOut.differs) {
+        log(`  round ${round} WARNING: the gateway held out different kinds per arm (${viaGateway.map((slot) => `${slot.toUpperCase()}: ${r.heldOut[slot].join(', ') || 'none'}`).join('; ')}); the arms ran different strategy sets: drop this round`);
+      }
+      if (args.experimentB) {
+        // Arm B's treatment is a rule in a shared config: it must be the same rule at both ends of the round.
+        const after = experimentRules(r.optimizerConfig, args.experimentB);
+        r.experimentRule = { before: ruleBefore ?? null, after, stable: ruleBefore == null || after == null ? null : ruleBefore.length > 0 && sameRules(ruleBefore, after) };
+        if (r.experimentRule.stable === false) log(`  round ${round} WARNING: the rule for experiment=${args.experimentB} was missing or changed during the round; drop it`);
+      }
       if (args.strategy) {
         // Isolation check: nothing but the named strategy may have acted on either gateway arm.
         const iso = {};
@@ -712,6 +813,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +
         `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
+        (r.heldOut && viaGateway.some((slot) => r.heldOut[slot].length) ? `\n  round ${round} held out by the gateway's session gate: ${viaGateway.map((slot) => `${slot.toUpperCase()} ${r.heldOut[slot].join(', ') || 'none'}`).join(' · ')}` : '') +
         (r.optimizationA ? `\n  round ${round} A ${formatKindTally(r.optimizationA)}` : '') +
         (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
     );
