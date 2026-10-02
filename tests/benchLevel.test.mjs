@@ -58,10 +58,10 @@ test('integration level arguments validate comparison, value and retrieval optio
 
 test('set and clear preserve other policy fields, use revisions, and save no key', async () => {
   const stub = api(), root = testRoot();
-  const level = createBenchLevel({ gatewayUrl: GW, adminKey: ADMIN, clientKey: KEY, fetchImpl: stub.fetchImpl, root });
+  const level = createBenchLevel({ gatewayUrl: GW, adminKey: ADMIN, clientKey: KEY, agent: 'agent-1', fetchImpl: stub.fetchImpl, root });
   const change = await level.set('gateway_hooks');
   assert.equal(change.target.id, 'agent-1');
-  assert.equal(stub.secrets, 1);
+  assert.equal(stub.secrets, 0);
   assert.equal(stub.state.integrationLevel.agents['agent-1'], 'gateway_hooks');
   assert.deepEqual(stub.state.skills, policy().skills);
   assert.deepEqual(stub.state.hooks, policy().hooks);
@@ -76,7 +76,7 @@ test('set and clear preserve other policy fields, use revisions, and save no key
 
 test('clear rebases over unrelated policy changes but refuses a changed target', async () => {
   const stub = api();
-  const level = createBenchLevel({ gatewayUrl: GW, adminKey: ADMIN, clientKey: KEY, fetchImpl: stub.fetchImpl, root: testRoot() });
+  const level = createBenchLevel({ gatewayUrl: GW, adminKey: ADMIN, clientKey: KEY, agent: 'agent-1', fetchImpl: stub.fetchImpl, root: testRoot() });
   const change = await level.set('gateway');
   stub.state.revision = 'external';
   stub.state.hooks.extra = 'on';
@@ -189,4 +189,16 @@ test('level checks pass matching shapes and name each wrong piece in both direct
   for (const piece of ['mcp anyray', 'permission', 'skill']) assert.match(hooksWrong, new RegExp(piece));
   const fullWrong = failedChecks(checkConnectConfig({ ...shape('gateway_hooks'), integrationLevel: 'gateway_hooks_mcp', appliedIntegrationLevel: 'gateway_hooks_mcp' })).map((c) => c.name).join(' ');
   for (const piece of ['mcp anyray', 'permission', 'skill']) assert.match(fullWrong, new RegExp(piece));
+});
+
+test('without an explicit id the tool refuses, and never lists keys or reads a secret', async () => {
+  const stub = api(), root = testRoot();
+  const seen = [];
+  const fetchImpl = (url, init) => (seen.push(String(url)), stub.fetchImpl(url, init));
+  const level = createBenchLevel({ gatewayUrl: GW, adminKey: ADMIN, clientKey: KEY, fetchImpl, root });
+  await assert.rejects(level.set('gateway'), /--agent <id>.*--user <id>/);
+  await assert.rejects(level.show(), /--agent <id>/);
+  assert.equal(stub.secrets, 0);
+  assert.ok(seen.every((u) => !u.includes('/admin/v1/keys')), 'no key listing or secret read');
+  assert.equal(stub.puts.length, 0);
 });

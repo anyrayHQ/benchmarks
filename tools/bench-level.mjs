@@ -17,7 +17,7 @@ async function main(argv = process.argv.slice(2), env = process.env) {
   if (rest.length || !['show', 'set', 'clear'].includes(command) || (command === 'set' && !LEVELS.includes(level)) || (command !== 'set' && level)) {
     throw new Error(`usage: bench-level show | set ${LEVELS.join('|')} | clear [--agent <id> | --user <id>]`);
   }
-  const tool = createBenchLevel({ gatewayUrl: env.ANYRAY_GATEWAY_URL, adminKey: env.ANYRAY_ADMIN_KEY, clientKey: env.ANYRAY_BENCH_CLIENT_KEY || env.ANYRAY_CLIENT_KEY, agent, user });
+  const tool = createBenchLevel({ gatewayUrl: env.ANYRAY_GATEWAY_URL, adminKey: env.ANYRAY_ADMIN_KEY, clientKey: env.ANYRAY_BENCH_CLIENT_KEY || env.ANYRAY_CLIENT_KEY, agent: agent ?? (user ? undefined : env.ANYRAY_BENCH_AGENT_ID), user: user ?? (agent ? undefined : env.ANYRAY_BENCH_USER_ID) });
   if (command === 'show') {
     const report = await tool.show();
     console.log(`${report.target.scope}/${report.target.id}: assigned ${report.assigned ?? 'none'}; effective ${report.effective.level} (${report.effective.source})`);
