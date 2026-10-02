@@ -345,10 +345,15 @@ test('a requested level never falls back to harness wiring when Connect fails', 
 
 test('ANYRAY_CONNECT_BIN is the binary used by enrollment and fallback MCP wiring', () => {
   const { bin } = fakeConnect();
+  // The fallback wiring reads this machine's Connect profile: give the child its own
+  // HOME with one, so the test does not depend on the machine it runs on.
+  const home = mkdtempSync(join(tmpdir(), 'bin-home-'));
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  writeFileSync(join(home, '.anyray', 'connect.json'), JSON.stringify({ gateway: 'https://elsewhere.test.invalid', clientKey: KEY }));
   const code = `import { ANYRAY_BIN } from './lib/connectArm.mjs'; import { armConfig } from './lib/agentRun.mjs';
     const arm = armConfig({ arm: 'anyray', gatewayUrl: '${GATEWAY}', runTag: {}, cfgDir: process.env.TEST_CFG_DIR });
     console.log(JSON.stringify({ binary: ANYRAY_BIN, mcp: arm.mcp.mcpServers.anyray?.command }));`;
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: process.cwd(), env: { ...process.env, ANYRAY_CONNECT_BIN: bin, ANYRAY_CLIENT_KEY: '', ANYRAY_BENCH_CLIENT_KEY: '', TEST_CFG_DIR: cfg() }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: process.cwd(), env: { ...process.env, HOME: home, ANYRAY_CONNECT_BIN: bin, ANYRAY_CLIENT_KEY: '', ANYRAY_BENCH_CLIENT_KEY: '', TEST_CFG_DIR: cfg() }, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), { binary: bin, mcp: bin });
 });
