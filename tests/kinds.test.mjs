@@ -8,6 +8,7 @@ import {
   parseOptimizationResult,
   tallyKinds,
   formatKindTally,
+  otherKindsThatActed,
 } from '../lib/optimizationKinds.mjs';
 
 test('header names match the gateway contract', () => {
@@ -108,4 +109,54 @@ test('formatKindTally prints one line per requested kind', () => {
   assert.match(lines[0], /2 request/);
   assert.match(lines.find((l) => l.includes('observation_mask')), /applied 1 · skipped 0 · unconfirmed 1/);
   assert.match(lines.find((l) => l.includes('code_graph')), /applied 0 · skipped 1 \(no_change 1\) · unconfirmed 1/);
+});
+
+// ---- isolation: which other kinds changed the request ----
+
+const decision = (kind, extra = {}) => ({ kind, summary: 's', estimatedTokensSaved: 0, ...extra });
+
+test('otherKindsThatActed: the named strategy and its own reports are not "other"', () => {
+  const decisions = [
+    decision('thinking_trim', { estimatedTokensSaved: 16, before: 'a', after: 'b' }),
+    decision('thinking_trim_signature_pricing', { metric: { name: 'blocks', value: 1 } }),
+    decision('thinking_trim_binding_hold'),
+    decision('mint_economics', { metric: { name: 'mint_declined_tokens', value: 900 } }),
+  ];
+  assert.deepEqual(otherKindsThatActed(decisions, 'thinking_trim'), []);
+});
+
+test('otherKindsThatActed: kinds that only measure are not "other"', () => {
+  const decisions = [
+    decision('content_census', { metric: { name: 'censusToolTokens', value: 3042 } }),
+    decision('cache_lint', { estimatedSavingsUsd: 0 }),
+    decision('first_appearance_shadow', { metric: { name: 'fa_shadow_tokens', value: 0 } }),
+  ];
+  assert.deepEqual(otherKindsThatActed(decisions, 'thinking_trim'), []);
+});
+
+test('otherKindsThatActed: another strategy that acted is reported, once, in order', () => {
+  const decisions = [
+    decision('observation_mask', { estimatedTokensSaved: 1200, before: 'x', after: 'y' }),
+    decision('thinking_trim', { estimatedTokensSaved: 16 }),
+    decision('relevance_filter'),
+    decision('observation_mask', { estimatedTokensSaved: 300 }),
+  ];
+  assert.deepEqual(otherKindsThatActed(decisions, 'thinking_trim'), ['observation_mask', 'relevance_filter']);
+});
+
+test('otherKindsThatActed: a measuring kind or a report that edited the request is "other" after all', () => {
+  // The exemption is for decisions that changed nothing. One that saved tokens or
+  // carries a before/after seam edited the request, whatever its kind is called.
+  assert.deepEqual(otherKindsThatActed([decision('content_census', { estimatedTokensSaved: 40 })], 'thinking_trim'), ['content_census']);
+  assert.deepEqual(otherKindsThatActed([decision('cache_lint', { before: 'a', after: 'b' })], 'thinking_trim'), ['cache_lint']);
+  assert.deepEqual(otherKindsThatActed([decision('observation_mask_report', { estimatedTokensSaved: 9 })], 'observation_mask'), ['observation_mask_report']);
+});
+
+test('otherKindsThatActed: a kind that merely starts like the strategy is not its report', () => {
+  assert.deepEqual(otherKindsThatActed([decision('thinking_trimmer')], 'thinking_trim'), ['thinking_trimmer']);
+});
+
+test('otherKindsThatActed: malformed input is ignored', () => {
+  assert.deepEqual(otherKindsThatActed(undefined, 'thinking_trim'), []);
+  assert.deepEqual(otherKindsThatActed([null, 7, {}, { kind: 42 }], 'thinking_trim'), []);
 });
