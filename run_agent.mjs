@@ -124,6 +124,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--integration-level') a.integrationLevel = argv[++i] ?? '';
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
+    else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
@@ -208,12 +209,14 @@ export const slotOptions = (args, arms, slot) => ({
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   bare: !!args.bare && arms[slot] === 'anyray',
+  warmUp: !!args.warmUp, // both slots, so the pair stays like for like
 });
 
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
 export const requestRecord = (args) => ({
   noSubagents: !!args.noSubagents,
   bare: !!args.bare,
+  warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
@@ -272,6 +275,24 @@ export function armSetups(args, arms, run, scenario, { enrolled, tenant } = {}) 
 export const withSessionSetups = (setup, sessions) =>
   Object.fromEntries(Object.entries(setup).map(([slot, planned]) => [slot, sessions[slot]?.setup ? { ...planned, ...sessions[slot].setup } : planned]));
 
+/**
+ * What each agent's FIRST request read from the provider cache and wrote to it, summed
+ * over the main agent and every subagent. A session whose prefix was already cached
+ * (by a run minutes earlier) reads it; one whose setup changed writes it cold, at a
+ * higher price: this shows how much of a cost gap is that and not the session's work.
+ */
+export function startTokens(requests) {
+  const first = new Map();
+  for (const r of requests) if (!first.has(r.agent)) first.set(r.agent, r.usage ?? {});
+  let read = 0;
+  let written = 0;
+  for (const u of first.values()) {
+    read += u.cache_read_input_tokens ?? 0;
+    written += u.cache_creation_input_tokens ?? 0;
+  }
+  return { agents: first.size, read, written };
+}
+
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
@@ -279,6 +300,8 @@ function summarize(session, pricing) {
   let subIn = 0;
   // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
   t.cacheBreaks = countCacheBreaks(session.requests);
+  t.start = startTokens(session.requests);
+  t.outsideCheckout = session.outsideCheckout?.count ?? 0;
   t.parallelToolTurns = parallelToolTurns(session.requests);
   t.resultSubtype = session.result?.subtype ?? null; // e.g. error_max_turns
   t.compactions = session.compactions?.length ?? 0;
@@ -680,6 +703,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     const tb = sessions.b.totals;
     const line = (slot, t) =>
       `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
+      ` · start ${t.start.read} read / ${t.start.written} written` +
+      (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
