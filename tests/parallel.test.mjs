@@ -280,3 +280,59 @@ test('runAll: without --with-control the main comparison gets the whole budget',
   assert.equal(control, undefined);
   assert.equal(max, 3);
 });
+
+// --retry-invalid N
+
+test('parseArgs: --retry-invalid takes a whole number', () => {
+  assert.equal(parseArgs(base).retryInvalid, undefined);
+  assert.equal(parseArgs([...base, '--retry-invalid', '0']).retryInvalid, 0);
+  assert.equal(parseArgs([...base, '--retry-invalid', '2']).retryInvalid, 2);
+  for (const bad of ['-1', '1.5', 'two', '']) {
+    assert.throws(() => parseArgs([...base, '--retry-invalid', bad]), /--retry-invalid needs a whole number/);
+  }
+});
+
+/** A stub whose listed rounds answer without the key fact, so those rounds are not solved. */
+function unsolvedOn(rounds) {
+  const s = stubAgent();
+  const inner = s.runAgent;
+  s.runAgent = async (o) => {
+    const v = await inner(o);
+    const round = Number(/-r(\d+)-/.exec(o.runTag.sessionId)[1]);
+    return rounds.includes(round) ? { ...v, result: { ...v.result, text: 'nothing useful' } } : v;
+  };
+  return s;
+}
+
+test('runComparison: --retry-invalid runs an unsolved round again under the next number', async () => {
+  const { root, cfg } = fixture();
+  const lines = [];
+  const { record } = await runComparison(parseArgs([...base, '--rounds', '1', '--retry-invalid', '1']), cfg, { deps: deps(unsolvedOn([1]), { log: (m) => lines.push(m) }) });
+  assert.deepEqual(record.rounds.map((r) => [r.round, r.quality.a && r.quality.b]), [[1, false], [2, true]]);
+  assert.deepEqual(record.retries, [{ round: 1, reasons: ['not solved'], retriedAs: 2 }]);
+  assert.equal(record.request.retryInvalid, 1);
+  assert.ok(lines.some((l) => /round 1 is not usable \(not solved\); running round 2 in its place \(retry 1\/1\)/.test(l)));
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('runComparison: --retry-invalid stops at N extra rounds, and a failed round counts', async () => {
+  const { root, cfg } = fixture();
+  const s = unsolvedOn([2]);
+  const inner = s.runAgent;
+  s.runAgent = async (o) => {
+    if (/-r1-/.test(o.runTag.sessionId)) throw new Error('arm crashed');
+    return inner(o);
+  };
+  const { record } = await runComparison(parseArgs([...base, '--rounds', '1', '--retry-invalid', '1']), cfg, { deps: deps(s) });
+  assert.deepEqual(record.rounds.map((r) => r.round), [1, 2]);
+  assert.deepEqual(record.retries, [{ round: 1, reasons: ['failed round', 'not solved'], retriedAs: 2 }]);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('runComparison: without --retry-invalid an unsolved round is not run again', async () => {
+  const { root, cfg } = fixture();
+  const { record } = await runComparison(parseArgs([...base, '--rounds', '2', '--parallel', '2']), cfg, { deps: deps(unsolvedOn([1])) });
+  assert.deepEqual(record.rounds.map((r) => r.round), [1, 2]);
+  assert.equal(record.retries, undefined);
+  rmSync(root, { recursive: true, force: true });
+});
