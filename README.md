@@ -352,6 +352,12 @@ settings afterwards.
   `bench-rule params`). Recorded in `request.experimentB`.
 - `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
   (see the gateway comparison above). Stopped attempts are not in the round's cost.
+- `--kinds-b <k1,k2>` (`--compare gateway`): arm B requests these kinds instead of `--kinds`,
+  so the pair isolates one strategy (e.g. the shipped defaults vs the defaults plus one
+  default-off kind). Recorded in `request.kindsB` and in each arm's `optimizationKinds`.
+- `--read-trim-b` (`--compare gateway`): connect's nested-Read trim on arm B only, so the
+  pair isolates it. Needs `--integration-level gateway_hooks_mcp` when a level is set.
+  Recorded in `request.readTrimB`.
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
