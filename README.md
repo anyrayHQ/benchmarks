@@ -12,6 +12,8 @@ Anyray's Rule 0: **a session must never cost more because of us.**
 Each **round** runs the same task on a real open-source repo in two arms **at the same
 time**, each a full Claude Code session on its own fresh checkout:
 
+The `sdk-docs` scenario below uses its own SDK tool loop and two per-token lanes.
+
 | Arm | How it reaches the model |
 |---|---|
 | **A · direct** | Claude Code straight to Anthropic. No gateway, hooks or MCP. |
@@ -137,6 +139,7 @@ are recorded in the round's `redraws`. Name every kind the gateway may hold out 
 | `saltstack-loader` | saltstack/salt (pinned) | Explain how an execution module is found and loaded | Key facts in the answer |
 | `saltstack-long-session` | saltstack/salt (pinned) | Five user turns of code walkthroughs over one large Python codebase | Path:line citations resolve |
 | `saltstack-long-session-cold` | saltstack/salt (pinned) | The same five turns with three 62-minute pauses, so three turns start with the prompt cache expired (about 4 hours a round) | Path:line citations resolve |
+| `sdk-docs` | saltstack/salt (pinned) | SDK tool loop without client cache markers, direct Bedrock vs gateway | Path:line citations resolve |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
 is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
@@ -226,6 +229,34 @@ npm run agent -- --scenario saltstack-docs --rounds 4 --provider bedrock --kinds
 A gateway that answers with the client's own model id (it passes the request to Bedrock
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
+
+### SDK agent without client cache markers
+
+`sdk-docs` measures a script or agent framework that sends ordinary Anthropic Messages
+requests without `cache_control`. Both arms pay per token. A small local agent sends the
+same system prompt, tool definitions, and full conversation in each arm. It can read a
+file by numbered range, list a directory, or search for literal text; every tool stays
+inside its own checkout of the pinned Salt repository. The direct arm calls Bedrock
+`InvokeModel` through the AWS CLI and local AWS profile. The Anyray arm sends the native
+Messages body to the gateway's org lane with the benchmark client key as bearer; the
+gateway selects its provider. Neither arm uses Claude Code or a subscription seat.
+
+```bash
+node run_agent.mjs --scenario sdk-docs --rounds 1 --provider bedrock
+```
+
+Set `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`),
+and configure the direct AWS profile and region as above. `ANYRAY_BEDROCK_MODEL` can
+pin the direct model; otherwise the existing gateway route probe resolves it. Use
+`--kinds <comma-list>` to request a measured gateway strategy set. The default sends
+no optimization selection header. `--inter-turn-delay-sec 310` pauses between model
+requests to test behavior beyond the five-minute cache lifetime. `--max-turns` must
+stay between 8 and 30; the scenario continues early answers until at least eight
+model requests have run. The round line prints each arm's cache-read share. The result
+file stores every request's token usage, estimated cost, and latency, plus the usual
+paired verdict and citation check. Run `node tools/bench-verdict.mjs` on that file to
+recalculate the verdict. A live run is required to establish route parity and measured
+savings; `npm test` uses stubs and makes no model requests.
 
 ### Connect's client-tool switches
 

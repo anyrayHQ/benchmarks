@@ -1,0 +1,17 @@
+title: "SDK agent documentation walk through a pinned Salt checkout"
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  Explain how `salt '*' test.ping` travels from the CLI through the master to a
+  minion, how the loader finds the execution module and injects dunder globals,
+  and how the return gets back to the CLI. Inspect at least eight distinct
+  source files. Write a Markdown answer with a section per stage and cite each
+  code claim as a repository-relative path:line.
+citations:
+  min: 10
+  resolveRate: 0.9
+maxTurns: 30
+minTurns: 8
+timeoutMin: 20
+interTurnDelaySec: 0
