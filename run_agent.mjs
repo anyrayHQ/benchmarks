@@ -153,7 +153,7 @@ export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => 
 }
 
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
@@ -161,9 +161,11 @@ export function parseArgs(argv) {
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
     else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
+    else if (argv[i] === '--read-trim-b') a.readTrimB = true; // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--integration-level') a.integrationLevel = argv[++i] ?? '';
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
+    else if (argv[i] === '--kinds-b') a.kindsB = parseKinds(argv[++i]); // arm B's own kinds (--compare gateway)
     else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
@@ -193,6 +195,17 @@ export function parseArgs(argv) {
     if (!validExperimentName(a.experimentB)) throw new Error(`--experiment-b must be a plain name (letters, digits, ".", "_", "-"), got ${JSON.stringify(a.experimentB)}`);
     if (a.strategy) throw new Error('--experiment-b and --strategy both set the experiment tag: use --kinds with --experiment-b');
     if (a.experimentB === a.experiment) throw new Error('--experiment-b must differ from --experiment: a rule keyed on it would match both arms');
+  }
+  // --kinds-b / --read-trim-b: arm B alone differs, so the pair isolates that one change.
+  if (a.kindsB !== null) {
+    if (a.compare !== 'gateway') throw new Error('--kinds-b needs --compare gateway: it sets arm B of two gateway arms');
+    if (!a.kinds && !a.strategy) throw new Error('--kinds-b needs --kinds: arm A requests its own strategies too');
+    if (a.kinds && a.kinds.join(',') === a.kindsB.join(',')) throw new Error('--kinds-b must differ from --kinds: otherwise A and B are the same arm');
+  }
+  if (a.readTrimB) {
+    if (a.compare !== 'gateway') throw new Error('--read-trim-b needs --compare gateway: it sets arm B of two gateway arms');
+    if (a.readTrim) throw new Error('--read-trim already turns it on for both arms: use one of --read-trim and --read-trim-b');
+    if (a.integrationLevel && a.integrationLevel !== 'gateway_hooks_mcp') throw new Error('--read-trim-b needs --integration-level gateway_hooks_mcp: lower levels cannot retrieve');
   }
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
@@ -232,6 +245,8 @@ export const controlArgs = (args) => ({
   strategy: null,
   experiment: null,
   experimentB: null,
+  kindsB: null,
+  readTrimB: false,
   redrawHoldout: 0,
   readTrim: false,
   integrationLevel: null,
@@ -242,8 +257,11 @@ export const controlArgs = (args) => ({
   bare: false,
 });
 
-/** `--read-trim` applies to the Anyray arm only. */
-export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
+/** `--read-trim` applies to the Anyray arm only; `--read-trim-b` to slot B of a gateway pair. */
+export const armReadTrim = (args, arm, slot) => arm === 'anyray' && (!!args.readTrim || (!!args.readTrimB && slot === 'b'));
+
+/** The kinds a slot requests: `--kinds-b` replaces `--kinds` on slot B. */
+const slotKinds = (args, slot) => (slot === 'b' && args.kindsB ? [args.kindsB, '--kinds-b'] : [args.kinds ?? null, args.kindsSource ?? null]);
 
 /**
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
@@ -251,10 +269,10 @@ export const armReadTrim = (args, arm) => args.readTrim && arm === 'anyray';
  */
 export const slotOptions = (args, arms, slot) => ({
   arm: arms[slot],
-  readTrim: armReadTrim(args, arms[slot]),
+  readTrim: armReadTrim(args, arms[slot], slot),
   env: args.env?.[slot] ?? {},
-  kinds: arms[slot] === 'anyray' ? args.kinds ?? null : null,
-  kindsSource: arms[slot] === 'anyray' ? args.kindsSource ?? null : null,
+  kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
+  kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
   extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : [],
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
   provider: args.provider ?? 'anthropic',
@@ -272,6 +290,8 @@ export const requestRecord = (args) => ({
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
+  ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
+  ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
   ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
@@ -426,7 +446,15 @@ function summarize(session, pricing) {
 /** How the round printout names a slot's arm; under gateway, B names its extra headers. */
 export const armLabel = (args, arms, slot) => {
   if (args.compare !== 'gateway') return arms[slot];
-  const treatment = slot === 'b' ? [...requestRecord(args).extraHeaders, ...(args.experimentB ? [`experiment=${args.experimentB}`] : [])] : [];
+  const added = args.kindsB ? args.kindsB.filter((k) => !(args.kinds ?? []).includes(k)) : [];
+  const dropped = args.kindsB ? (args.kinds ?? []).filter((k) => !args.kindsB.includes(k)) : [];
+  const treatment = slot === 'b' ? [
+    ...requestRecord(args).extraHeaders,
+    ...(args.experimentB ? [`experiment=${args.experimentB}`] : []),
+    ...(added.length ? [`kinds+${added.join(',')}`] : []),
+    ...(dropped.length ? [`kinds-${dropped.join(',')}`] : []),
+    ...(args.readTrimB ? ['read-trim'] : []),
+  ] : [];
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
 };
 
@@ -622,7 +650,8 @@ async function main() {
   console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds })}\n${formatVerdictBlock(record.verdict)}`);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
-    if (args.kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, args.kinds))}`);
+    const kinds = slotKinds(args, slot)[0];
+    if (kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, kinds))}`);
   }
 }
 
@@ -656,7 +685,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB) {
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.readTrimB) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;
