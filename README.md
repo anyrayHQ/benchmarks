@@ -227,6 +227,14 @@ A gateway that answers with the client's own model id (it passes the request to 
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
 
+### Connect's client-tool switches
+
+`--client-tool-policy name=true|false` (repeatable) sets one of anyray-connect's local
+switches for what its MCP server advertises, in the Anyray arm's connect profile
+(`clientToolPolicies`), after connect has configured the arm. For example
+`--client-tool-policy readBatchRanges=true` offers the ranged batch read. The switches
+used are recorded in the arm's setup.
+
 ### Keeping the pair like for like
 
 - `--warm-up` runs a throwaway one-turn session with each arm's exact setup before the
