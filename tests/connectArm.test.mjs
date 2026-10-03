@@ -272,6 +272,33 @@ test('--read-trim fails loudly if connect configured the arm but wrote no profil
   assert.throws(() => armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, readTrim: true, deps: deps({ configureArm }) }), /wrote no profile/);
 });
 
+test('--hook-posture on the connect-configured arm pins the switch in the profile connect wrote, as --read-trim does', () => {
+  const a = connectedArm({ hookPosture: { logRead: 'on' } });
+  assert.equal(a.trimHome.home, a.home, 'pinned where the session runs, not in a second HOME');
+  const profile = JSON.parse(readFileSync(join(a.home, '.anyray', 'connect.json'), 'utf8'));
+  assert.deepEqual(profile.fleetHookPolicy, { digest: 'on', logRead: 'on' });
+  assert.equal(profile.hookPolicies, undefined);
+  assert.equal(statSync(join(a.home, '.anyray', 'connect.json')).mode & 0o777, 0o600);
+  assert.deepEqual(a.trimHome.pinned, { logRead: 'on' });
+  assert.equal(a.persistSession, true, 'a switch is on, so the hook may read the transcript');
+  assert.deepEqual(a.procEnv, { ANYRAY_REFRESH_DISABLE: 'true' }, 'no policy sync rewrites the profile mid-session');
+  assert.deepEqual(a.setup.hookPosture.pinned, { logRead: 'on' });
+  assert.match(a.setup.hookPosture.how, /^for this session only: .*logRead on.*profile anyray-connect wrote/);
+  assert.match(a.setup.readTrim, /^fleet policy/);
+});
+
+test('--hook-posture pinned only off on the connect-configured arm: key refresh off, no transcript', () => {
+  const a = connectedArm({ hookPosture: { logRead: 'off' } });
+  assert.deepEqual(JSON.parse(readFileSync(join(a.home, '.anyray', 'connect.json'), 'utf8')).fleetHookPolicy, { digest: 'on', logRead: 'off' });
+  assert.equal(a.persistSession, false);
+  assert.deepEqual(a.procEnv, { ANYRAY_REFRESH_DISABLE: 'true' });
+});
+
+test('--hook-posture fails loudly if connect configured the arm but wrote no profile', () => {
+  const configureArm = () => ({ configured: true, settings: { env: {} }, mcpServers: {}, setup: {} });
+  assert.throws(() => armConfig({ arm: 'anyray', cfgDir: cfg(), gatewayUrl: GATEWAY, runTag: {}, hookPosture: { logRead: 'on' }, deps: deps({ configureArm }) }), /--hook-posture logRead=on: anyray-connect wrote no profile/);
+});
+
 test('--arm-env on the connect-configured arm overrides connect\'s env in --settings only; the run tag survives', () => {
   const a = connectedArm({ env: { ENABLE_TOOL_SEARCH: 'false', CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' } });
   assert.equal(a.settings.env.ENABLE_TOOL_SEARCH, 'false');
