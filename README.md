@@ -363,6 +363,25 @@ settings afterwards.
 - `--read-trim-b` (`--compare gateway`): connect's nested-Read trim on arm B only, so the
   pair isolates it. Needs `--integration-level gateway_hooks_mcp` when a level is set.
   Recorded in `request.readTrimB`.
+- `--hook-posture-b <name>=<on|off>` (`--compare gateway`, repeatable): pin one of connect's
+  team-policy hook switches (`fleetHookPolicy.<name>`) on arm B only, the same way
+  `--read-trim-b` pins `readTrim`. For example `--hook-posture-b logRead=on`.
+  `--hook-posture <name>=<on|off>` pins it on every Anyray arm. `--read-trim-b` is
+  `--hook-posture-b readTrim=on`, and `--read-trim` is `--hook-posture readTrim=on`.
+  - The pinned arm's hooks read a private copy of connect's profile with key refresh off,
+    so policy sync cannot rewrite it. With a switch on, session persistence is on too, so
+    the hook can read the transcript.
+  - After each round the harness reads the profile back. If a pinned switch changed or
+    disappeared, the round fails.
+  - A switch set both on and off for one arm is refused, and so is naming the same switch
+    in both flags. `--integration-level gateway` and `--bare` install no hooks, so they
+    refuse it too.
+  - A keeps the team posture for that switch (the result's `anyray.connectPolicy.hooks`).
+    The harness does not know which switches your connect build reads, so a name it does
+    not know changes nothing.
+  - Recorded in `request.hookPostureB` / `request.hookPosture`, each arm's
+    `setup.hookPosture`, the session's `hookPosture` (`set`, `pinned`, `atEnd`), and the
+    round line's arm label (`anyray + hook:logRead`, or `hook:logRead=off`).
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
