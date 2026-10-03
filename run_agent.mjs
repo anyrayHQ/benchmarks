@@ -29,7 +29,12 @@
 //      `bench-rule per-experiment <kind>`; each round fails if another strategy acted)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 3 --kinds observation_mask --label read-trim --read-trim
 //     (Anyray arm only: anyray-connect's Read trim on for that session, without
-//      touching the shared connect policy; see readTrimHome in lib/agentRun.mjs)
+//      touching the shared connect policy; see hookPostureHome in lib/agentRun.mjs)
+//   node run_agent.mjs --scenario s --compare gateway --kinds observation_mask --hook-posture-b logRead=on
+//     (--hook-posture-b <name>=<on|off>, repeatable: pin connect's fleetHookPolicy.<name> on
+//      arm B alone, the way --read-trim-b pins readTrim; --hook-posture <name>=<on|off> pins it
+//      on every Anyray arm. --read-trim(-b) is the readTrim=on spelling. The round fails if a
+//      pinned switch is not what the session's profile ended with)
 //   node run_agent.mjs --scenario pyrepo-docs --compare control --label max-ctx \
 //     --arm-env b:CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
 //     (extra Claude Code settings env on arm a, b, or both with no prefix; repeatable.
@@ -158,16 +163,39 @@ export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => 
   }
 }
 
+/**
+ * `--hook-posture[-b] logRead=on` → ['logRead', 'on']. The name is one of connect's
+ * camelCase fleetHookPolicy switches; the harness does not know which ones a build reads.
+ */
+export function parseHookPosture(flag, spec) {
+  const m = /^([a-z][A-Za-z0-9]*)=(on|off)$/.exec(String(spec ?? ''));
+  if (!m) throw new Error(`${flag} takes name=on|off, the name a plain identifier like logRead (got ${JSON.stringify(spec ?? null)})`);
+  return [m[1], m[2]];
+}
+
+/** One flag's switches as {name: on|off}; a switch given both ways for the arm is refused. */
+function postureOf(pairs, arm) {
+  const out = {};
+  for (const [name, value] of pairs) {
+    if (Object.hasOwn(out, name) && out[name] !== value) throw new Error(`${name} is set both on and off for ${arm}`);
+    out[name] = value;
+  }
+  return out;
+}
+
 export function parseArgs(argv) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
+  const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
     else if (argv[i] === '--strategy') a.strategy = argv[++i]; // experiment=<kind> in the metadata header
-    else if (argv[i] === '--read-trim') a.readTrim = true; // Anyray arm: hooks.readTrim on for this session only
-    else if (argv[i] === '--read-trim-b') a.readTrimB = true; // the same, on arm B only (--compare gateway)
+    else if (argv[i] === '--read-trim') pins.all.push(['readTrim', 'on']); // Anyray arm: hooks.readTrim on for this session only
+    else if (argv[i] === '--read-trim-b') pins.b.push(['readTrim', 'on']); // the same, on arm B only (--compare gateway)
+    else if (argv[i] === '--hook-posture') pins.all.push(parseHookPosture('--hook-posture', argv[++i])); // name=on|off, repeatable: a connect hook switch on every Anyray arm
+    else if (argv[i] === '--hook-posture-b') pins.b.push(parseHookPosture('--hook-posture-b', argv[++i])); // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--integration-level') a.integrationLevel = argv[++i] ?? '';
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
@@ -188,15 +216,22 @@ export function parseArgs(argv) {
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
+  // --read-trim(-b) is readTrim=on: one posture, so both spellings reach every check below.
+  a.hookPosture = postureOf(pins.all, 'every Anyray arm');
+  postureOf([...pins.all, ...pins.b], 'arm B'); // --hook-posture reaches B too
+  a.hookPostureB = postureOf(pins.b, 'arm B');
+  a.readTrim = a.hookPosture.readTrim === 'on';
+  a.readTrimB = a.hookPostureB.readTrim === 'on';
+  const pinsHooks = Object.keys(a.hookPosture).length + Object.keys(a.hookPostureB).length > 0;
   if (a.interTurnDelaySec !== null && (!Number.isFinite(a.interTurnDelaySec) || a.interTurnDelaySec < 0)) throw new Error('--inter-turn-delay-sec needs a nonnegative number');
   if (a.scenario === 'sdk-docs') {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error('sdk-docs needs --provider bedrock and --compare anyray');
-    if (a.withControl || a.bare || a.warmUp || a.readTrim || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error('sdk-docs supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec');
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error('sdk-docs supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec');
   } else if (a.interTurnDelaySec !== null) throw new Error('--inter-turn-delay-sec is for sdk-docs');
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
   const gateway = a.compare !== 'control';
-  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel], ['--redraw-holdout', a.redrawHoldout]]) {
+  for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--hook-posture', Object.keys(a.hookPosture).length], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel], ['--redraw-holdout', a.redrawHoldout]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
   }
   if (a.integrationLevel !== null && !LEVELS.includes(a.integrationLevel)) throw new Error(`--integration-level must be ${LEVELS.join('|')}`);
@@ -220,6 +255,12 @@ export function parseArgs(argv) {
     if (a.readTrim) throw new Error('--read-trim already turns it on for both arms: use one of --read-trim and --read-trim-b');
     if (a.integrationLevel && a.integrationLevel !== 'gateway_hooks_mcp') throw new Error('--read-trim-b needs --integration-level gateway_hooks_mcp: lower levels cannot retrieve');
   }
+  if (Object.keys(a.hookPostureB).length) {
+    if (a.compare !== 'gateway') throw new Error('--hook-posture-b needs --compare gateway: it sets arm B of two gateway arms');
+    const same = Object.keys(a.hookPostureB).find((name) => Object.hasOwn(a.hookPosture, name)); // same value: both ways is refused above
+    if (same) throw new Error(`--hook-posture already sets ${same}=${a.hookPosture[same]} on both arms: use one of --hook-posture and --hook-posture-b`);
+  }
+  if (pinsHooks && a.integrationLevel === 'gateway') throw new Error("--hook-posture needs connect's hooks: --integration-level gateway installs none");
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
   if (a.strategy && a.kinds && !a.kinds.includes(a.strategy)) throw new Error(`--strategy ${a.strategy} must be one of --kinds`);
@@ -229,6 +270,7 @@ export function parseArgs(argv) {
   if (a.bare && a.clientToolPolicies) throw new Error('--bare runs without anyray-connect, which is what reads --client-tool-policy');
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
+  if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
   if (gateway && !a.kinds && !a.bare && a.scenario !== 'sdk-docs') {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
@@ -265,6 +307,8 @@ export const controlArgs = (args) => ({
   readTrimB: false,
   redrawHoldout: 0,
   readTrim: false,
+  hookPosture: {},
+  hookPostureB: {},
   integrationLevel: null,
   armEnv: [],
   env: { a: {}, b: {} },
@@ -273,8 +317,21 @@ export const controlArgs = (args) => ({
   bare: false,
 });
 
+/**
+ * The connect hook switches a slot's session pins: `--hook-posture` on every Anyray arm,
+ * `--hook-posture-b` on slot B of a gateway pair (parseArgs refused any overlap).
+ */
+export const armHookPosture = (args, arm, slot) =>
+  arm === 'anyray' ? { ...(args.hookPosture ?? {}), ...(slot === 'b' ? args.hookPostureB ?? {} : {}) } : {};
+
 /** `--read-trim` applies to the Anyray arm only; `--read-trim-b` to slot B of a gateway pair. */
-export const armReadTrim = (args, arm, slot) => arm === 'anyray' && (!!args.readTrim || (!!args.readTrimB && slot === 'b'));
+export const armReadTrim = (args, arm, slot) => armHookPosture(args, arm, slot).readTrim === 'on';
+
+/** readTrim=on keeps its own spelling (`readTrim` in slotOptions, `read-trim` in the label), as before --hook-posture. */
+const isReadTrimOn = ([name, value]) => name === 'readTrim' && value === 'on';
+
+/** slotOptions' `hookPosture`: present only when the slot pins more than readTrim=on. */
+const postureOption = (posture) => (Object.entries(posture).some((e) => !isReadTrimOn(e)) ? { hookPosture: posture } : {});
 
 /** The kinds a slot requests: `--kinds-b` replaces `--kinds` on slot B. */
 const slotKinds = (args, slot) => (slot === 'b' && args.kindsB ? [args.kindsB, '--kinds-b'] : [args.kinds ?? null, args.kindsSource ?? null]);
@@ -286,6 +343,7 @@ const slotKinds = (args, slot) => (slot === 'b' && args.kindsB ? [args.kindsB, '
 export const slotOptions = (args, arms, slot) => ({
   arm: arms[slot],
   readTrim: armReadTrim(args, arms[slot], slot),
+  ...postureOption(armHookPosture(args, arms[slot], slot)),
   env: args.env?.[slot] ?? {},
   kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
   kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
@@ -308,6 +366,8 @@ export const requestRecord = (args) => ({
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
+  ...(Object.keys(args.hookPosture ?? {}).length ? { hookPosture: args.hookPosture } : {}), // connect hook switches every Anyray arm pins
+  ...(Object.keys(args.hookPostureB ?? {}).length ? { hookPostureB: args.hookPostureB } : {}), // the switches arm B alone pins
   ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
   ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
@@ -471,6 +531,7 @@ export const armLabel = (args, arms, slot) => {
     ...(added.length ? [`kinds+${added.join(',')}`] : []),
     ...(dropped.length ? [`kinds-${dropped.join(',')}`] : []),
     ...(args.readTrimB ? ['read-trim'] : []),
+    ...Object.entries(args.hookPostureB ?? {}).filter((e) => !isReadTrimOn(e)).map(([k, v]) => (v === 'on' ? `hook:${k}` : `hook:${k}=off`)),
   ] : [];
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
 };
@@ -776,7 +837,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.readTrimB) {
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !Object.keys(args.hookPostureB ?? {}).length) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;
