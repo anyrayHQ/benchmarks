@@ -76,7 +76,7 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders } from './lib/agentRun.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
-import { benchVerdict, formatVerdictBlock } from './lib/benchVerdict.mjs';
+import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { rmSync } from 'node:fs';
@@ -117,6 +117,11 @@ function parseParallel(v) {
 
 function parseMaxTurns(v) {
   if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--max-turns needs a positive integer, got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  return Number(v);
+}
+
+function parseRetryInvalid(v) {
+  if (!/^[0-9]+$/.test(v ?? '')) throw new Error(`--retry-invalid needs a whole number (how many extra rounds), got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
   return Number(v);
 }
 
@@ -173,6 +178,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--experiment-b') a.experimentB = argv[++i] ?? ''; // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
+    else if (argv[i] === '--retry-invalid') a.retryInvalid = parseRetryInvalid(argv[++i]); // run a round the verdict would drop again, up to N extra rounds
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
     else if (argv[i] === '--inter-turn-delay-sec') a.interTurnDelaySec = Number(argv[++i]);
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
@@ -185,7 +191,7 @@ export function parseArgs(argv) {
   if (a.interTurnDelaySec !== null && (!Number.isFinite(a.interTurnDelaySec) || a.interTurnDelaySec < 0)) throw new Error('--inter-turn-delay-sec needs a nonnegative number');
   if (a.scenario === 'sdk-docs') {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error('sdk-docs needs --provider bedrock and --compare anyray');
-    if (a.withControl || a.bare || a.warmUp || a.readTrim || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents) throw new Error('sdk-docs supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec');
+    if (a.withControl || a.bare || a.warmUp || a.readTrim || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error('sdk-docs supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec');
   } else if (a.interTurnDelaySec !== null) throw new Error('--inter-turn-delay-sec is for sdk-docs');
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -303,6 +309,7 @@ export const requestRecord = (args) => ({
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
   ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
+  ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
@@ -851,9 +858,10 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = (sa.reason ?? sb.reason)?.message;
       log(`  round ${round} failed: ${err}`);
-      insertRound(record.rounds, { round, error: err });
+      const failed = { round, error: err };
+      insertRound(record.rounds, failed);
       await save();
-      return;
+      return failed;
     }
     const sessions = { a: sa.value, b: sb.value };
     for (const s of Object.values(sessions)) s.totals = summarize(s, pricing);
@@ -953,11 +961,29 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
     record.verdict = benchVerdict(record.rounds);
     await save();
+    return r;
+  };
+
+  // --retry-invalid N: a round the verdict would drop (exclusionReasons: not solved, failed,
+  // outside the checkout, a gateway restart) runs again under the next free number, at most
+  // N extra rounds in all, so a one-round test still ends with a usable pair. The dropped
+  // round stays in the file and the verdict as before; `record.retries` names each one.
+  let nextRound = first + args.rounds;
+  let retriesLeft = args.retryInvalid ?? 0;
+  const attempt = async (round) => {
+    const r = await schedule(() => runRound(round));
+    const why = exclusionReasons(r);
+    if (!why.length || retriesLeft <= 0) return r;
+    retriesLeft--;
+    const again = nextRound++;
+    (record.retries ??= []).push({ round, reasons: why, retriedAs: again });
+    log(`  round ${round} is not usable (${why.join(', ')}); running round ${again} in its place (retry ${args.retryInvalid - retriesLeft}/${args.retryInvalid})`);
+    return attempt(again);
   };
 
   // Every round is queued at once; the pool lets --parallel of them run. All settle
   // (and are saved) before the first unexpected error, if any, is rethrown.
-  const settled = await Promise.allSettled(numbers.map((round) => schedule(() => runRound(round))));
+  const settled = await Promise.allSettled(numbers.map(attempt));
   const failed = settled.find((x) => x.status === 'rejected');
   if (failed) {
     await save();
