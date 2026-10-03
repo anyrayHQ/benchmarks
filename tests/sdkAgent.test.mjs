@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage } from '../lib/sdkAgent.mjs';
+import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage, FINAL_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
 import { parseArgs, runComparison } from '../run_agent.mjs';
 import { run as runVerdictTool } from '../tools/bench-verdict.mjs';
 
@@ -128,4 +128,29 @@ test('sdk-docs requires the billed paired mode and validates delay', () => {
   assert.throws(() => parseArgs(['--scenario', 'sdk-docs']), /--provider bedrock/);
   assert.throws(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--inter-turn-delay-sec', '-1']), /nonnegative/);
   assert.equal(parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--inter-turn-delay-sec', '310']).interTurnDelaySec, 310);
+});
+
+test('SDK final turn asks for the answer with tools declared but not callable', async () => {
+  const root = fresh();
+  try {
+    writeFileSync(join(root, 'a.py'), 'first\nsecond\n');
+    const bodies = [];
+    const toolTurn = { model: 'claude-sonnet-5', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't', name: 'read_file', input: { path: 'a.py', offset: 1, limit: 1 } }], usage: { input_tokens: 1, output_tokens: 1 } };
+    const answer = { model: 'claude-sonnet-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Answer a.py:1' }], usage: { input_tokens: 1, output_tokens: 1 } };
+    const session = await runSdkAgent({
+      arm: 'direct', scenario: { task: 'Explain', maxTurns: 3, citations: { min: 1, resolveRate: 1 } }, work: root, model: 'claude-sonnet-5',
+      pricing: { 'claude-sonnet-5': { input: 2, output: 10 } },
+      request: async ({ body, turn }) => { bodies.push(JSON.parse(JSON.stringify(body))); return turn === 2 ? answer : { ...toolTurn, content: [{ ...toolTurn.content[0], id: `t${turn}` }] }; },
+    });
+    assert.equal(bodies.length, 3);
+    assert.equal(bodies[0].tool_choice, undefined);
+    assert.deepEqual(bodies[2].tool_choice, { type: 'none' });
+    assert.deepEqual(bodies[2].tools, bodies[0].tools, 'tools stay declared, so the prefix is unchanged');
+    const lastUser = bodies[2].messages.at(-1);
+    assert.equal(lastUser.role, 'user');
+    assert.equal(lastUser.content.at(-1).text, FINAL_ANSWER_REQUEST);
+    assert.equal(lastUser.content[0].type, 'tool_result');
+    assert.equal(session.result.subtype, 'success');
+    assert.equal(session.citations.resolved, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
