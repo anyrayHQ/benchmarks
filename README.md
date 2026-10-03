@@ -352,6 +352,11 @@ settings afterwards.
   `bench-rule params`). Recorded in `request.experimentB`.
 - `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
   (see the gateway comparison above). Stopped attempts are not in the round's cost.
+- `--retry-invalid N`: when a round would be dropped from the verdict (an arm not solved, a
+  failed round, a file outside the checkout, a gateway restart), run another round in its
+  place, up to N extra rounds in all. The dropped round stays in the result file and the
+  verdict; `retries` lists each one and the round that replaced it. Use it with `--rounds 1`
+  to end a quick test with one usable pair.
 - `--kinds-b <k1,k2>` (`--compare gateway`): arm B requests these kinds instead of `--kinds`,
   so the pair isolates one strategy (e.g. the shipped defaults vs the defaults plus one
   default-off kind). Recorded in `request.kindsB` and in each arm's `optimizationKinds`.
