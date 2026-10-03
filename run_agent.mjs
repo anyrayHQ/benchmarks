@@ -164,6 +164,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--integration-level') a.integrationLevel = argv[++i] ?? '';
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
+    else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
@@ -199,6 +200,7 @@ export function parseArgs(argv) {
   if (a.strategy && !a.kinds) [a.kinds, a.kindsSource] = [parseKinds(a.strategy), '--strategy'];
   // --bare measures the seat that changed only its base URL: nothing client-side, nothing optimized.
   if (a.bare && !gateway) throw new Error('--bare needs --compare anyray or gateway');
+  if (a.bare && a.clientToolPolicies) throw new Error('--bare runs without anyray-connect, which is what reads --client-tool-policy');
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (gateway && !a.kinds && !a.bare) {
@@ -258,6 +260,7 @@ export const slotOptions = (args, arms, slot) => ({
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
+  ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
 });
@@ -273,6 +276,7 @@ export const requestRecord = (args) => ({
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
+  ...(args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
 });
 
 /** results/agent/<scenario>--<compare>[--<label>].json */
@@ -357,6 +361,13 @@ export function startTokens(requests) {
     written += u.cache_creation_input_tokens ?? 0;
   }
   return { agents: first.size, read, written };
+}
+
+/** `readBatchRanges=true` → {readBatchRanges: true}. Names are connect's camelCase switches. */
+export function parseClientToolPolicy(spec) {
+  const m = /^([a-z][A-Za-z0-9]*)=(true|false)$/.exec(String(spec ?? ''));
+  if (!m) throw new Error(`--client-tool-policy takes name=true|false (got "${spec}")`);
+  return { [m[1]]: m[2] === 'true' };
 }
 
 /** ` (reason 12, other 3)` for a rewrite's stand-aside reasons, most frequent first; '' when there are none. */
