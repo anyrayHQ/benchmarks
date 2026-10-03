@@ -72,6 +72,38 @@ test("outsideCheckout: Claude Code's own files are not counted", () => {
   assert.equal(o.count, 0);
 });
 
+test('outsideCheckout: a file the session wrote earlier is its own, not another checkout', () => {
+  const o = outsideCheckout(
+    [
+      use('Bash', { command: 'go test -v ./... > /tmp/testout.log 2>&1; echo EXIT:$?' }),
+      use('Read', { file_path: '/tmp/testout.log' }),
+      use('Bash', { command: 'go test ./... 2>&1 | tee -a /tmp/gotest.log | tail -100' }),
+      use('Read', { file_path: '/tmp/gotest.log' }),
+      use('Write', { file_path: '/tmp/notes.md', content: 'x' }),
+      use('Read', { file_path: '/tmp/notes.md' }),
+    ],
+    '/tmp/w'
+  );
+  // The Write itself still reaches outside (it could land in another checkout); the read after it does not.
+  assert.deepEqual(o, { count: 1, dirs: { '/tmp/notes.md': 1 } });
+});
+
+test('outsideCheckout: a read BEFORE the session wrote that file still counts', () => {
+  const o = outsideCheckout(
+    [use('Read', { file_path: '/tmp/testout.log' }), use('Bash', { command: 'go test ./... > /tmp/testout.log' })],
+    '/tmp/w'
+  );
+  assert.deepEqual(o, { count: 1, dirs: { '/tmp/testout.log': 1 } });
+});
+
+test("outsideCheckout: reading back an anyray-hook tee file is the hook's retrieval path, not counted", () => {
+  const o = outsideCheckout(
+    [use('Read', { file_path: '/private/var/folders/9g/x/T/anyray-bench-cfg-abc/home/.anyray/hook-tee/63378d635d586ae4.txt' })],
+    '/tmp/w'
+  );
+  assert.equal(o.count, 0);
+});
+
 test('startTokens: sums the first request of each agent only', () => {
   const u = (r, w) => ({ cache_read_input_tokens: r, cache_creation_input_tokens: w });
   const s = startTokens([
