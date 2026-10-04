@@ -71,14 +71,22 @@
 //      gateway rule keyed on it (`bench-rule params <name> --params …`) is the treatment: same
 //      strategies in both arms, the rule's params on B only. Each round records the rule as
 //      it stood before and after, and which kind the gateway's session gate held out of each arm)
+//   ANYRAY_CONNECT_BIN=/abs/main/anyray-connect node run_agent.mjs --scenario s --compare gateway \
+//     --kinds observation_mask --connect-bin-b /abs/pr/anyray-connect --label my-connect-change
+//     (--connect-bin-b <abs path>: anyray-connect configures arm B from that build, so B's
+//      hooks and MCP server run it, while A runs ANYRAY_CONNECT_BIN: a pair that isolates
+//      one connect change. Each arm's setup records its build's sha256 prefix, never the
+//      path; refused when both builds are the same. Keep both outside the temp dir:
+//      connect installs no hooks or MCP server from a binary it finds there)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, binDigest } from './lib/agentRun.mjs';
+import { ANYRAY_BIN } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
@@ -200,6 +208,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--arm-env') a.armEnv.push(argv[++i]); // [a:|b:]KEY=VALUE[,…]: extra session env
     else if (argv[i] === '--kinds') [a.kinds, a.kindsSource] = [parseKinds(argv[++i]), '--kinds']; // x-anyray-optimization-kinds
     else if (argv[i] === '--kinds-b') a.kindsB = parseKinds(argv[++i]); // arm B's own kinds (--compare gateway)
+    else if (argv[i] === '--connect-bin-b') a.connectBinB = argv[++i] ?? ''; // arm B configured by another anyray-connect build (--compare gateway)
     else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
@@ -249,6 +258,12 @@ export function parseArgs(argv) {
     if (a.compare !== 'gateway') throw new Error('--kinds-b needs --compare gateway: it sets arm B of two gateway arms');
     if (!a.kinds && !a.strategy) throw new Error('--kinds-b needs --kinds: arm A requests its own strategies too');
     if (a.kinds && a.kinds.join(',') === a.kindsB.join(',')) throw new Error('--kinds-b must differ from --kinds: otherwise A and B are the same arm');
+  }
+  // --connect-bin-b: arm B alone runs another connect build; A runs ANYRAY_CONNECT_BIN.
+  if (a.connectBinB !== undefined) {
+    if (a.compare !== 'gateway') throw new Error('--connect-bin-b needs --compare gateway: it sets arm B of two gateway arms');
+    if (!isAbsolute(a.connectBinB)) throw new Error('--connect-bin-b takes an absolute path to an anyray-connect binary');
+    if (a.bare) throw new Error('--bare runs without anyray-connect, which --connect-bin-b replaces on arm B');
   }
   if (a.readTrimB) {
     if (a.compare !== 'gateway') throw new Error('--read-trim-b needs --compare gateway: it sets arm B of two gateway arms');
@@ -305,6 +320,8 @@ export const controlArgs = (args) => ({
   experimentB: null,
   kindsB: null,
   readTrimB: false,
+  connectBinB: undefined,
+  connectBinBDigest: undefined,
   redrawHoldout: 0,
   readTrim: false,
   hookPosture: {},
@@ -353,6 +370,7 @@ export const slotOptions = (args, arms, slot) => ({
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
+  ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
 });
@@ -365,6 +383,7 @@ export const requestRecord = (args) => ({
   experiment: args.experiment ?? null,
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
+  ...(args.connectBinB ? { connectBinB: args.connectBinBDigest ?? null } : {}), // arm B's connect build (sha256 prefix, never the path)
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
   ...(Object.keys(args.hookPosture ?? {}).length ? { hookPosture: args.hookPosture } : {}), // connect hook switches every Anyray arm pins
   ...(Object.keys(args.hookPostureB ?? {}).length ? { hookPostureB: args.hookPostureB } : {}), // the switches arm B alone pins
@@ -531,6 +550,7 @@ export const armLabel = (args, arms, slot) => {
     ...(added.length ? [`kinds+${added.join(',')}`] : []),
     ...(dropped.length ? [`kinds-${dropped.join(',')}`] : []),
     ...(args.readTrimB ? ['read-trim'] : []),
+    ...(args.connectBinB ? ['connect-bin-b'] : []),
     ...Object.entries(args.hookPostureB ?? {}).filter((e) => !isReadTrimOn(e)).map(([k, v]) => (v === 'on' ? `hook:${k}` : `hook:${k}=off`)),
   ] : [];
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
@@ -837,7 +857,12 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !Object.keys(args.hookPostureB ?? {}).length) {
+  if (args.connectBinB) {
+    if (!existsSync(args.connectBinB)) throw new Error(`--connect-bin-b: no anyray-connect at ${args.connectBinB}`);
+    args.connectBinBDigest = binDigest(args.connectBinB);
+    if (args.connectBinBDigest.sha256 === binDigest(ANYRAY_BIN).sha256) throw new Error('--connect-bin-b is the same build arm A runs (ANYRAY_CONNECT_BIN): A and B would be the same arm');
+  }
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;
