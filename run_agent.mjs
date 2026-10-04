@@ -76,13 +76,14 @@
 //     (--connect-bin-b <abs path>: anyray-connect configures arm B from that build, so B's
 //      hooks and MCP server run it, while A runs ANYRAY_CONNECT_BIN: a pair that isolates
 //      one connect change. Each arm's setup records its build's sha256 prefix, never the
-//      path; refused when both builds are the same. Keep both outside the temp dir:
+//      path; refused when both builds are the same. The file must be called anyray-connect,
+//      the command name the arm's checks expect. Keep both outside the temp dir:
 //      connect installs no hooks or MCP server from a binary it finds there)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, binDigest } from './lib/agentRun.mjs';
@@ -263,6 +264,9 @@ export function parseArgs(argv) {
   if (a.connectBinB !== undefined) {
     if (a.compare !== 'gateway') throw new Error('--connect-bin-b needs --compare gateway: it sets arm B of two gateway arms');
     if (!isAbsolute(a.connectBinB)) throw new Error('--connect-bin-b takes an absolute path to an anyray-connect binary');
+    // connect writes its own path into the hooks and MCP server, and the arm's checks (like
+    // a real install) expect that command to be anyray-connect: name the file so.
+    if (basename(a.connectBinB) !== 'anyray-connect') throw new Error(`--connect-bin-b must name a file called anyray-connect (put the build at <dir>/anyray-connect), got ${basename(a.connectBinB)}`);
     if (a.bare) throw new Error('--bare runs without anyray-connect, which --connect-bin-b replaces on arm B');
   }
   if (a.readTrimB) {
