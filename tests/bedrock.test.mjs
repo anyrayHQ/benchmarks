@@ -8,6 +8,7 @@ import { parseArgs, resolveBedrock, resultFileName, slotOptions } from '../run_a
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const GW = 'https://gateway.test.invalid';
 const KEY = 'ark_svc_test_fake';
@@ -160,6 +161,23 @@ test('armConfig on bedrock: direct gets the AWS env; the anyray arm asks connect
   const bad = { ...ok, checks: checkConnectConfig(orgConfig({ skills: [] })) };
   assert.throws(() => armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: {}, cfgDir: cfgDir(), provider: 'bedrock', bedrock, deps: deps(bad) }), /left the arm misconfigured: skill anyray installed/);
   assert.throws(() => armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: {}, cfgDir: cfgDir(), provider: 'bedrock', bedrock, deps: deps({ configured: false, reason: 'no key' }) }), /needs anyray-connect to configure the Anyray arm: no key/);
+});
+
+test('armConfig with connectBin: connect configures the arm from that build and the setup names it by digest', () => {
+  const bedrock = { profile: 'bench', region: 'us-east-1', model: 'us.anthropic.claude-sonnet-5' };
+  const cfgDir = () => mkdtempSync(join(tmpdir(), 'bedrock-cfg-'));
+  const bin = join(mkdtempSync(join(tmpdir(), 'bin-b-')), 'anyray-connect');
+  writeFileSync(bin, 'build b');
+  const asked = [];
+  const ok = { configured: true, settings: orgSettings(), mcpServers, checks: checkConnectConfig(orgConfig()), setup: { lane: 'org', env: {} } };
+  const deps = { binExists: () => true, bin: '/missing/anyray-connect', serviceKey: () => KEY, clientKey: () => KEY, realClaudeJson: () => ({}), configureArm: (o) => (asked.push(o), ok) };
+  const b = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: {}, cfgDir: cfgDir(), provider: 'bedrock', bedrock, connectBin: bin, deps });
+  assert.equal(asked[0].bin, bin);
+  assert.deepEqual(b.setup.connectBin, { sha256: createHash('sha256').update('build b').digest('hex').slice(0, 16) });
+  const a = armConfig({ arm: 'anyray', gatewayUrl: GW, runTag: {}, cfgDir: cfgDir(), provider: 'bedrock', bedrock, deps });
+  assert.equal('bin' in asked[1], false, 'arm A keeps the default build');
+  assert.deepEqual(a.setup.connectBin, { sha256: null });
+  assert.ok(!JSON.stringify(b.setup).includes(bin), 'the path never reaches the setup');
 });
 
 test('describeSetup on bedrock names the AWS route for direct and the org lane for anyray', () => {
