@@ -61,10 +61,11 @@ test('--connect-bin-b: only B is configured by that build; the record keeps its 
 });
 
 test('--connect-bin-b: refused outside --compare gateway, as a relative path, or with --bare', () => {
-  assert.throws(() => parseArgs(['--scenario', 's', '--kinds', SIX, '--connect-bin-b', '/opt/b']), /--connect-bin-b needs --compare gateway/);
+  assert.throws(() => parseArgs(['--scenario', 's', '--kinds', SIX, '--connect-bin-b', '/opt/b/anyray-connect']), /--connect-bin-b needs --compare gateway/);
   assert.throws(() => gw('--connect-bin-b', 'builds/anyray-connect'), /absolute path/);
   assert.throws(() => gw('--connect-bin-b'), /absolute path/);
-  assert.throws(() => parseArgs(['--scenario', 's', '--compare', 'gateway', '--bare', '--connect-bin-b', '/opt/b']), /--bare runs without anyray-connect/);
+  assert.throws(() => gw('--connect-bin-b', '/opt/bins/connect-pr-123'), /must name a file called anyray-connect/);
+  assert.throws(() => parseArgs(['--scenario', 's', '--compare', 'gateway', '--bare', '--connect-bin-b', '/opt/b/anyray-connect']), /--bare runs without anyray-connect/);
 });
 
 test('neither flag set: the record and labels are unchanged, and controlArgs drops both', () => {
@@ -76,5 +77,5 @@ test('neither flag set: the record and labels are unchanged, and controlArgs dro
   const c = controlArgs({ ...gw('--kinds-b', `${SIX},context_dedupe`, '--read-trim-b'), extraHeaders: [] });
   assert.equal(c.kindsB, null);
   assert.equal(c.readTrimB, false);
-  assert.equal('connectBinB' in requestRecord(controlArgs({ ...gw('--connect-bin-b', '/opt/b'), extraHeaders: [] })), false);
+  assert.equal('connectBinB' in requestRecord(controlArgs({ ...gw('--connect-bin-b', '/opt/b/anyray-connect'), extraHeaders: [] })), false);
 });
