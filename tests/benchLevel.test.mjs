@@ -192,6 +192,19 @@ test('level checks pass matching shapes and name each wrong piece in both direct
   for (const piece of ['mcp anyray', 'permission', 'skill']) assert.match(fullWrong, new RegExp(piece));
 });
 
+// connect keeps a content-free SessionStart/SessionEnd pair at every level, `gateway` included
+// (claudeCode.ts: "Keep only the content-free lifecycle pair even at gateway level").
+const lifecycle = { hooks: [{ command: '/bin/anyray-connect __anyray-hook-lifecycle' }] };
+
+test('a gateway-level arm passes with connect\'s lifecycle pair, and still fails on any other connect hook', () => {
+  const base = shape('gateway');
+  const withLifecycle = { ...base, settings: { ...base.settings, hooks: { SessionStart: [lifecycle], SessionEnd: [lifecycle] } } };
+  assert.deepEqual(failedChecks(checkConnectConfig(withLifecycle)), []);
+  const subagent = { hooks: [{ command: '/bin/anyray-connect __anyray-batch-subagent-start' }] };
+  const leaked = { ...withLifecycle, settings: { ...withLifecycle.settings, hooks: { ...withLifecycle.settings.hooks, SubagentStart: [subagent] } } };
+  assert.match(failedChecks(checkConnectConfig(leaked)).map((c) => c.name).join(' '), /hooks: no anyray-connect commands/);
+});
+
 test('without an explicit id the tool refuses, and never lists keys or reads a secret', async () => {
   const stub = api(), root = testRoot();
   const seen = [];
