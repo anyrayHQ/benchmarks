@@ -101,6 +101,7 @@ import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
 import { runSdkAgent } from './lib/sdkAgent.mjs';
+import { runLangGraphAgent } from './lib/langgraphAgent.mjs';
 import { createBenchLevel, LEVELS, redactLevelError } from './lib/benchLevel.mjs';
 
 const COMPARES = ['anyray', 'control', 'gateway'];
@@ -192,6 +193,9 @@ function postureOf(pairs, arm) {
   return out;
 }
 
+/** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
+export const SDK_SCENARIOS = ['sdk-docs', 'langgraph-docs'];
+
 export function parseArgs(argv) {
   const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
   const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
@@ -234,10 +238,10 @@ export function parseArgs(argv) {
   a.readTrimB = a.hookPostureB.readTrim === 'on';
   const pinsHooks = Object.keys(a.hookPosture).length + Object.keys(a.hookPostureB).length > 0;
   if (a.interTurnDelaySec !== null && (!Number.isFinite(a.interTurnDelaySec) || a.interTurnDelaySec < 0)) throw new Error('--inter-turn-delay-sec needs a nonnegative number');
-  if (a.scenario === 'sdk-docs') {
-    if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error('sdk-docs needs --provider bedrock and --compare anyray');
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error('sdk-docs supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec');
-  } else if (a.interTurnDelaySec !== null) throw new Error('--inter-turn-delay-sec is for sdk-docs');
+  if (SDK_SCENARIOS.includes(a.scenario)) {
+    if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
+  } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
   const gateway = a.compare !== 'control';
@@ -290,7 +294,7 @@ export function parseArgs(argv) {
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
-  if (gateway && !a.kinds && !a.bare && a.scenario !== 'sdk-docs') {
+  if (gateway && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
   a.label ??= a.strategy;
@@ -776,9 +780,17 @@ export async function resolveBedrock(run, { env = process.env, probe = probeGate
 /** What runComparison reaches outside the process through; tests stub them. */
 const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock, readOptimizerConfig: optimizerConfig };
 
+/** Each SDK scenario's agent and the transport each arm records; langgraph-docs runs LangGraph on ChatAnthropic. */
+const SDK_AGENTS = {
+  'sdk-docs': { run: runSdkAgent, transport: { a: 'bedrock-invoke-model', b: 'anyray-messages' } },
+  'langgraph-docs': { run: runLangGraphAgent, transport: { a: 'langchain-anthropic-bedrock', b: 'langchain-anthropic-gateway' }, framework: 'langgraph' },
+};
+
 /** Paired pay-per-token SDK scenario; its record shape is accepted by bench-verdict. */
 export async function runSdkComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps = {} } = {}) {
-  const runSdk = deps.runSdkAgent ?? runSdkAgent;
+  const name = args.scenario;
+  const agent = SDK_AGENTS[name];
+  const runSdk = deps.runSdkAgent ?? agent.run;
   const checkout = deps.prepareRepo ?? prepareRepo;
   const describe = deps.describeRepo ?? describeRepo;
   const write = deps.write ?? writeFileSync;
@@ -786,12 +798,14 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   const { run, pricing } = cfg;
   if (!run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
   const clientKey = deps.clientKey ?? resolveBenchKey().key;
-  if (!clientKey) throw new Error('sdk-docs needs ANYRAY_BENCH_CLIENT_KEY or ANYRAY_CLIENT_KEY');
-  const dir = join(cfg.root, 'scenarios', 'sdk-docs');
+  if (!clientKey) throw new Error(`${name} needs ANYRAY_BENCH_CLIENT_KEY or ANYRAY_CLIENT_KEY`);
+  const dir = join(cfg.root, 'scenarios', name);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
   const scenario = effectiveScenario(scenarioFile, args);
-  if (scenario.maxTurns < 8 || scenario.maxTurns > 30) throw new Error('sdk-docs maxTurns must be 8–30');
-  if (scenario.minTurns < 8 || scenario.minTurns > scenario.maxTurns) throw new Error('sdk-docs minTurns must be at least 8 and no more than maxTurns');
+  if (name === 'sdk-docs') {
+    if (scenario.maxTurns < 8 || scenario.maxTurns > 30) throw new Error('sdk-docs maxTurns must be 8–30');
+    if (scenario.minTurns < 8 || scenario.minTurns > scenario.maxTurns) throw new Error('sdk-docs minTurns must be at least 8 and no more than maxTurns');
+  } else if (scenario.maxTurns < 2 || scenario.maxTurns > 80) throw new Error(`${name} maxTurns must be 2–80: one turn to research, the last to answer`);
   const out = join(cfg.root, 'results', 'agent');
   const workParent = join(out, 'sdk-work');
   const cacheDir = join(out, 'sdk-repo-cache');
@@ -801,13 +815,13 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
   const save = recordSaver(file, record, write);
   const probe = checkout(scenario, dir, repoOptions);
-  try { record.scenario = { name: 'sdk-docs', ...scenarioFile, repoInfo: describe(probe, scenario) }; }
+  try { record.scenario = { name, ...scenarioFile, repoInfo: describe(probe, scenario) }; }
   finally { rmSync(probe, { recursive: true, force: true }); }
   const bedrock = args.bedrock ?? await (deps.resolveBedrock ?? resolveBedrock)(run);
   args.bedrock = bedrock;
-  Object.assign(record, { compare: 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: 'direct', b: 'anyray' }, kinds: args.kinds, request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true }, setup: { a: { transport: 'bedrock-invoke-model', model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: 'anyray-messages', model: run.model, maxTurns: scenario.maxTurns } } });
+  Object.assign(record, { compare: 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: 'direct', b: 'anyray' }, kinds: args.kinds, request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true, ...(agent.framework ? { framework: agent.framework } : {}) }, setup: { a: { transport: agent.transport.a, model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } } });
   const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
-  log(`sdk-docs [anyray] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1}`);
+  log(`${name} [anyray] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1}`);
   const runRound = async (round) => {
     const tags = roundTags(args, round);
     const startedAt = new Date().toISOString();
@@ -855,7 +869,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
  * pool with the control); each is saved as it finishes, in round order.
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
-  if (args.scenario === 'sdk-docs') return runSdkComparison(args, cfg, { prefix, schedule, deps });
+  if (SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
   const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig } = { ...LIVE, ...deps };
   const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
