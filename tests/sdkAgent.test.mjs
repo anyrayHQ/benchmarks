@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage, FINAL_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
+import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage, FINAL_ANSWER_REQUEST, EMPTY_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
 import { parseArgs, runComparison } from '../run_agent.mjs';
 import { run as runVerdictTool } from '../tools/bench-verdict.mjs';
 
@@ -152,5 +152,41 @@ test('SDK final turn asks for the answer with tools declared but not callable', 
     assert.equal(lastUser.content[0].type, 'tool_result');
     assert.equal(session.result.subtype, 'success');
     assert.equal(session.citations.resolved, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('SDK final reply of thinking alone gets one more answer-only request with the same tools', async () => {
+  const root = fresh();
+  try {
+    writeFileSync(join(root, 'a.py'), 'first\nsecond\n');
+    const bodies = [];
+    const toolTurn = (id) => ({ model: 'claude-sonnet-5', stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name: 'read_file', input: { path: 'a.py', offset: 1, limit: 1 } }], usage: { input_tokens: 1, output_tokens: 1 } });
+    const thinkingOnly = { model: 'claude-sonnet-5', stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '', signature: 'sig' }], usage: { input_tokens: 1, output_tokens: 300 } };
+    const answer = { model: 'claude-sonnet-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Answer a.py:1' }], usage: { input_tokens: 1, output_tokens: 1 } };
+    const session = await runSdkAgent({
+      arm: 'direct', scenario: { task: 'Explain', maxTurns: 2, citations: { min: 1, resolveRate: 1 } }, work: root, model: 'claude-sonnet-5', pricing,
+      request: async ({ body, turn }) => { bodies.push(JSON.parse(JSON.stringify(body))); return [toolTurn('t0'), thinkingOnly, answer][turn]; },
+    });
+    assert.equal(bodies.length, 3);
+    const { messages: retryMessages, ...retryParams } = bodies[2];
+    const { messages: _m, ...finalParams } = bodies[1];
+    assert.deepEqual(retryParams, finalParams, 'same tools, tool_choice and max_tokens as the final turn');
+    assert.equal(retryMessages.at(-2).content[0].type, 'thinking');
+    assert.equal(retryMessages.at(-1).content, EMPTY_ANSWER_REQUEST);
+    assert.equal(session.result.text, 'Answer a.py:1');
+    assert.equal(session.result.subtype, 'success');
+    assert.equal(session.totals.answerRetries, 1);
+    assert.equal(session.totals.requests, 3);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('SDK answer still empty after the retry is graded as no answer', async () => {
+  const root = fresh();
+  try {
+    const bodies = [];
+    const thinkingOnly = { model: 'claude-sonnet-5', stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '', signature: 'sig' }], usage: { input_tokens: 1, output_tokens: 3 } };
+    const session = await runSdkAgent({ arm: 'direct', scenario: { task: 'Explain', maxTurns: 3 }, work: root, model: 'claude-sonnet-5', pricing, request: async ({ body }) => { bodies.push(body); return thinkingOnly; } });
+    assert.equal(bodies.length, 2, 'one retry, never a loop');
+    assert.equal(session.result.subtype, 'error_no_answer');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
