@@ -12,7 +12,8 @@ Anyray's Rule 0: **a session must never cost more because of us.**
 Each **round** runs the same task on a real open-source repo in two arms **at the same
 time**, each a full Claude Code session on its own fresh checkout:
 
-The `sdk-docs` scenario below uses its own SDK tool loop and two per-token lanes.
+The `sdk-docs` and `framework-docs` scenarios below run their own agent in-process instead,
+on two per-token lanes.
 
 | Arm | How it reaches the model |
 |---|---|
@@ -140,6 +141,7 @@ are recorded in the round's `redraws`. Name every kind the gateway may hold out 
 | `pyrepo-long-session` | a large Python codebase (pinned) | Five user turns of code walkthroughs over one large Python codebase | Path:line citations resolve |
 | `pyrepo-long-session-cold` | a large Python codebase (pinned) | The same five turns with three 62-minute pauses, so three turns start with the prompt cache expired (about 4 hours a round) | Path:line citations resolve |
 | `sdk-docs` | a large Python codebase (pinned) | SDK tool loop without client cache markers, direct Bedrock vs gateway | Path:line citations resolve |
+| `framework-docs` | a large Python codebase (pinned) | The `pyrepo-docs` task run by an agent-framework graph agent, direct Bedrock vs gateway | Path:line citations resolve |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
 is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
@@ -252,11 +254,40 @@ pin the direct model; otherwise the existing gateway route probe resolves it. Us
 no optimization selection header. `--inter-turn-delay-sec 310` pauses between model
 requests to test behavior beyond the five-minute cache lifetime. `--max-turns` must
 stay between 8 and 30; the scenario continues early answers until at least eight
-model requests have run. The round line prints each arm's cache-read share. The result
+model requests have run. A final reply with no text (Sonnet 5 can end a turn on thinking
+alone) gets one more answer-only request with the same tools; an answer still empty is
+graded `error_no_answer`. The round line prints each arm's cache-read share. The result
 file stores every request's token usage, estimated cost, and latency, plus the usual
 paired verdict and citation check. Run `node tools/bench-verdict.mjs` on that file to
 recalculate the verdict. A live run is required to establish route parity and measured
 savings; `npm test` uses stubs and makes no model requests.
+
+### Agent-framework agent
+
+`framework-docs` runs the `pyrepo-docs` task and grade with an agent built the way
+agent-framework users build one: a state graph with a model node and a tool node,
+its Anthropic chat model bound to three zod-declared tools (the same checkout-confined read,
+list and search as `sdk-docs`), and no cache markers. Both arms run the same graph and
+model class; only the HTTP client under the chat model differs. The direct arm uses
+`AnthropicBedrock` with the local AWS profile and region. The Anyray arm uses the stock
+setup for a gateway: the gateway URL as base URL and the benchmark client key as the
+API key. Each model request is one turn; the last allowed turn asks for the answer with
+the tools still declared but not callable. Sonnet 5 thinks when `thinking` is omitted and
+can end a turn on thinking alone, so a reply with neither tool calls nor text gets one
+more answer-only request with the same parameters; an answer still empty is graded
+`error_no_answer`.
+
+```bash
+node run_agent.mjs --scenario framework-docs --rounds 1 --provider bedrock --kinds <k1,k2>
+```
+
+It takes the same flags and environment as `sdk-docs`; `--max-turns` must stay between
+2 and 80. The Anthropic SDK reads `ANTHROPIC_BASE_URL`, `ANTHROPIC_CUSTOM_HEADERS` and
+API keys from the environment, so a shell inside a routed Claude Code session would
+otherwise send both arms elsewhere. The agent builds its clients without them, and
+refuses any request to another host or with an `x-anyray-*` header it did not set.
+Each request's usage, cost, latency and content block types are stored in the result
+file.
 
 ### Connect's client-tool switches
 
