@@ -218,8 +218,24 @@ test("after the session, reads what connect's hooks left in the arm HOME: cached
     refreshed: true,
     hookTeeFiles: 2,
     anyrayFiles: ['connect.json', 'hook-tee', 'refresh-state.json'],
+    hookLogRead: null,
   });
-  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [] });
+  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [], hookLogRead: null });
+});
+
+test("keeps the test-log Read lane's counts (never its records) from the arm HOME before it goes", () => {
+  // Two real sessions left a recorded log unshortened while a replay shortened
+  // it; the counts said why, and they were deleted with the arm HOME.
+  const home = armHome();
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  const counts = { recorded: 2, emits: 1, rangedRereads: 0, fullRereads: 0, declined: { 'log-read-ranged': 3 } };
+  const record = { key: 'a'.repeat(64), size: 87730, mtimeMs: 1, runner: 'go', at: 1, emitted: true, pages: [], omitted: [] };
+  writeFileSync(join(home, '.anyray', 'hook-log-reads.json'), JSON.stringify({ v: 1, counts, records: [record, { ...record, key: 'b'.repeat(64) }] }));
+  const activity = connectActivity(home);
+  assert.deepEqual(activity.hookLogRead, { ...counts, records: 2 });
+  assert.ok(!JSON.stringify(activity).includes('a'.repeat(64)), 'no record key leaves the HOME');
+  writeFileSync(join(home, '.anyray', 'hook-log-reads.json'), 'not json');
+  assert.equal(connectActivity(home).hookLogRead, null);
 });
 
 // ---- the connect-configured arm combined with --read-trim, --arm-env and the HOME guard ----
