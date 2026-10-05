@@ -1,0 +1,21 @@
+title: "Agent-framework agent documents a large Python codebase — how a command reaches a minion and runs a module"
+# The pyrepo-docs task and grade, run by an agent-framework graph agent on its Anthropic chat model
+# instead of Claude Code: the request shape an agent-framework user sends (no cache markers,
+# the framework's own tool schemas and message layout), direct to Bedrock vs through Anyray.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+task: >-
+  Write developer documentation for this codebase, for an engineer joining the team.
+  Cover how `salt '*' test.ping` travels from the CLI through the master to a minion,
+  how the loader discovers and loads execution modules (and what __virtual__ and the
+  dunder globals like __salt__ and __opts__ do), and how the return gets back to the
+  CLI. Output the documentation as Markdown in your final answer, with a section per
+  stage, and cite the code for every claim as path:line, with each path written from
+  the repository root (salt/minion.py:120, not minion.py:120).
+citations:
+  min: 10
+  resolveRate: 0.9
+# One turn is one model request; the last allowed turn must answer with tools not callable.
+maxTurns: 30
+interTurnDelaySec: 0
