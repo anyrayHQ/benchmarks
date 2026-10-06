@@ -27,7 +27,14 @@ credential, and neither loads your own Claude Code settings.
 Per round it records:
 
 - **Cost:** Claude Code's billed total, with cache reads and writes, main agent and subagents.
-- **Turns, model requests, subagents** and their share of cost.
+- **Turns, model requests, subagents** and their share of cost, and the subagent load:
+  how many requests the main agent made (`mainRequests`), how many the subagents made
+  (`subagentRequests`), and requests per subagent (`requestsPerSubagent`, null with no
+  subagents). The round line prints it as `4 subagents · 68 sub-req (17.0/agent) · 20
+  main-req`; the result's `subagentLoad` pools it per arm over the run.
+- **The Claude Code build each arm ran** (`setup.{a,b}.claudeVersion`, per round) and the
+  run's `claudeVersions` per arm, with a warning when a block mixed versions. The default
+  `claude` comes from PATH, which auto-update moves between rounds; `--claude-bin` pins it.
 - **Solved or not.** A bug-fix task must pass its test command in the session's checkout afterwards. A question must contain every key fact. An audit's `path:line` citations must resolve to real lines.
 - **Every model request:** cache read / write / uncached input, each tool call and its output.
 - **The gateway's own record,** when an admin key is set: which strategies were on for the run, and what each one did on each request (saved, stood down, held by the guard).
@@ -307,6 +314,20 @@ used are recorded in the arm's setup.
 - Each round line shows `start <read> read / <written> written`: what the first request of
   each agent (main and subagents) read from the cache and wrote to it. A large difference
   between the arms is a cold start, not the work.
+- `--claude-bin <abs path>` (or `ANYRAY_CLAUDE_BIN=<abs path>`; the flag wins) pins the
+  Claude Code binary both arms spawn, for the task session and the warm-up: a `claude`
+  executable (for example `~/.local/share/claude/versions/2.1.286`, which is the binary
+  itself), or a directory holding one. The path must exist and be executable.
+  Without it `claude` comes from PATH, and Claude Code's auto-update can move it between
+  rounds, which changes how the sessions split work into subagents (requests per
+  subagent) without the harness saying so. The run header line ends with the version in
+  use (`· Claude Code 2.1.286 pinned by --claude-bin: …`), each arm's setup records it
+  (`client`, `claudeVersion`, `claudeBinSource`; never the path), each round records the
+  version its sessions ran, and the end-of-run summary lists the versions per arm with a
+  warning when they were mixed.
+- Each round line shows each arm's subagent load, `N subagents · M sub-req (M/N per
+  agent) · K main-req`, and the end-of-run summary pools it per arm (`subagentLoad` in the
+  result file, with `requestsPerSubagent` for A and B).
 - A session that reads, searches or `cd`s outside its own checkout is flagged
   `OUTSIDE CHECKOUT` with a count (`outsideCheckout` on the session). Another copy of the
   scenario's repo elsewhere on the machine is the usual cause: remove it.
@@ -372,6 +393,9 @@ settings afterwards.
 
 - `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in
   each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`).
+- `--claude-bin <abs path>` / `ANYRAY_CLAUDE_BIN`: the Claude Code binary both arms spawn
+  (see "Keeping the pair like for like"). Recorded in `request.claudeBin` (`source`,
+  `version`) when pinned, and in each arm's setup as `claudeVersion` / `claudeBinSource`.
 - `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
   neither can spawn subagents. Recorded in the result's `request.noSubagents`.
 - `--experiment <name>` (`--compare anyray`): the Anyray arm sends `experiment=<name>` in
