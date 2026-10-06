@@ -156,6 +156,7 @@ const int = (n) => (n == null ? '—' : Math.round(n).toLocaleString('en-US'));
 const usd = (n, d = 3) => (n == null ? '—' : '$' + n.toFixed(d));
 const secs = (ms) => (ms == null ? '—' : (ms / 1000).toFixed(0) + ' s');
 const x2 = (n) => (n == null ? '—' : n.toFixed(2) + '×');
+const perAgent = (t) => (t?.requestsPerSubagent == null ? '—' : t.requestsPerSubagent.toFixed(1)); // requests per subagent; — with none (or an older result file)
 const NS = 'http://www.w3.org/2000/svg';
 // Under --compare gateway both slots go through Anyray; B adds ANYRAY_BENCH_EXTRA_HEADERS.
 const armName = (r, key) => r.compare === 'gateway'
@@ -287,7 +288,7 @@ function requestsCard(r, round, key) {
   const t = s.totals;
   const cls = key === 'b' && r.arms.b === 'anyray' ? 'b' : 'a';
   return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2></div>' +
-    '<div class="muted num">' + t.turns + ' turns · ' + t.requests + ' model requests · ' + t.subagents + ' subagents (' + Math.round(t.subagentInputShare * 100) + '% of input cost) · ' + t.toolCalls + ' tool calls' + (t.hookTrimmed ? ' · ' + t.hookTrimmed + ' trimmed' : '') + '</div>' + rows + '</div>';
+    '<div class="muted num">' + t.turns + ' turns · ' + t.requests + ' model requests' + (t.subagentRequests != null ? ' (' + t.mainRequests + ' main, ' + t.subagentRequests + ' subagent)' : '') + ' · ' + t.subagents + ' subagents (' + Math.round(t.subagentInputShare * 100) + '% of input cost' + (t.requestsPerSubagent != null ? ', ' + perAgent(t) + ' req/agent' : '') + ') · ' + t.toolCalls + ' tool calls' + (t.hookTrimmed ? ' · ' + t.hookTrimmed + ' trimmed' : '') + (s.setup?.claudeVersion ? ' · Claude Code ' + esc(s.setup.claudeVersion) : '') + '</div>' + rows + '</div>';
 }
 
 function resultCard(r, round, key) {
@@ -327,14 +328,14 @@ function renderDetail() {
 
   h += '<section class="stack"><h3>Harness setup</h3><div class="duo">' + setupCard(r, 'a') + setupCard(r, 'b') + '</div></section>';
 
-  h += '<section class="panel stack"><div class="row between"><h2>Rounds</h2><span class="muted">Select a round to inspect it.</span></div><div class="tablewrap"><table><thead><tr><th>Round</th><th class="r">Cost A → B</th><th class="r">Ratio</th><th class="r">Turns A → B</th><th class="r">Subagents A → B</th><th class="r">Input A → B</th><th>Solved A / B</th>' + (r.compare !== 'control' ? '<th>Saved by</th>' : '') + '</tr></thead><tbody>' +
-    rounds.map((x, k) => { const a = x.sessions.a.totals, b = x.sessions.b.totals; return '<tr class="pick" tabindex="0" data-k="' + k + '" aria-selected="' + (x === round) + '"><td class="num">' + x.round + '</td><td class="r">' + usd(a.costUsd) + ' → ' + usd(b.costUsd) + '</td><td class="r ' + (x.ratio < 0.999 ? 'good-t' : x.ratio > 1.001 ? 'bad-t' : '') + '">' + x2(x.ratio) + '</td><td class="r">' + a.turns + ' → ' + b.turns + '</td><td class="r">' + a.subagents + ' → ' + b.subagents + '</td><td class="r">' + int(a.input) + ' → ' + int(b.input) + '</td><td>' + (x.quality.a ? '✓' : '✕') + ' / ' + (x.quality.b ? '✓' : '✕') + '</td>' + (r.compare !== 'control' ? '<td>' + workedChips(x.traces?.traces ?? [], !!x.traces?.traces) + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div></section>';
+  h += '<section class="panel stack"><div class="row between"><h2>Rounds</h2><span class="muted">Select a round to inspect it.</span></div><div class="tablewrap"><table><thead><tr><th>Round</th><th class="r">Cost A → B</th><th class="r">Ratio</th><th class="r">Turns A → B</th><th class="r">Subagents A → B</th><th class="r">Sub-req / agent A → B</th><th class="r">Input A → B</th><th>Solved A / B</th><th>Claude Code A / B</th>' + (r.compare !== 'control' ? '<th>Saved by</th>' : '') + '</tr></thead><tbody>' +
+    rounds.map((x, k) => { const a = x.sessions.a.totals, b = x.sessions.b.totals; return '<tr class="pick" tabindex="0" data-k="' + k + '" aria-selected="' + (x === round) + '"><td class="num">' + x.round + '</td><td class="r">' + usd(a.costUsd) + ' → ' + usd(b.costUsd) + '</td><td class="r ' + (x.ratio < 0.999 ? 'good-t' : x.ratio > 1.001 ? 'bad-t' : '') + '">' + x2(x.ratio) + '</td><td class="r">' + a.turns + ' → ' + b.turns + '</td><td class="r">' + a.subagents + ' → ' + b.subagents + '</td><td class="r">' + perAgent(a) + ' → ' + perAgent(b) + '</td><td class="r">' + int(a.input) + ' → ' + int(b.input) + '</td><td>' + (x.quality.a ? '✓' : '✕') + ' / ' + (x.quality.b ? '✓' : '✕') + '</td><td class="mono">' + esc(x.sessions.a.setup?.claudeVersion ?? '—') + ' / ' + esc(x.sessions.b.setup?.claudeVersion ?? '—') + '</td>' + (r.compare !== 'control' ? '<td>' + workedChips(x.traces?.traces ?? [], !!x.traces?.traces) + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div></section>';
 
   if (!round) { $('#detail').innerHTML = h; return; }
   const a = round.sessions.a.totals, b = round.sessions.b.totals;
   h += '<section class="panel stack"><h2>Round ' + round.round + '</h2><div class="kpis">' +
     kpi('Cost', a.costUsd, b.costUsd, (n) => usd(n)) + kpi('Input tokens', a.input, b.input, int) + kpi('Output tokens', a.output, b.output, int) +
-    kpi('Turns', a.turns, b.turns, int) + kpi('Subagents', a.subagents, b.subagents, int) + kpi('Wall time', a.wallMs, b.wallMs, secs) + '</div>' +
+    kpi('Turns', a.turns, b.turns, int) + kpi('Subagents', a.subagents, b.subagents, int) + kpi('Sub-req / agent', a.requestsPerSubagent, b.requestsPerSubagent, (n) => perAgent({ requestsPerSubagent: n })) + kpi('Wall time', a.wallMs, b.wallMs, secs) + '</div>' +
     '<div class="legend"><span><i style="background:var(--read)"></i>cache read (0.1×)</span><span><i style="background:var(--write)"></i>cache write (2× for 1h)</span><span><i style="background:var(--fresh)"></i>uncached input</span><span><i style="background:var(--sub)"></i>subagent request</span></div></section>';
   if (r.compare !== 'control') {
     h += anyrayCard(r, round);

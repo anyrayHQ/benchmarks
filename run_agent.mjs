@@ -79,6 +79,17 @@
 //      path; refused when both builds are the same. The file must be called anyray-connect,
 //      the command name the arm's checks expect. Keep both outside the temp dir:
 //      connect installs no hooks or MCP server from a binary it finds there)
+//   node run_agent.mjs --scenario pyrepo-docs --rounds 4 --kinds observation_mask \
+//     --claude-bin ~/.local/share/claude/versions/2.1.286
+//     (--claude-bin <abs path>, or ANYRAY_CLAUDE_BIN (the flag wins): the Claude Code binary
+//      BOTH arms spawn, for the task session and the warm-up: a `claude` executable, or a
+//      directory holding one. Without it `claude` comes from PATH, which auto-update moves
+//      between rounds. The run header prints the version; each arm's setup records it
+//      (`client`, `claudeVersion`, `claudeBinSource`, never the path), per round too)
+// Each arm's round line also shows its subagent load: `N subagents · M sub-req (M/N per
+//   agent) · K main-req` (totals.subagentRequests, requestsPerSubagent, mainRequests); the
+//   end-of-run summary pools it per arm (`subagentLoad`) and lists the Claude Code versions
+//   the rounds ran on (`claudeVersions`), warning when a block mixed them.
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -103,6 +114,7 @@ import { formatChecks } from './lib/connectChecks.mjs';
 import { runSdkAgent } from './lib/sdkAgent.mjs';
 import { runFrameworkAgent } from './lib/frameworkAgent.mjs';
 import { createBenchLevel, LEVELS, redactLevelError } from './lib/benchLevel.mjs';
+import { claudeBinRequest, resolveClaudeBin, claudeVersion, describeClaudeBin } from './lib/claudeBin.mjs';
 
 const COMPARES = ['anyray', 'control', 'gateway'];
 
@@ -196,11 +208,13 @@ function postureOf(pairs, arm) {
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 
-export function parseArgs(argv) {
+export function parseArgs(argv, env = process.env) {
   const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
   const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
+  let claudeBinFlag = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
+    else if (argv[i] === '--claude-bin') claudeBinFlag = argv[++i] ?? ''; // the Claude Code binary both arms spawn (wins over ANYRAY_CLAUDE_BIN)
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
@@ -238,9 +252,14 @@ export function parseArgs(argv) {
   a.readTrimB = a.hookPostureB.readTrim === 'on';
   const pinsHooks = Object.keys(a.hookPosture).length + Object.keys(a.hookPostureB).length > 0;
   if (a.interTurnDelaySec !== null && (!Number.isFinite(a.interTurnDelaySec) || a.interTurnDelaySec < 0)) throw new Error('--inter-turn-delay-sec needs a nonnegative number');
+  // --claude-bin / ANYRAY_CLAUDE_BIN: what was asked for; resolveClaudeBin checks it exists
+  // and runs when the comparison starts. An empty flag value is refused here, not ignored.
+  if (claudeBinFlag === '') throw new Error('--claude-bin takes an absolute path to a claude executable (or a directory holding one)');
+  a.claudeBin = claudeBinRequest({ flag: claudeBinFlag, env });
+  if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -381,6 +400,7 @@ export const slotOptions = (args, arms, slot) => ({
   ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
+  ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
 });
 
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
@@ -392,6 +412,7 @@ export const requestRecord = (args) => ({
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
   ...(args.connectBinB ? { connectBinB: args.connectBinBDigest ?? null } : {}), // arm B's connect build (sha256 prefix, never the path)
+  ...(args.claude?.pinned ? { claudeBin: { source: args.claude.source, version: args.claude.version ?? null } } : {}), // both arms' pinned Claude Code build (never the path)
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
   ...(Object.keys(args.hookPosture ?? {}).length ? { hookPosture: args.hookPosture } : {}), // connect hook switches every Anyray arm pins
   ...(Object.keys(args.hookPostureB ?? {}).length ? { hookPostureB: args.hookPostureB } : {}), // the switches arm B alone pins
@@ -422,6 +443,66 @@ export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gate
 /** Main-agent requests that issued more than one tool call (Claude Code's parallel tool use). */
 export const parallelToolTurns = (requests) =>
   requests.filter((r) => r.agent === 'main' && r.blocks.filter((b) => b.type === 'tool_use').length > 1).length;
+
+/**
+ * How the session's model requests split between the main agent and its subagents, and
+ * the load per subagent (requests whose `agent` is not `main`, over the Task calls that
+ * spawned subagents; null with no subagents). This is what moves between Claude Code
+ * versions, and what the cost per round follows: say it on every round line.
+ */
+export function subagentLoad(requests, subagents) {
+  const subagentRequests = requests.filter((r) => r.agent !== 'main').length;
+  const n = subagents?.length ?? 0;
+  return { mainRequests: requests.length - subagentRequests, subagentRequests, requestsPerSubagent: n ? subagentRequests / n : null };
+}
+
+/** The round line's subagent part: ` · 4 subagents · 68 sub-req (17.0/agent) · 20 main-req`. */
+export const subagentNote = (t) =>
+  ` · ${t.subagents} subagents · ${t.subagentRequests ?? 0} sub-req${t.requestsPerSubagent == null ? '' : ` (${t.requestsPerSubagent.toFixed(1)}/agent)`} · ${t.mainRequests ?? 0} main-req`;
+
+/**
+ * The run's subagent load per arm, pooled over the rounds that have a session (failed
+ * rounds have none): Σ subagent requests ÷ Σ subagents (null when no round spawned one),
+ * with the per-round ratios beside it. Written to the record as `subagentLoad`.
+ */
+export function subagentLoadSummary(rounds) {
+  const arm = (slot) => {
+    const totals = rounds.map((r) => r.sessions?.[slot]?.totals).filter((t) => t && t.subagentRequests != null);
+    const sum = (key) => totals.reduce((n, t) => n + (t[key] ?? 0), 0);
+    const subagents = sum('subagents');
+    const subagentRequests = sum('subagentRequests');
+    return { rounds: totals.length, subagents, subagentRequests, mainRequests: sum('mainRequests'), requestsPerSubagent: subagents ? subagentRequests / subagents : null };
+  };
+  return {
+    a: arm('a'),
+    b: arm('b'),
+    perRound: rounds.filter((r) => r.sessions).map((r) => ({ round: r.round, a: r.sessions.a?.totals?.requestsPerSubagent ?? null, b: r.sessions.b?.totals?.requestsPerSubagent ?? null })),
+  };
+}
+
+/**
+ * Which Claude Code version each arm's sessions ran, counted over the rounds (from each
+ * session's `setup.claudeVersion`; 'unknown' when a round recorded none), and whether
+ * the block mixed versions: across its rounds, or between its arms.
+ */
+export function claudeVersions(rounds) {
+  const count = (slot) => {
+    const out = {};
+    for (const r of rounds) {
+      if (!r.sessions?.[slot]) continue;
+      const v = r.sessions[slot].setup?.claudeVersion ?? 'unknown';
+      out[v] = (out[v] ?? 0) + 1;
+    }
+    return out;
+  };
+  const a = count('a');
+  const b = count('b');
+  const seen = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return { a, b, mixed: seen.size > 1 };
+}
+
+/** `2.1.286 ×3, 2.1.292 ×1`, or 'n/a' with no sessions. */
+const versionList = (counts) => (Object.keys(counts).length ? Object.entries(counts).map(([v, n]) => `${v} ×${n}`).join(', ') : 'n/a');
 
 /**
  * Each slot's x-anyray-metadata tag. Under --compare gateway both slots are gateway
@@ -512,6 +593,7 @@ function summarize(session, pricing) {
   t.parallelToolTurns = parallelToolTurns(session.requests);
   t.resultSubtype = session.result?.subtype ?? null; // e.g. error_max_turns
   t.compactions = session.compactions?.length ?? 0;
+  Object.assign(t, subagentLoad(session.requests, session.subagents)); // mainRequests, subagentRequests, requestsPerSubagent
   t.peakContext = {}; // largest input (fresh + cache read + write) any one request of each agent sent
   for (const r of session.requests) {
     const u = { ...(r.usage ?? {}), output_tokens: 0 };
@@ -606,6 +688,18 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds }) {
   if (v.qualityEvents.length) out.push(`  quality events (one arm solved): ${v.qualityEvents.map((e) => `round ${e.round} ${e.solvedBy.toUpperCase()} only`).join(', ')}`);
   if (v.neither.length) out.push(`  neither arm solved: round(s) ${v.neither.join(', ')}`);
   if (v.noCost.length) out.push(`  no cost (timeout/crash), excluded: ${v.noCost.map((e) => `round ${e.round} (${e.reason})`).join(', ')}`);
+  // Subagent load per arm and the Claude Code versions the rounds ran on: the two things
+  // an auto-update between rounds moves, which the cost ratio alone never shows.
+  const load = subagentLoadSummary(rounds);
+  const perArm = (slot) => `${slot.toUpperCase()} ${load[slot].requestsPerSubagent == null ? 'n/a' : load[slot].requestsPerSubagent.toFixed(1)}/agent (${load[slot].subagentRequests} sub-req over ${load[slot].subagents} subagents, ${load[slot].mainRequests} main-req, ${load[slot].rounds} rounds)`;
+  if (load.a.rounds || load.b.rounds) {
+    out.push(`  subagent load: ${perArm('a')} · ${perArm('b')}`);
+    out.push(`  per round (A / B per agent): ${load.perRound.map((p) => `r${p.round} ${x2(p.a)}/${x2(p.b)}`).join(', ')}`);
+  }
+  const versions = claudeVersions(rounds);
+  if (Object.keys(versions.a).length || Object.keys(versions.b).length) {
+    out.push(`  Claude Code: A ${versionList(versions.a)} · B ${versionList(versions.b)}` + (versions.mixed ? ' → WARNING: this block mixed Claude Code versions; pin one with --claude-bin' : ''));
+  }
   if (controlRounds) {
     const band = noiseBand(solvedPairVerdict(controlRounds.filter((x) => !x.gatewayRestarted)));
     if (!band) out.push('  noise band (control): n/a, no solved pairs');
@@ -778,7 +872,7 @@ export async function resolveBedrock(run, { env = process.env, probe = probeGate
 }
 
 /** What runComparison reaches outside the process through; tests stub them. */
-const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock, readOptimizerConfig: optimizerConfig };
+const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock, readOptimizerConfig: optimizerConfig, resolveClaudeBin, claudeVersion };
 
 /** Each SDK scenario's agent and the transport each arm records; framework-docs runs a graph agent on the framework's chat model. */
 const SDK_AGENTS = {
@@ -870,9 +964,15 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
   if (SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
-  const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig } = { ...LIVE, ...deps };
+  const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig, resolveClaudeBin, claudeVersion } = { ...LIVE, ...deps };
   const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
+  // The Claude Code binary both arms spawn (--claude-bin / ANYRAY_CLAUDE_BIN, else PATH),
+  // checked now so a bad path fails before any session, and read once for the header.
+  if (!args.claude) {
+    const claude = resolveClaudeBin(args.claudeBin ?? claudeBinRequest({ env: process.env }));
+    args.claude = { ...claude, version: claudeVersion(claude.bin) };
+  }
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   if (args.connectBinB) {
@@ -934,7 +1034,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   // and each round's session id stay unique however the rounds overlap.
   const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
   const numbers = Array.from({ length: args.rounds }, (_, k) => first + k);
-  log(`${args.scenario} [${args.compare}] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1} (up to ${args.parallel ?? 1} round(s) at once, each A ‖ B)`);
+  // The header names the Claude Code build both arms spawn, beside the provider line above.
+  log(`${args.scenario} [${args.compare}] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1} (up to ${args.parallel ?? 1} round(s) at once, each A ‖ B) · ${describeClaudeBin(args.claude)}`);
 
   const runRound = async (round) => {
     log(`${args.scenario} [${args.compare}] round ${round}: ${armLabel(args, arms, 'a')} ‖ ${armLabel(args, arms, 'b')} (concurrent)…`);
@@ -1046,7 +1147,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     const ta = sessions.a.totals;
     const tb = sessions.b.totals;
     const line = (slot, t) =>
-      `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
+      `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns${subagentNote(t)} · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       ` · start ${t.start.read} read / ${t.start.written} written` +
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
@@ -1064,6 +1165,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     record.stats = rule0(scoredRounds(record.rounds));
     record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
     record.verdict = benchVerdict(record.rounds);
+    record.subagentLoad = subagentLoadSummary(record.rounds); // per arm: requestsPerSubagent, pooled, and per round
+    record.claudeVersions = claudeVersions(record.rounds); // per arm: which Claude Code versions the rounds ran, `mixed` when not one
     await save();
     return r;
   };
@@ -1096,6 +1199,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   record.stats = rule0(scoredRounds(record.rounds)); // all rounds, as before (the report reads it)
   record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // historical Rule 0 summary
   record.verdict = benchVerdict(record.rounds);
+  record.subagentLoad = subagentLoadSummary(record.rounds);
+  record.claudeVersions = claudeVersions(record.rounds);
   await save();
   return { record, file, viaGateway };
 }
