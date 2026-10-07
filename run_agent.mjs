@@ -66,6 +66,8 @@
 //   ANYRAY_BENCH_EXTRA_HEADERS='x-example: on' node run_agent.mjs --scenario s --compare gateway --strategy thinking_trim
 //     (both slots are the anyray arm with the same kinds and metadata, each with its own
 //      session id so traces and spend stay apart; B alone sends the extra headers)
+//   ANYRAY_BENCH_SHARED_HEADERS='x-anyray-tool-defer: off' node run_agent.mjs --compare gateway …
+//     (headers every Anyray arm sends, for a setting both arms must share)
 //   node run_agent.mjs --scenario s --compare gateway --kinds observation_mask --experiment-b my-exp-b
 //     (--experiment-b <name>: arm B alone sends experiment=<name> in x-anyray-metadata, so a
 //      gateway rule keyed on it (`bench-rule params <name> --params …`) is the treatment: same
@@ -86,7 +88,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { basename, isAbsolute, join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, binDigest } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest } from './lib/agentRun.mjs';
 import { ANYRAY_BIN } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
@@ -372,7 +374,11 @@ export const slotOptions = (args, arms, slot) => ({
   env: args.env?.[slot] ?? {},
   kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
   kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
-  extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : [],
+  // ANYRAY_BENCH_SHARED_HEADERS on every Anyray arm, then the treatment on B.
+  extraHeaders: [
+    ...(arms[slot] === 'anyray' ? args.sharedHeaders ?? [] : []),
+    ...(carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : []),
+  ],
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
@@ -399,6 +405,7 @@ export const requestRecord = (args) => ({
   ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
+  ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
 });
@@ -875,6 +882,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const arms = armsFor(args.compare);
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
+  args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
   if (args.connectBinB) {
     if (!existsSync(args.connectBinB)) throw new Error(`--connect-bin-b: no anyray-connect at ${args.connectBinB}`);
     args.connectBinBDigest = binDigest(args.connectBinB);

@@ -61,6 +61,16 @@ test('slotOptions: under anyray the extra headers still go to the anyray arm (B)
   assert.deepEqual(slotOptions(args, armsFor('anyray'), 'b').extraHeaders, ['x-e: 1']);
 });
 
+test('slotOptions: shared headers ride every Anyray arm, ahead of the treatment on B', () => {
+  const args = { ...gw(), sharedHeaders: ['x-anyray-tool-defer: off'], extraHeaders: ['x-anyray-retrieval-tools: lazy'] };
+  const arms = armsFor('gateway');
+  assert.deepEqual(slotOptions(args, arms, 'a').extraHeaders, ['x-anyray-tool-defer: off']);
+  assert.deepEqual(slotOptions(args, arms, 'b').extraHeaders, ['x-anyray-tool-defer: off', 'x-anyray-retrieval-tools: lazy']);
+  const direct = { ...parseArgs(['--scenario', 's', '--kinds', 'observation_mask']), sharedHeaders: ['x-anyray-tool-defer: off'] };
+  assert.deepEqual(slotOptions(direct, armsFor('anyray'), 'a').extraHeaders, [], 'never on a direct arm');
+  assert.deepEqual(slotOptions(direct, armsFor('anyray'), 'b').extraHeaders, ['x-anyray-tool-defer: off']);
+});
+
 test('roundTags: gateway gives each slot its own session id, same everything else', () => {
   const t = roundTags(gw(), 2, 7);
   assert.equal(t.a.sessionId, 'anyray-bench-s-gateway-r2-7-a');
@@ -88,6 +98,11 @@ test('armSetups: gateway records two gateway arms, headers only on B', () => {
 test('requestRecord: records which slots carried the extra headers', () => {
   assert.deepEqual(requestRecord({ ...gw(), extraHeaders: ['x-anyray-tool-defer: on'] }).extraHeadersOn, ['b']);
   assert.deepEqual(requestRecord({ ...gw(), extraHeaders: [] }).extraHeadersOn, []);
+});
+
+test('requestRecord: names the shared headers only when there are some', () => {
+  assert.deepEqual(requestRecord({ ...gw(), extraHeaders: [], sharedHeaders: ['x-anyray-tool-defer: off'] }).sharedHeaders, ['x-anyray-tool-defer']);
+  assert.equal('sharedHeaders' in requestRecord({ ...gw(), extraHeaders: [] }), false);
 });
 
 test('resultFileName: <scenario>--gateway[--label].json', () => {

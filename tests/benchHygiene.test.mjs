@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
-import { armConfig, benchExtraHeaders, describeSetup, followupDelayMs, subagentArgs } from '../lib/agentRun.mjs';
+import { armConfig, benchExtraHeaders, benchSharedHeaders, describeSetup, followupDelayMs, subagentArgs } from '../lib/agentRun.mjs';
 import { gatewayReplicaStarts, replicaStarts, restartedDuring } from '../lib/traces.mjs';
 import { parseArgs, requestRecord, roundTag, slotOptions } from '../run_agent.mjs';
 
@@ -77,6 +77,20 @@ test('parseArgs: --experiment needs --compare anyray and cannot be combined with
 test('benchExtraHeaders: newline-separated "name: value" lines, blank lines ignored', () => {
   assert.deepEqual(benchExtraHeaders({}), []);
   assert.deepEqual(benchExtraHeaders({ ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-cache-ttl: 1h\n\nx-trace: a:b\n' }), ['x-anyray-cache-ttl: 1h', 'x-trace: a:b']);
+});
+
+test('benchSharedHeaders: parsed like the treatment, and never a name the treatment sets', () => {
+  assert.deepEqual(benchSharedHeaders({}), []);
+  assert.deepEqual(benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-tool-defer: off\n' }), ['x-anyray-tool-defer: off']);
+  assert.throws(() => benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-api-key: k' }), /ANYRAY_BENCH_SHARED_HEADERS cannot set/);
+  assert.throws(
+    () => benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'X-Anyray-Tool-Defer: off', ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-tool-defer: on' }),
+    /in both/
+  );
+  assert.deepEqual(
+    benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-tool-defer: off', ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-retrieval-tools: lazy' }),
+    ['x-anyray-tool-defer: off']
+  );
 });
 
 test('benchExtraHeaders refuses a malformed line or a header the harness owns', () => {
