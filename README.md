@@ -418,6 +418,10 @@ settings afterwards.
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
   and which slots sent them in `request.extraHeadersOn`). Under `--compare gateway` they go
   to B only.
+- `ANYRAY_BENCH_SHARED_HEADERS`: the same format, sent on every Anyray arm: a setting both
+  arms must share, such as `x-anyray-tool-defer: off` where the dev org's default differs
+  from production. Never the treatment, so a header named in both lists is an error. The
+  names are recorded in `request.sharedHeaders`.
 - `--arm-env b:DISABLE_PROMPT_CACHING=1` (`--compare anyray`): the Anyray arm's Claude Code
   sends no `cache_control` markers of its own, leaving prompt caching to the gateway.
 
