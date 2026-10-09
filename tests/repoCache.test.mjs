@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { prepareRepo, repoCacheDir } from '../lib/agentRun.mjs';
+import { prepareRepo, repoCacheDir, sessionDirParent } from '../lib/agentRun.mjs';
 
 const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -23,6 +23,13 @@ test('repoCacheDir: outside the OS temp dir by default, and overridable', () => 
   assert.equal(repoCacheDir({ XDG_CACHE_HOME: '/x/cache' }), join('/x/cache', 'anyray-bench-repos'));
   assert.equal(repoCacheDir({ ANYRAY_BENCH_REPO_CACHE: '/y/repos', XDG_CACHE_HOME: '/x/cache' }), '/y/repos');
   assert.ok(!repoCacheDir({}).startsWith(tmpdir()), 'the OS prunes its temp dir and leaves half a clone');
+});
+
+test('sessionDirParent: outside the OS temp dir by default, and overridable', () => {
+  assert.equal(sessionDirParent({}), join(homedir(), '.cache', 'anyray-bench-sessions'));
+  assert.equal(sessionDirParent({ XDG_CACHE_HOME: '/x/cache' }), join('/x/cache', 'anyray-bench-sessions'));
+  assert.equal(sessionDirParent({ ANYRAY_BENCH_SESSION_DIR: '/y/sessions', XDG_CACHE_HOME: '/x/cache' }), '/y/sessions');
+  assert.ok(!sessionDirParent({}).startsWith(tmpdir()), 'connect installs no hooks or MCP server for a HOME in the temp dir');
 });
 
 test('prepareRepo: clones once into the cache and hands each session its own checkout', () => {
