@@ -232,6 +232,17 @@ A gateway that answers with the client's own model id (it passes the request to 
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
 
+Both arms also use the same small/fast model. Claude Code sends some side calls, such as
+WebFetch's page summary, to a small model. Arm B looks like the Anthropic API to Claude
+Code, so Claude Code picks its own Haiku there. On Bedrock, Claude Code sends those calls
+to the main model unless `ANTHROPIC_DEFAULT_HAIKU_MODEL` is set. Arm A would then pay
+Sonnet prices for calls arm B makes on Haiku, and the gap would look like a gateway saving.
+So arm A gets `ANTHROPIC_DEFAULT_HAIKU_MODEL` = Haiku 5.5 in the main model's inference
+profile (`us.anthropic.claude-sonnet-5` → `us.anthropic.claude-haiku-5-5`).
+`ANYRAY_BEDROCK_SMALL_MODEL` sets another id. Each arm's setup records the model and where
+it came from (`setup.<arm>.smallFastModel`). A round where the arms ran one model family
+on different models (`result.modelUsage`) is flagged in `modelsDiffer` with a warning.
+
 ### SDK agent without client cache markers
 
 `sdk-docs` measures a script or agent framework that sends ordinary Anthropic Messages
@@ -338,7 +349,8 @@ npm run bench-level -- clear
 ```
 
 The override is used for enrollment, status, and fallback MCP commands; results
-record only its basename. `bench-level` uses `ANYRAY_GATEWAY_URL`,
+record only its basename. See [Pinned Connect builds](#pinned-connect-builds) for how
+the harness makes sure the arm runs that build. `bench-level` uses `ANYRAY_GATEWAY_URL`,
 `ANYRAY_ADMIN_KEY`, and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`). It
 backs up the prior assignment under ignored `results/` and sends revision-checked
 team-policy writes that preserve the skills list and other policy fields. For a
@@ -362,6 +374,27 @@ the result twice (`lib/connectChecks.mjs`), recording both lists in the arm's se
 
 A failed required check fails the round instead of measuring a half-connected client.
 Advisory checks (tool search setting, connectors MCP) are reported only.
+
+### Pinned Connect builds
+
+`ANYRAY_CONNECT_BIN=<abs path>` (every Anyray arm) and `--connect-bin-b <abs path>` (arm B
+of `--compare gateway`) pin the anyray-connect build an arm runs. If the Connect desktop
+app is installed, connect hands its setup to the app. The arm's launcher
+(`<HOME>/.anyray/bin/anyray-connect`) then links to the app's binary. Hooks and the MCP
+server would run the app's build even though every command is still named
+`anyray-connect`. Two things stop that:
+
+- Before connect runs, every arm of a run with a pinned build gets a profile with
+  `{"trayAppPath": "/nonexistent/Anyray Connect.app"}` at `.anyray/connect.json`. connect
+  then does the setup itself. With `--connect-bin-b`, arm A gets the same profile. Your
+  own `--seed-home .anyray/connect.json=<file>` replaces it. The arm's `setup.seedHome`
+  records it with `by: "harness: …"`.
+- A check follows each hook, MCP server and `apiKeyHelper` command to the file it runs,
+  symlinks included. It compares that file to the pinned build by real path, or by
+  content for a copy. A different build fails the arm's setup before the session. The
+  same check runs again after the session (`session: …`) and fails the round if a refresh
+  re-pointed the launcher. Details name sha256 prefixes and an app bundle name, never an
+  absolute path. Without a pinned build the check is reported only.
 
 `--arm-env b:KEY=-` removes a key connect wrote. connect re-applies its configuration
 when its MCP server starts, which would write the key straight back, so such a session

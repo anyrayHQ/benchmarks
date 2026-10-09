@@ -45,8 +45,9 @@
 //      turn cap and subagent setting, into <scenario>--control--<label|compare>-control.json;
 //      its solved-pair median and range are printed as the noise band beside the verdict)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 4 --kinds observation_mask --provider bedrock
-//     (--provider bedrock: direct = Claude Code's own Bedrock client on an AWS profile;
-//      anyray = connect's org lane, the gateway routing to Bedrock; see lib/bedrock.mjs)
+//     (--provider bedrock: direct = Claude Code's own Bedrock client on an AWS profile,
+//      small/fast model Bedrock Haiku 5.5 (ANYRAY_BEDROCK_SMALL_MODEL); anyray = connect's
+//      org lane, the gateway routing to Bedrock; see lib/bedrock.mjs)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 6 --kinds observation_mask --parallel 3
 //     (--parallel N: up to N rounds at once, default 2, max 4; each round is still A ‖ B,
 //      so N rounds is up to 2N Claude sessions on the one subscription. --parallel 1 runs
@@ -80,7 +81,10 @@
 //      one connect change. Each arm's setup records its build's sha256 prefix, never the
 //      path; refused when both builds are the same. The file must be called anyray-connect,
 //      the command name the arm's checks expect. Keep both outside the temp dir:
-//      connect installs no hooks or MCP server from a binary it finds there)
+//      connect installs no hooks or MCP server from a binary it finds there. With a pinned
+//      build every Anyray arm starts from a no-app profile, so an installed Connect app
+//      cannot take the configure over, and fails unless its hooks and MCP server run that
+//      build: lib/agentRun.mjs armSeeds, lib/connectChecks.mjs checkConnectBinary)
 // Output: results/agent/<scenario>--<compare>[--<label>].json (resumes; adds rounds), then
 //   `npm run agent:report`.
 
@@ -101,7 +105,7 @@ import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
 import { experimentRules, sameRules, validExperimentName } from './lib/benchRule.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
-import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
+import { bedrockOptions, bedrockSmallModel, probeGatewayRoute, assertBedrockRoute, modelMismatch } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
 import { runSdkAgent } from './lib/sdkAgent.mjs';
 import { runFrameworkAgent } from './lib/frameworkAgent.mjs';
@@ -403,6 +407,9 @@ export const slotOptions = (args, arms, slot) => ({
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
   ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
+  // --connect-bin-b: A's build (ANYRAY_CONNECT_BIN) is pinned as much as B's, so both arms
+  // start from the same no-app profile and must run exactly their build.
+  ...(arms[slot] === 'anyray' && args.connectBinB ? { connectBinPinned: true } : {}),
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
@@ -795,13 +802,15 @@ async function main() {
  */
 export async function resolveBedrock(run, { env = process.env, probe = probeGatewayRoute } = {}) {
   const opts = bedrockOptions(env);
+  // The direct arm's small/fast model (lib/bedrock.mjs): what the gateway arm's Claude Code picks itself.
+  const withSmall = (b) => ({ ...b, ...bedrockSmallModel(b.model, opts.smallModel) });
   if (!run.gatewayUrl) {
     if (!opts.model) throw new Error('--provider bedrock without a gateway needs ANYRAY_BEDROCK_MODEL (the Bedrock model id)');
-    return { ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' };
+    return withSmall({ ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' });
   }
   const route = await probe({ gatewayUrl: run.gatewayUrl, clientKey: resolveBenchKey(env, () => {}).key, model: run.model });
   const served = assertBedrockRoute(route, { pinned: opts.model });
-  return { ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model };
+  return withSmall({ ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model });
 }
 
 /** What runComparison reaches outside the process through; tests stub them. */
@@ -937,7 +946,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   if (args.provider === 'bedrock') {
     args.bedrock ??= await resolveBedrock(run);
     record.bedrock = args.bedrock;
-    log(`provider bedrock: direct arm on AWS profile "${args.bedrock.profile}" (${args.bedrock.region}) as ${args.bedrock.model}` + (args.bedrock.gatewayServedAs ? `; the gateway serves ${run.model} as ${args.bedrock.gatewayServedAs}` : ''));
+    log(`provider bedrock: direct arm on AWS profile "${args.bedrock.profile}" (${args.bedrock.region}) as ${args.bedrock.model}, small/fast model ${args.bedrock.smallModel ?? "Claude Code's own"}` + (args.bedrock.gatewayServedAs ? `; the gateway serves ${run.model} as ${args.bedrock.gatewayServedAs}` : ''));
     if (/anthropic\./.test(args.bedrock.gatewayServedAs ?? '') && args.bedrock.gatewayServedAs !== args.bedrock.model) log(`  WARNING: the arms are on different Bedrock ids (${args.bedrock.model} vs ${args.bedrock.gatewayServedAs})`);
   }
   record.request = requestRecord(args);
@@ -1028,6 +1037,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
       gatewaySpend,
     };
+    // A model family the arms ran on different models (say Haiku for Claude Code's side
+    // calls) is a client difference that would read as a gateway one.
+    const modelsDiffer = modelMismatch(sessions.a.totals.models, sessions.b.totals.models);
+    if (Object.keys(modelsDiffer).length) {
+      r.modelsDiffer = modelsDiffer;
+      log(`  round ${round} WARNING: the arms ran different models (${Object.entries(modelsDiffer).map(([f, m]) => `${f}: A ${m.a.join(', ')} vs B ${m.b.join(', ')}`).join('; ')})`);
+    }
     if (viaGateway.length) {
       r.gatewayReplicas = { before: replicasBefore, after: await gatewayReplicaStarts(run.gatewayUrl) };
       r.gatewayRestarted = restartedDuring(r.gatewayReplicas.before, r.gatewayReplicas.after);

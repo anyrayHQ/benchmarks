@@ -37,8 +37,11 @@ test('--provider: bedrock is parsed, labels its own result file, and reaches bot
 });
 
 test('bedrockOptions: profile, region and model come from the environment, with defaults', () => {
-  assert.deepEqual(bedrockOptions({}), { profile: 'default', region: 'us-east-1', model: null });
-  assert.deepEqual(bedrockOptions({ ANYRAY_BEDROCK_PROFILE: 'bench', ANYRAY_BEDROCK_REGION: 'eu-central-1', ANYRAY_BEDROCK_MODEL: 'eu.anthropic.claude-sonnet-5' }), { profile: 'bench', region: 'eu-central-1', model: 'eu.anthropic.claude-sonnet-5' });
+  assert.deepEqual(bedrockOptions({}), { profile: 'default', region: 'us-east-1', model: null, smallModel: null });
+  assert.deepEqual(
+    bedrockOptions({ ANYRAY_BEDROCK_PROFILE: 'bench', ANYRAY_BEDROCK_REGION: 'eu-central-1', ANYRAY_BEDROCK_MODEL: 'eu.anthropic.claude-sonnet-5', ANYRAY_BEDROCK_SMALL_MODEL: ' eu.anthropic.claude-haiku-5-5 ' }),
+    { profile: 'bench', region: 'eu-central-1', model: 'eu.anthropic.claude-sonnet-5', smallModel: 'eu.anthropic.claude-haiku-5-5' }
+  );
   assert.deepEqual(bedrockDirectEnv({ profile: 'bench', region: 'us-east-1' }), { CLAUDE_CODE_USE_BEDROCK: '1', AWS_PROFILE: 'bench', AWS_REGION: 'us-east-1' });
 });
 
@@ -71,7 +74,10 @@ test('resolveBedrock: the direct arm takes the id the gateway serves, unless one
   const probe = async () => ({ provider: 'bedrock', model: 'us.anthropic.claude-sonnet-5' });
   const env = { ANYRAY_CLIENT_KEY: KEY };
   const b = await resolveBedrock({ gatewayUrl: GW, model: 'claude-sonnet-5' }, { env, probe });
-  assert.deepEqual(b, { profile: 'default', region: 'us-east-1', model: 'us.anthropic.claude-sonnet-5', modelSource: 'gateway route probe', gatewayServedAs: 'us.anthropic.claude-sonnet-5' });
+  assert.deepEqual(b, {
+    profile: 'default', region: 'us-east-1', model: 'us.anthropic.claude-sonnet-5', modelSource: 'gateway route probe', gatewayServedAs: 'us.anthropic.claude-sonnet-5',
+    smallModel: 'us.anthropic.claude-haiku-5-5', smallModelSource: 'default: Haiku 5.5 in the main model\'s "us" inference profile',
+  });
   const pinned = await resolveBedrock({ gatewayUrl: GW, model: 'claude-sonnet-5' }, { env: { ...env, ANYRAY_BEDROCK_MODEL: 'global.anthropic.claude-sonnet-5' }, probe });
   assert.equal(pinned.model, 'global.anthropic.claude-sonnet-5');
   assert.equal(pinned.gatewayServedAs, 'us.anthropic.claude-sonnet-5');
