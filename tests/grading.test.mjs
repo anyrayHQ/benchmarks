@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkCitations, outsideCheckout, warmUpArgs } from '../lib/agentRun.mjs';
+import { checkCitations, outsideCheckout, warmUpArgs, warmUpStdin } from '../lib/agentRun.mjs';
 import { startTokens, parseArgs } from '../run_agent.mjs';
 
 const checkout = () => {
@@ -127,12 +127,18 @@ test('warmUpArgs: same setup, a one-turn no-op instead of the task', () => {
   assert.deepEqual(args[1], 'THE TASK'); // the timed session's argv is untouched
 });
 
-test('warmUpArgs: a streamed-input session gets a plain prompt', () => {
-  const w = warmUpArgs(['-p', '--input-format', 'stream-json', '--max-turns', '40', '--no-session-persistence'], null);
-  assert.equal(w.includes('--input-format'), false);
-  assert.equal(w[0], '-p');
-  assert.equal(typeof w[1], 'string');
+test('warmUpArgs: a streamed-input session warms up in streamed input too', () => {
+  // A plain -p prompt changes Claude Code's tool text (Bash background timeout 10 vs 30 min),
+  // and tools lead the cached prefix: the session would read none of what the warm-up wrote.
+  const args = ['-p', '--input-format', 'stream-json', '--max-turns', '40', '--no-session-persistence'];
+  const w = warmUpArgs(args, null);
+  assert.deepEqual(w.slice(0, 3), ['-p', '--input-format', 'stream-json']);
+  assert.equal(w[w.indexOf('--max-turns') + 1], '1');
   assert.equal(w.filter((a) => a === '--no-session-persistence').length, 1);
+  const line = JSON.parse(warmUpStdin(w));
+  assert.deepEqual(line.message.role, 'user');
+  assert.equal(typeof line.message.content, 'string');
+  assert.equal(warmUpStdin(warmUpArgs(['-p', 'T', '--max-turns', '9'], 'T')), null); // a -p task: nothing on stdin
 });
 
 test('--warm-up is parsed and off by default', () => {
