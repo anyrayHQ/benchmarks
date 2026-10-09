@@ -413,6 +413,20 @@ settings afterwards.
   - Recorded in `request.hookPostureB` / `request.hookPosture`, each arm's
     `setup.hookPosture`, the session's `hookPosture` (`set`, `pinned`, `atEnd`), and the
     round line's arm label (`anyray + hook:logRead`, or `hook:logRead=off`).
+- `--seed-home <path>=<absolute file>` (repeatable): copy a file into every Anyray arm's
+  private HOME before anyray-connect configures it. Use it to give the arm local evidence
+  a fresh HOME lacks, such as `.anyray/hook-digest-routers.json` for the digest cost gate
+  (`hooks.digestEconomics`). Under `--compare gateway` both arms get the same files, so it
+  is never the treatment.
+  - `<path>` is relative to the HOME and must stay inside it. Needs an anyray-connect arm:
+    `--compare control` and `--bare` refuse it, and so does an arm connect could not
+    configure.
+  - Recorded as each file's HOME path and a sha256 prefix (`request.seedHome`,
+    `setup.seedHome`), never the source path or the file. Keep a seeded run apart with
+    `--label`.
+  - After each session the arm records the gate's counts as connect left them:
+    `setup.activity.hookDigestRouters` (router, version, emits, read-backs) and
+    `setup.activity.hookTeeDigest`.
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,

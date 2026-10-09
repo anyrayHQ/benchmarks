@@ -219,8 +219,10 @@ test("after the session, reads what connect's hooks left in the arm HOME: cached
     hookTeeFiles: 2,
     anyrayFiles: ['connect.json', 'hook-tee', 'refresh-state.json'],
     hookLogRead: null,
+    hookDigestRouters: null,
+    hookTeeDigest: null,
   });
-  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [], hookLogRead: null });
+  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [], hookLogRead: null, hookDigestRouters: null, hookTeeDigest: null });
 });
 
 test("keeps the test-log Read lane's counts (never its records) from the arm HOME before it goes", () => {
@@ -236,6 +238,45 @@ test("keeps the test-log Read lane's counts (never its records) from the arm HOM
   assert.ok(!JSON.stringify(activity).includes('a'.repeat(64)), 'no record key leaves the HOME');
   writeFileSync(join(home, '.anyray', 'hook-log-reads.json'), 'not json');
   assert.equal(connectActivity(home).hookLogRead, null);
+});
+
+test("keeps the digest cost gate's counts per router and the tee ledger's digest counts, never a label, a session or a stray field", () => {
+  const home = armHome();
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  const session = 'c'.repeat(64);
+  const stray = 'synthetic-not-a-count';
+  writeFileSync(join(home, '.anyray', 'hook-digest-routers.json'), JSON.stringify({
+    labels: [{ session, tee: 'synthetic-tee', router: 'test-run', version: 2, at: 1 }],
+    routers: [
+      { router: 'test-run', version: 2, at: 5, emits: 3, rereads: 1, note: stray },
+      { router: 'grep', version: 1, at: 6, emits: 0, rereads: 0 },
+      null, // a row another build wrote is skipped, never the whole file
+      stray,
+      { router: `${stray} with spaces`, version: 1, at: 7, emits: 1, rereads: 0 },
+      { router: 'grep', version: '2', at: 8, emits: 1, rereads: 0 },
+      { router: 'log-dedup', version: 1, at: 9, emits: -1, rereads: 0 },
+      { version: 1, at: 10, emits: 1, rereads: 0 }, // no router: not the string "undefined"
+    ],
+  }));
+  writeFileSync(join(home, '.anyray', 'hook-tee-ledger.json'), JSON.stringify({
+    sessions: [{ key: session, at: 1, emitted: [], rangedEmitted: [], suppressed: [session] }],
+    shapes: [], gateways: [],
+    teeRereads: 4, rangedEmits: 0, rangedRereads: 0, rangedSliceSum: 0, rangedSlices: 0,
+    digestEmits: 6, digestRereads: stray,
+  }));
+  const activity = connectActivity(home);
+  assert.deepEqual(activity.hookDigestRouters, [
+    { router: 'test-run', version: 2, emits: 3, rereads: 1 },
+    { router: 'grep', version: 1, emits: 0, rereads: 0 },
+  ]);
+  assert.deepEqual(activity.hookTeeDigest, { digestEmits: 6, digestRereads: null, teeRereads: 4 });
+  const json = JSON.stringify(activity);
+  assert.ok(!json.includes(session), 'no hashed session leaves the HOME');
+  assert.ok(!json.includes('synthetic-tee'), 'no tee id either');
+  assert.ok(!json.includes(stray), 'only counts and router names leave the HOME');
+  for (const file of ['hook-digest-routers.json', 'hook-tee-ledger.json']) writeFileSync(join(home, '.anyray', file), 'not json');
+  assert.equal(connectActivity(home).hookDigestRouters, null);
+  assert.equal(connectActivity(home).hookTeeDigest, null);
 });
 
 // ---- the connect-configured arm combined with --read-trim, --arm-env and the HOME guard ----
