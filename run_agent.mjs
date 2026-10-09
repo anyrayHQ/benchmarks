@@ -85,7 +85,8 @@
 //   `npm run agent:report`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { basename, isAbsolute, join } from 'node:path';
+import { basename, isAbsolute, join, normalize } from 'node:path';
+import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest } from './lib/agentRun.mjs';
@@ -195,6 +196,20 @@ function postureOf(pairs, arm) {
   return out;
 }
 
+/**
+ * `--seed-home .anyray/hook-digest-routers.json=/abs/file` → { path, file, sha256 }: a file
+ * placed in every Anyray arm's HOME before anyray-connect configures it (lib/agentRun.mjs
+ * seedArmHome). The path is relative and stays inside the HOME; the file must exist.
+ */
+export function parseSeedHome(spec) {
+  const at = String(spec ?? '').indexOf('=');
+  const path = at > 0 ? String(spec).slice(0, at) : '';
+  const file = at > 0 ? String(spec).slice(at + 1) : '';
+  if (!path || path === '.' || isAbsolute(path) || normalize(path) !== path || path.split('/').includes('..')) throw new Error(`--seed-home takes <relative path in the arm HOME>=<absolute file>, got ${JSON.stringify(spec ?? null)}`);
+  if (!isAbsolute(file) || !existsSync(file)) throw new Error(`--seed-home ${path}: the file must be an absolute path that exists`);
+  return { path, file, sha256: createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 16) };
+}
+
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 
@@ -229,6 +244,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
+    else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -296,6 +312,7 @@ export function parseArgs(argv) {
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
+  if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
   if (gateway && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
@@ -332,6 +349,7 @@ export const controlArgs = (args) => ({
   readTrimB: false,
   connectBinB: undefined,
   connectBinBDigest: undefined,
+  seedHome: undefined, // no Anyray arm to seed
   redrawHoldout: 0,
   readTrim: false,
   hookPosture: {},
@@ -385,6 +403,7 @@ export const slotOptions = (args, arms, slot) => ({
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
   ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
+  ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
 });
@@ -408,6 +427,7 @@ export const requestRecord = (args) => ({
   ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
+  ...(args.seedHome?.length ? { seedHome: args.seedHome.map(({ path, sha256 }) => ({ path, sha256 })) } : {}), // never the source path
 });
 
 /** results/agent/<scenario>--<compare>[--<label>].json */
