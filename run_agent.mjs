@@ -892,7 +892,8 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     };
     const [sa, sb] = await Promise.allSettled([runArm('a'), runArm('b')]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
-      const error = (sa.reason ?? sb.reason)?.message ?? 'SDK arm failed';
+      // Name each arm that failed, so a round lost to one lane's transport says which lane.
+      const error = [['direct', sa], ['anyray', sb]].filter(([, s]) => s.status === 'rejected').map(([arm, s]) => `${arm}: ${s.reason?.message ?? 'SDK arm failed'}`).join('; ');
       insertRound(record.rounds, { round, error });
       log(`  round ${round} failed: ${error}`);
       await save();
