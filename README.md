@@ -266,7 +266,9 @@ requests without `cache_control`. Both arms pay per token. A small local agent s
 same system prompt, tool definitions, and full conversation in each arm. It can read a
 file by numbered range, list a directory, or search for literal text; every tool stays
 inside its own checkout of the pinned Python repository. The direct arm calls Bedrock
-`InvokeModel` through the AWS CLI and local AWS profile. The Anyray arm sends the native
+`InvokeModel` through the AWS CLI and local AWS profile. InvokeModel does not stream, and
+a long answer takes minutes, so the CLI read timeout is raised from its 60 s default to
+600 s; a failed call's error carries the CLI's stderr. The Anyray arm sends the native
 Messages body to the gateway's org lane with the benchmark client key as bearer; the
 gateway selects its provider. Neither arm uses Claude Code or a subscription seat.
 

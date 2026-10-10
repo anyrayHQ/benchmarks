@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage, FINAL_ANSWER_REQUEST, EMPTY_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { executeSdkTool, runSdkAgent, gatewayMessage, bedrockMessage, bedrockFailure, BEDROCK_CLI_READ_TIMEOUT_SEC, BEDROCK_CLI_PROCESS_TIMEOUT_MS, FINAL_ANSWER_REQUEST, EMPTY_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
 import { parseArgs, runComparison } from '../run_agent.mjs';
 import { run as runVerdictTool } from '../tools/bench-verdict.mjs';
 
@@ -173,6 +175,7 @@ test('SDK final reply of thinking alone gets one more answer-only request with t
     assert.deepEqual(retryParams, finalParams, 'same tools, tool_choice and max_tokens as the final turn');
     assert.equal(retryMessages.at(-2).content[0].type, 'thinking');
     assert.equal(retryMessages.at(-1).content, EMPTY_ANSWER_REQUEST);
+    assert.deepEqual(session.requests.map((r) => r.blocks), [['tool_use'], ['thinking'], ['text']], 'each reply records what it held');
     assert.equal(session.result.text, 'Answer a.py:1');
     assert.equal(session.result.subtype, 'success');
     assert.equal(session.totals.answerRetries, 1);
@@ -189,4 +192,80 @@ test('SDK answer still empty after the retry is graded as no answer', async () =
     assert.equal(bodies.length, 2, 'one retry, never a loop');
     assert.equal(session.result.subtype, 'error_no_answer');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+const bedrock = { model: 'us.anthropic.claude-sonnet-5', profile: 'test', region: 'us-east-1' };
+const body = { model: 'claude-sonnet-5', max_tokens: 16000, messages: [{ role: 'user', content: 'hello' }] };
+
+test('Bedrock CLI call waits out a long non-streaming reply', async () => {
+  const scratch = fresh();
+  try {
+    let call;
+    const reply = await bedrockMessage({ bedrock, body, scratchDir: scratch, execImpl: async (bin, args, opts) => {
+      call = { bin, args, opts };
+      writeFileSync(args.at(-1), JSON.stringify({ content: [{ type: 'text', text: 'ok' }] }));
+    } });
+    assert.equal(reply.content[0].text, 'ok');
+    assert.equal(call.bin, 'aws');
+    const flag = (name) => call.args[call.args.indexOf(name) + 1];
+    assert.ok(BEDROCK_CLI_READ_TIMEOUT_SEC >= 600, 'well above the CLI default of 60 s');
+    assert.equal(flag('--cli-read-timeout'), String(BEDROCK_CLI_READ_TIMEOUT_SEC));
+    assert.equal(flag('--cli-connect-timeout'), '60');
+    assert.equal(flag('--model-id'), bedrock.model);
+    assert.ok(call.args.at(-1).endsWith('response.json'), 'the reply file stays the positional last argument');
+    assert.ok(call.opts.timeout > BEDROCK_CLI_READ_TIMEOUT_SEC * 1000, 'the CLI times out before the child process is killed');
+    assert.equal(call.opts.timeout, BEDROCK_CLI_PROCESS_TIMEOUT_MS);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test('a failed Bedrock CLI call names its cause from the CLI stderr', async () => {
+  const scratch = fresh();
+  const stub = join(scratch, 'aws-stub.mjs');
+  writeFileSync(stub, `process.stderr.write('\\nRead timeout on endpoint URL: "https://bedrock-runtime.us-east-1.amazonaws.com/model/x/invoke"\\n'); process.exit(255);`);
+  try {
+    // A real child process, so the error has execFile's shape (numeric code, stderr, "Command failed" message).
+    const run = promisify(execFile);
+    await assert.rejects(
+      bedrockMessage({ bedrock, body, scratchDir: scratch, execImpl: (_bin, args, opts) => run(process.execPath, [stub, ...args], opts) }),
+      (e) => {
+        assert.equal(e.message, 'SDK Bedrock request failed (exit 255): Read timeout on endpoint URL: "https://bedrock-runtime.us-east-1.amazonaws.com/model/x/invoke"');
+        return true;
+      },
+    );
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test('Bedrock failure text: timeout kill, spawn error, bad reply, account ids', () => {
+  assert.equal(bedrockFailure({ killed: true, signal: 'SIGTERM', code: null, stderr: '', message: 'Command failed: aws ...' }), `SDK Bedrock request failed (timed out after ${BEDROCK_CLI_PROCESS_TIMEOUT_MS / 1000} s)`);
+  assert.equal(bedrockFailure(Object.assign(new Error('spawn aws ENOENT'), { code: 'ENOENT' })), 'SDK Bedrock request failed (ENOENT): spawn aws ENOENT');
+  assert.equal(bedrockFailure(new SyntaxError('Unexpected end of JSON input')), 'SDK Bedrock request failed: Unexpected end of JSON input');
+  const denied = bedrockFailure({ code: 254, stderr: 'An error occurred (AccessDeniedException) when calling the InvokeModel operation: User: arn:aws:iam::123456789012:user/x is not authorized', message: 'Command failed: aws' });
+  assert.match(denied, /^SDK Bedrock request failed \(exit 254\): An error occurred \(AccessDeniedException\)/);
+  assert.equal(denied.includes('123456789012'), false);
+  assert.match(denied, /iam::<account>:user/);
+  assert.ok(bedrockFailure({ code: 255, stderr: 'x'.repeat(2000) }).length < 500, 'capped');
+});
+
+test('a failed SDK round names the arm that failed and its cause', async () => {
+  const label = `offline-fail-${process.pid}-${Date.now()}`;
+  const args = parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--rounds', '1', '--label', label]);
+  const workDirs = [];
+  const deps = {
+    clientKey: 'fake-key',
+    resolveBedrock: async () => bedrock,
+    prepareRepo: () => { const dir = fresh(); workDirs.push(dir); return dir; },
+    describeRepo: () => ({ files: 1 }),
+    runSdkAgent: async ({ arm }) => {
+      if (arm === 'direct') throw new Error('SDK Bedrock request failed (exit 255): Read timeout on endpoint URL');
+      return { requests: [], totals: { costUsd: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, turns: 0, requests: 0, outsideCheckout: 0 }, result: { text: '' }, citations: null, setup: {} };
+    },
+    log: () => {},
+  };
+  const cfg = { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid', model: 'claude-sonnet-5' }, pricing };
+  let file;
+  try {
+    const result = await runComparison(args, cfg, { deps });
+    file = result.file;
+    assert.equal(result.record.rounds[0].error, 'direct: SDK Bedrock request failed (exit 255): Read timeout on endpoint URL');
+  } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
 });
