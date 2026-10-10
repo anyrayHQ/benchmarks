@@ -317,7 +317,7 @@ function renderDetail() {
   const rounds = okRounds(r);
   const round = rounds[curRound] || rounds[0];
   const repo = r.scenario.repoInfo || {};
-  let h = '<section class="panel stack"><div class="row between"><div class="stack" style="gap:2px"><h2>' + esc(r.scenario.title) + '</h2><span class="muted mono">' + esc(repo.git) + ' @ ' + esc((repo.ref || '').slice(0, 10)) + (repo.patch ? ' + ' + esc(repo.patch) : '') + '</span></div>' +
+  let h = '<section class="panel stack"><div class="row between"><div class="stack" style="gap:2px"><h2>' + esc(r.scenario.title) + '</h2><span class="muted mono">' + esc(repo.git) + ' @ ' + esc((repo.ref || '').slice(0, 10)) + [repo.patch ?? []].flat().map((p) => ' + ' + esc(p)).join('') + '</span></div>' +
     (r.compare === 'control' ? '<span class="chip">noise reference</span>' : '<span class="row"><span class="verdict">Rule 0</span>' + verdictChip(r.stats?.verdict) + '</span>') + '</div>' +
     (r.stats?.reasons?.length && r.compare !== 'control' ? '<ul class="reasons">' + r.stats.reasons.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
     '<div class="duo"><div class="stack"><h3>Task</h3><pre class="scroll">' + esc(r.scenario.task) + '</pre>' +

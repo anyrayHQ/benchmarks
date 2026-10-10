@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { prepareRepo, repoCacheDir, sessionDirParent } from '../lib/agentRun.mjs';
+import { prepareRepo, repoCacheDir, scenarioPatches, sessionDirParent } from '../lib/agentRun.mjs';
 
 const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -62,5 +62,37 @@ test('prepareRepo: a cached clone that lost its git metadata is cloned again', (
     assert.ok(existsSync(join(cached, '.git', 'HEAD')));
   } finally {
     for (const d of [dir, cacheDir, ...works]) rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('scenarioPatches: none, one file, or a list in order', () => {
+  assert.deepEqual(scenarioPatches({}), []);
+  assert.deepEqual(scenarioPatches({ patch: 'a.patch' }), ['a.patch']);
+  assert.deepEqual(scenarioPatches({ patch: ['a.patch', 'b.patch'] }), ['a.patch', 'b.patch']);
+});
+
+test('prepareRepo: applies a list of patches in order, and hidePatch leaves one commit', () => {
+  const { dir, scenario } = origin();
+  const scenarioDir = mkdtempSync(join(tmpdir(), 'bench-scenario-'));
+  const cacheDir = mkdtempSync(join(tmpdir(), 'bench-cache-'));
+  const works = [];
+  try {
+    // The second patch edits what the first one wrote, so it only applies after it.
+    writeFileSync(join(scenarioDir, 'one.patch'), [
+      'diff --git a/hello.txt b/hello.txt', '--- a/hello.txt', '+++ b/hello.txt', '@@ -1 +1 @@', '-hello', '+hello, world', '',
+    ].join('\n'));
+    writeFileSync(join(scenarioDir, 'two.patch'), [
+      'diff --git a/hello.txt b/hello.txt', '--- a/hello.txt', '+++ b/hello.txt', '@@ -1 +1,2 @@', ' hello, world', '+again', '',
+    ].join('\n'));
+    const patched = { ...scenario, patch: ['one.patch', 'two.patch'], hidePatch: true };
+    works.push(prepareRepo(patched, scenarioDir, { cacheDir }));
+    assert.equal(readFileSync(join(works[0], 'hello.txt'), 'utf8'), 'hello, world\nagain\n');
+    assert.equal(git(['rev-list', '--count', 'HEAD'], works[0]), '1');
+    assert.equal(git(['status', '--porcelain'], works[0]), '');
+    // A single patch named as a string still applies.
+    works.push(prepareRepo({ ...scenario, patch: 'one.patch' }, scenarioDir, { cacheDir }));
+    assert.equal(readFileSync(join(works[1], 'hello.txt'), 'utf8'), 'hello, world\n');
+  } finally {
+    for (const d of [dir, scenarioDir, cacheDir, ...works]) rmSync(d, { recursive: true, force: true });
   }
 });

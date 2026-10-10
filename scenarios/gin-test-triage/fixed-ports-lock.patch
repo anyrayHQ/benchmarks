@@ -1,0 +1,35 @@
+diff --git a/testmain_test.go b/testmain_test.go
+new file mode 100644
+index 0000000..2bd64a5
+--- /dev/null
++++ b/testmain_test.go
+@@ -0,0 +1,29 @@
++//go:build darwin || linux
++
++package gin
++
++import (
++	"os"
++	"syscall"
++	"testing"
++	"time"
++)
++
++// Several tests in this package start servers on fixed addresses (:8080, :8443, :8449,
++// :3123, :5150, :10086 and a unix socket in the temp dir) that stay up until the test
++// binary exits, so two runs of this package's tests on one machine at the same time fail
++// with "address already in use". TestMain makes such runs take turns: the binary holds an
++// exclusive lock on a shared file until it exits, waiting at most a minute to get it.
++var fixedPortsLock *os.File
++
++func TestMain(m *testing.M) {
++	if f, err := os.OpenFile("/tmp/gin-test-fixed-ports.lock", os.O_CREATE|os.O_RDWR, 0o666); err == nil {
++		fixedPortsLock = f
++		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
++			if syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
++				break
++			}
++		}
++	}
++	os.Exit(m.Run())
++}

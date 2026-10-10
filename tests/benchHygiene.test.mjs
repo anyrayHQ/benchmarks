@@ -222,6 +222,23 @@ test('citation-graded scenarios: every turn that asks for path:line asks for rep
   }
 });
 
+test('gin scenarios: each applies the same fixed-ports lock patch, hidden in the import commit', () => {
+  const names = readdirSync(new URL('../scenarios/', import.meta.url)).filter((n) => /gin-gonic\/gin/.test(scenario(n).repo?.git ?? ''));
+  assert.deepEqual(names.sort(), ['gin-doc-audit', 'gin-long-session', 'gin-test-triage']);
+  const copies = new Set();
+  for (const name of names) {
+    const s = scenario(name);
+    assert.ok([s.patch].flat().includes('fixed-ports-lock.patch'), name);
+    assert.equal(s.hidePatch, true, name);
+    copies.add(readFileSync(new URL(`../scenarios/${name}/fixed-ports-lock.patch`, import.meta.url), 'utf8'));
+  }
+  assert.equal(copies.size, 1, 'the copies differ');
+  const [patch] = copies;
+  // A new test file only: it touches neither the library code nor the planted bugs.
+  assert.deepEqual([...patch.matchAll(/^\+\+\+ b\/(\S+)/gm)].map((m) => m[1]), ['testmain_test.go']);
+  assert.match(patch, /^new file mode/m);
+});
+
 // ---- the connect arm's HOME matches a real user's ------------------------------------
 
 const connectDeps = (realClaudeJson) => ({

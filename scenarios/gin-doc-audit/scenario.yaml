@@ -4,6 +4,12 @@ title: "Doc audit in gin-gonic/gin — check 2,700 lines of docs against 24k lin
 repo:
   git: https://github.com/gin-gonic/gin.git
   ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+# fixed-ports-lock.patch adds a TestMain that makes concurrent test runs of the gin
+# package take turns: several of its tests bind fixed ports, and both arms of a round
+# run `go test` on one machine at the same time.
+patch: fixed-ports-lock.patch
+# Imported as a single commit, so the added file is not an uncommitted change.
+hidePatch: true
 task: >-
   Audit this repository's documentation (README.md and docs/doc.md) against the actual
   code. Find claims, examples or API references in the docs that are wrong, outdated,
