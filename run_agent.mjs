@@ -93,7 +93,7 @@ import { basename, isAbsolute, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText } from './lib/agentRun.mjs';
 import { ANYRAY_BIN } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
@@ -591,6 +591,7 @@ export function summarize(session, pricing) {
   }
   t.endReason = session.end?.reason ?? null; // exited | answered | timeout | aborted
   t.answeredAtMs = session.answeredAtMs ?? null; // ms from session start to its final answer
+  if (session.reportedFindings) t.reportedFindings = session.reportedFindings.length; // graded with the answer text
   t.subagentInputShare = mainIn + subIn ? subIn / (mainIn + subIn) : 0;
   t.turns = session.result?.numTurns ?? null;
   t.wallMs = session.wallMs;
@@ -626,13 +627,13 @@ export const pingNote = (t) =>
     : t.gatewayPingCount === null ? ' · pings n/a'
     : ` · ${t.gatewayPingCount} pings $${t.gatewayPingCostUsd.toFixed(3)} (client $${t.clientCostUsd?.toFixed(3)})`;
 
-function solved(scenario, session) {
+export function solved(scenario, session) {
   if (scenario.check) return !!session.check?.passed;
   if (scenario.citations) {
     const c = session.citations ?? { total: 0, resolved: 0 };
     return c.resolved >= scenario.citations.min && c.resolved / Math.max(1, c.total) >= (scenario.citations.resolveRate ?? 0.9);
   }
-  const text = session.result?.text ?? '';
+  const text = answerText(session);
   return (scenario.keyFacts ?? []).every((f) => text.includes(f));
 }
 
