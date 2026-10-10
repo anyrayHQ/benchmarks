@@ -142,6 +142,11 @@ function parseMaxTurns(v) {
   return Number(v);
 }
 
+function parseTimeoutMin(v) {
+  if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--timeout-min needs a positive integer (minutes), got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  return Number(v);
+}
+
 function parseRetryInvalid(v) {
   if (!/^[0-9]+$/.test(v ?? '')) throw new Error(`--retry-invalid needs a whole number (how many extra rounds), got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
   return Number(v);
@@ -251,6 +256,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
     else if (argv[i] === '--retry-invalid') a.retryInvalid = parseRetryInvalid(argv[++i]); // run a round the verdict would drop again, up to N extra rounds
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
+    else if (argv[i] === '--timeout-min') a.timeoutMin = parseTimeoutMin(argv[++i]); // both arms: overrides scenario.timeoutMin (the session's wall-clock cap)
     else if (argv[i] === '--inter-turn-delay-sec') a.interTurnDelaySec = Number(argv[++i]);
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
@@ -339,8 +345,8 @@ export function parseArgs(argv) {
 
 /** The scenario as both arms run it: --max-turns replaces its turn cap. */
 export const effectiveScenario = (scenario, args) =>
-  args.maxTurns || args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined
-    ? { ...scenario, ...(args.maxTurns ? { maxTurns: args.maxTurns } : {}), ...(args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined ? { interTurnDelaySec: args.interTurnDelaySec } : {}) }
+  args.maxTurns || args.timeoutMin || args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined
+    ? { ...scenario, ...(args.maxTurns ? { maxTurns: args.maxTurns } : {}), ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), ...(args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined ? { interTurnDelaySec: args.interTurnDelaySec } : {}) }
     : scenario;
 
 /**
@@ -427,6 +433,7 @@ export const slotOptions = (args, arms, slot) => ({
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
 export const requestRecord = (args) => ({
   noSubagents: !!args.noSubagents,
+  ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), // the session cap both arms ran under
   ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // synthetic MCP tools both arms carried
   bare: !!args.bare,
   warmUp: !!args.warmUp,
