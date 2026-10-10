@@ -429,6 +429,11 @@ settings afterwards.
   each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`).
 - `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
   neither can spawn subagents. Recorded in the result's `request.noSubagents`.
+- `--mcp-catalog N`: both arms also run a stub MCP server (`tools/mcp-catalog-server.mjs`)
+  that lists N synthetic tools of about 2,085 chars each, never needed by the task. It is
+  catalog weight: 200 is the shape of a seat with many connectors (~417k chars of MCP
+  schema). Pair it with `--arm-env ENABLE_TOOL_SEARCH=false` to keep Claude Code's own
+  tool search off, so the gateway sees the whole catalog. Recorded in `request.mcpCatalog`.
 - `--experiment <name>` (`--compare anyray`): the Anyray arm sends `experiment=<name>` in
   `x-anyray-metadata`, so a gateway rule matching that experiment applies to this run
   only. Unlike `--strategy` it does not imply a kind or an isolation check; the two can't

@@ -205,6 +205,13 @@ function postureOf(pairs, arm) {
  * placed in every Anyray arm's HOME before anyray-connect configures it (lib/agentRun.mjs
  * seedArmHome). The path is relative and stays inside the HOME; the file must exist.
  */
+/** --mcp-catalog <n>: a positive integer count of synthetic MCP tools. */
+export function parseMcpCatalog(value) {
+  const n = Number(value);
+  if (!/^\d+$/.test(String(value ?? '')) || !Number.isInteger(n) || n <= 0) throw new Error('--mcp-catalog needs a positive integer tool count');
+  return n;
+}
+
 export function parseSeedHome(spec) {
   const at = String(spec ?? '').indexOf('=');
   const path = at > 0 ? String(spec).slice(0, at) : '';
@@ -238,6 +245,7 @@ export function parseArgs(argv) {
     else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
+    else if (argv[i] === '--mcp-catalog') a.mcpCatalog = parseMcpCatalog(argv[++i]); // both arms: a stub MCP server listing N synthetic tools (catalog weight)
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--experiment-b') a.experimentB = argv[++i] ?? ''; // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
@@ -262,7 +270,7 @@ export function parseArgs(argv) {
   if (a.interTurnDelaySec !== null && (!Number.isFinite(a.interTurnDelaySec) || a.interTurnDelaySec < 0)) throw new Error('--inter-turn-delay-sec needs a nonnegative number');
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents || a.mcpCatalog) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -402,6 +410,7 @@ export const slotOptions = (args, arms, slot) => ({
     ...(carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : []),
   ],
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
+  ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // both slots: the same synthetic catalog on either arm
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
@@ -418,6 +427,7 @@ export const slotOptions = (args, arms, slot) => ({
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
 export const requestRecord = (args) => ({
   noSubagents: !!args.noSubagents,
+  ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // synthetic MCP tools both arms carried
   bare: !!args.bare,
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
