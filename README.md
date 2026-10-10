@@ -475,7 +475,9 @@ settings afterwards.
     `--label`.
   - After each session the arm records the gate's counts as connect left them:
     `setup.activity.hookDigestRouters` (router, version, emits, read-backs) and
-    `setup.activity.hookTeeDigest`.
+    `setup.activity.hookTeeDigest`. `setup.activity.hookHints.truncatedTestRun` counts the
+    truncated-test-run hints connect added, by wording: `first_10k` (the original) and
+    `head_tail` (the wording `hooks.shellRewrite` turns on, ANY-995).
 - `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
   `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
   kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
