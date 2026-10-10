@@ -427,6 +427,10 @@ settings afterwards.
 
 - `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in
   each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`).
+- `--timeout-min N`: both arms' wall-clock session cap instead of the scenario's
+  `timeoutMin`. Use it when a slower model or route cannot finish inside the scenario's
+  cap (Opus 5.5 on Bedrock runs past `pyrepo-docs`'s 10 minutes). Recorded in
+  `request.timeoutMin`.
 - `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
   neither can spawn subagents. Recorded in the result's `request.noSubagents`.
 - `--mcp-catalog N`: both arms also run a stub MCP server (`tools/mcp-catalog-server.mjs`)
