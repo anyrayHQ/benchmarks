@@ -17,12 +17,13 @@ repo:
   ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
 task: >-
   I'm new to this codebase. Read salt/loader/lazy.py and explain how LazyLoader finds,
-  filters and loads a module, including what __virtual__ does. Cite path:line.
+  filters and loads a module, including what __virtual__ does. Cite path:line with the
+  path relative to the repository root.
 followups:
-  - "Now read salt/minion.py around how a job is received and explain the path from the published payload to calling the execution function. Cite path:line."
-  - "Explain how the return gets back to the master and then to the CLI (salt/client/__init__.py). Cite path:line."
-  - "How are the dunder globals (__salt__, __opts__, __grains__) injected into a module? Cite path:line."
-  - "Finally: write one Markdown summary of the whole path from `salt '*' test.ping` to the printed result, with a section per stage, citing path:line for every claim."
+  - "Now read salt/minion.py around how a job is received and explain the path from the published payload to calling the execution function. Cite path:line with the path relative to the repository root."
+  - "Explain how the return gets back to the master and then to the CLI (salt/client/__init__.py). Cite path:line with the path relative to the repository root."
+  - "How are the dunder globals (__salt__, __opts__, __grains__) injected into a module? Cite path:line with the path relative to the repository root."
+  - "Finally: write one Markdown summary of the whole path from `salt '*' test.ping` to the printed result, with a section per stage, citing path:line for every claim, with the path relative to the repository root."
 followupDelaySec: [3720, 3720, 3720, 0]
 gatewaySettleSec: 2100
 citations:

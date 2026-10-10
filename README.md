@@ -162,8 +162,12 @@ bar. Both arms follow the same rules.
 
 A scenario with
 `followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
-when the previous answer is done. `hidePatch: true` re-imports the patched checkout as a
-single commit, so the planted bug can't be found with `git diff` or `git log`.
+when the previous answer is done. `patch:` is one file or a list, applied in order.
+`hidePatch: true` re-imports the patched checkout as a
+single commit, so the planted bug can't be found with `git diff` or `git log`. The gin
+scenarios also apply `fixed-ports-lock.patch`: several gin tests bind fixed ports, and
+both arms run `go test` on one machine at once, so the patch adds a `TestMain` that makes
+concurrent runs of that package's tests take turns. No test or library code changes.
 `followupDelaySec` idles before each follow-up, the way a person pausing would: one
 number for every follow-up, or a list with one per follow-up (the last repeats).
 `gatewaySettleSec` waits that long after the session before reading the gateway's ping
