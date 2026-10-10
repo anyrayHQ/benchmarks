@@ -144,7 +144,20 @@ are recorded in the round's `redraws`. Name every kind the gateway may hold out 
 | `framework-docs` | a large Python codebase (pinned) | The `pyrepo-docs` task run by an agent-framework graph agent, direct Bedrock vs gateway | Path:line citations resolve |
 
 Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
-is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. A scenario with
+is capped at `timeoutMin` (6 minutes by default) and `maxTurns`.
+
+A session ends when it has answered. `claude -p` can stay alive after its final answer
+(a scheduled wakeup, a background command), so once the last turn's result is in, the
+input is closed, no background task runs and nothing has happened for 30 seconds, the
+harness ends it. Wall time runs to the final answer, never to the kill. A session killed
+at its timeout is graded on what it had answered: Claude Code holds a turn's result back
+while a background agent still runs, so when the main agent's last message completed its
+turn, that text is the answer (`timedOutAfterAnswer`). It is graded, but has no cost:
+Claude Code never reported the bill, and the background agent still running was cut off
+mid-task, so the round is excluded as having no cost. A main agent killed mid-request or
+mid-tool-call never answered: unsolved, no cost. Both arms follow the same rules.
+
+A scenario with
 `followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
 when the previous answer is done. `hidePatch: true` re-imports the patched checkout as a
 single commit, so the planted bug can't be found with `git diff` or `git log`.

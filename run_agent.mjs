@@ -445,9 +445,15 @@ export const resultFileName = (args) => `${args.scenario}--${args.compare}${args
  * cost: the round is an error, never a ratio of 0 or ∞.
  */
 export function roundRatio(a, b) {
-  const missing = [['A', a], ['B', b]].filter(([, s]) => s.totals.costUsd == null).map(([n]) => n);
-  if (missing.length) return { ratio: null, error: `${missing.join(' and ')} ended without a result (no cost)` };
-  return { ratio: a.totals.costUsd ? b.totals.costUsd / a.totals.costUsd : null };
+  const missing = [['A', a], ['B', b]].filter(([, s]) => s.totals.costUsd == null);
+  if (!missing.length) return { ratio: a.totals.costUsd ? b.totals.costUsd / a.totals.costUsd : null };
+  const plain = missing.filter(([, s]) => !s.totals.timedOutAfterAnswer).map(([n]) => n);
+  const cut = missing.filter(([, s]) => s.totals.timedOutAfterAnswer).map(([n]) => n);
+  const why = [
+    ...(plain.length ? [`${plain.join(' and ')} ended without a result (no cost)`] : []),
+    ...(cut.length ? [`${cut.join(' and ')} answered, then timed out before Claude Code reported a cost`] : []),
+  ];
+  return { ratio: null, error: why.join('; ') };
 }
 
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
@@ -535,7 +541,7 @@ export const whyNot = (reasons) => {
 };
 
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
-function summarize(session, pricing) {
+export function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
   let mainIn = 0;
   let subIn = 0;
@@ -574,6 +580,17 @@ function summarize(session, pricing) {
   t.cacheWrite = mu.reduce((a, m) => a + (m.cacheCreationInputTokens ?? 0), 0);
   t.output = mu.reduce((a, m) => a + (m.outputTokens ?? 0), 0);
   t.costUsd = session.result?.costUsd ?? null;
+  if (session.timedOutAfterAnswer) {
+    // Killed at the timeout after answering, with no result event (lib/agentRun.mjs
+    // parseSession): graded on that answer, but with no cost. Claude Code never reported
+    // its billed total, a background agent was still running (that is why the result was
+    // held back), and stream-json cannot rebuild the bill: subagent requests carry no final
+    // usage and not all of them reach the stream.
+    t.timedOutAfterAnswer = true;
+    t.agentsRunningAtEnd = session.agentsRunningAtEnd ?? 0;
+  }
+  t.endReason = session.end?.reason ?? null; // exited | answered | timeout | aborted
+  t.answeredAtMs = session.answeredAtMs ?? null; // ms from session start to its final answer
   t.subagentInputShare = mainIn + subIn ? subIn / (mainIn + subIn) : 0;
   t.turns = session.result?.numTurns ?? null;
   t.wallMs = session.wallMs;
@@ -597,6 +614,11 @@ export const armLabel = (args, arms, slot) => {
   ] : [];
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
 };
+
+/** The round line's note on how a session ended: answered time, and a timeout if it hit one. */
+export const endNote = (t) =>
+  (t.answeredAtMs != null ? ` · answered at ${Math.round(t.answeredAtMs / 1000)}s` : '') +
+  (t.timedOutAfterAnswer ? ` · TIMED OUT after answering (${t.agentsRunningAtEnd} agent(s) still running; no cost)` : t.endReason === 'timeout' ? ' · TIMED OUT' : '');
 
 /** The round line's gateway-ping part: '' for a direct arm, 'n/a' when unreadable. */
 export const pingNote = (t) =>
@@ -1093,6 +1115,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents} subagents · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       ` · start ${t.start.read} read / ${t.start.written} written` +
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
+      endNote(t) +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       whyNot(sessions[slot].budgetNoticeReasons) +
