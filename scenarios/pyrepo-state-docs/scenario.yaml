@@ -12,7 +12,7 @@ task: >-
   watch, onchanges) order and gate execution, and how an individual state function
   such as file.managed is invoked and its return assembled. Output the documentation
   as Markdown in your final answer, with a section per stage, and cite the code for
-  every claim as path:line.
+  every claim as path:line with the path relative to the repository root.
 citations:
   min: 10
   resolveRate: 0.9

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
@@ -206,6 +206,19 @@ test('pyrepo scenarios: pinned, one grading mode each', () => {
     assert.match(s.repo.git, /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/, name);
     assert.match(s.repo.ref, /^[0-9a-f]{40}$/, name);
     assert.equal([s.check, s.citations, s.keyFacts].filter(Boolean).length, 1, name);
+  }
+});
+
+test('citation-graded scenarios: every turn that asks for path:line asks for repository-root paths', () => {
+  // The grader rejects a bare file name that several files share (lazy.py in a repo with
+  // more than one), so a turn that leaves the path's form open fails rounds at random.
+  const names = readdirSync(new URL('../scenarios/', import.meta.url)).filter((n) => scenario(n).citations);
+  assert.ok(names.includes('pyrepo-long-session'));
+  for (const name of names) {
+    const s = scenario(name);
+    for (const turn of [s.task, ...(s.followups ?? [])].filter((t) => /path:line/.test(t))) {
+      assert.match(turn, /relative to the repository root|from\s+the repository root|repository-relative/, `${name}: ${turn}`);
+    }
   }
 });
 

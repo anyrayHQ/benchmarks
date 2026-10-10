@@ -8,8 +8,8 @@ task: >-
   Audit this repository's documentation (README.md and docs/doc.md) against the actual
   code. Find claims, examples or API references in the docs that are wrong, outdated,
   or don't match the implementation. For each finding, cite the doc location and the
-  code location as path:line, and say what is wrong. Be thorough: cover the whole of
-  both documents.
+  code location as path:line with the path relative to the repository root, and say
+  what is wrong. Be thorough: cover the whole of both documents.
 # Every finding must cite real code. Solved when at
 # least `min` path:line citations appear and at least `resolveRate` of them resolve
 # to an existing line in the checkout.
