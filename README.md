@@ -155,7 +155,10 @@ while a background agent still runs, so when the main agent's last message compl
 turn, that text is the answer (`timedOutAfterAnswer`). It is graded, but has no cost:
 Claude Code never reported the bill, and the background agent still running was cut off
 mid-task, so the round is excluded as having no cost. A main agent killed mid-request or
-mid-tool-call never answered: unsolved, no cost. Both arms follow the same rules.
+mid-tool-call never answered: unsolved, no cost. Findings the main agent files with
+Claude Code's `ReportFindings` tool (accepted calls) are part of its answer: each is
+graded as `file:line — summary — failure scenario` beside the result text, at the same
+bar. Both arms follow the same rules.
 
 A scenario with
 `followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
