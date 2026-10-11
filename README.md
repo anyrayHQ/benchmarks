@@ -101,6 +101,11 @@ Per round it records:
 - **Every model request:** cache read / write / uncached input, each tool call and its output.
 - **The gateway's own record,** when an admin key is set: which strategies were on for the run, and what each one did on each request (saved, stood down, held by the guard).
 - **Gateway pings,** when an admin key with `spend:read` is set: requests the gateway sends on the session's behalf (keep-warm pings) are billed but never reach Claude Code's total. After the Anyray arm finishes, the harness reads `GET /admin/v1/spend/sessions/<Claude Code session id>?includeSubagents=true` (re-reading for up to 30 s until the counts settle) and records `gatewayPingCount` and `gatewayPingCostUsd`. The arm's `costUsd`, which the ratio uses, becomes Claude Code's figure (kept as `clientCostUsd`) plus the ping cost. A gateway without that endpoint gives a one-line warning and null ping fields, and the cost stays the client figure.
+- **Booked vs measured savings** (`--compare anyray`): what the gateway's own records claim it
+  saved for the Anyray session (the sum of its traces' `savingsUsd`, the figure its spend rows and
+  console report) against what the pair actually cost (direct minus Anyray, pings included). A
+  round where Anyray cost more but the gateway still booked a saving prints a warning, and so does
+  the run's summary line (`savingsCheck` on the round and on the result).
 - **Gateway restarts:** the admin health report's replica start times before and after the round. A replica that is new or started again (60 s tolerance) sets `gatewayRestarted` and prints a warning, since such a round is not a fair pair.
 
 Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
