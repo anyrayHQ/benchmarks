@@ -100,6 +100,7 @@ import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.m
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
+import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
@@ -1098,6 +1099,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       r.traces = traces.b ?? null;
       // What the gateway reported doing with the requested kinds, per request.
       r.optimization = sessions.b.optimization?.tally ?? null;
+      // What the gateway booked as saved against what the pair actually cost (direct arm only).
+      if (args.compare === 'anyray') {
+        const check = savingsCheck({ directUsd: sessions.a.totals.costUsd, anyrayUsd: sessions.b.totals.costUsd, traces: r.traces });
+        if (check) r.savingsCheck = check;
+      }
       if (args.compare === 'gateway') {
         r.tracesA = traces.a ?? null;
         r.optimizationA = sessions.a.optimization?.tally ?? null;
@@ -1145,7 +1151,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
         (r.heldOut && viaGateway.some((slot) => r.heldOut[slot].length) ? `\n  round ${round} held out by the gateway's session gate: ${viaGateway.map((slot) => `${slot.toUpperCase()} ${r.heldOut[slot].join(', ') || 'none'}`).join(' · ')}` : '') +
         (r.optimizationA ? `\n  round ${round} A ${formatKindTally(r.optimizationA)}` : '') +
-        (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
+        (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '') +
+        (r.savingsCheck ? `\n${savingsCheckNote(round, r.savingsCheck)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds));
     record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
@@ -1182,6 +1189,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   record.stats = rule0(scoredRounds(record.rounds)); // all rounds, as before (the report reads it)
   record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted)); // historical Rule 0 summary
   record.verdict = benchVerdict(record.rounds);
+  const booked = savingsCheckSummary(record.rounds);
+  if (booked.rounds) {
+    record.savingsCheck = booked;
+    log(`gateway booked $${booked.bookedUsd.toFixed(3)} saved vs measured $${booked.measuredUsd.toFixed(3)} over ${booked.rounds} round(s)` +
+      (booked.lostButBooked ? `; WARNING: ${booked.lostButBooked} round(s) booked a saving while Anyray cost more` : '') +
+      (booked.overclaim > booked.lostButBooked ? `; ${booked.overclaim - booked.lostButBooked} more booked more than they saved` : ''));
+  }
   await save();
   return { record, file, viaGateway };
 }
