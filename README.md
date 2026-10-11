@@ -9,30 +9,30 @@ Anyray's Rule 0: **a session must never cost more because of us.**
 
 ## Latest results (2026-10-11)
 
-17 scenarios across four kinds of client, each a paired run: the same agent and task
-straight to Amazon Bedrock, and through a development build of the Anyray gateway, on
-Claude Sonnet 5. Small tasks ran three rounds each and long tasks one (`framework-docs`
-comes from a pass earlier the same day). A round counts only when both arms solved the
-task.
+18 scenarios across three kinds of agent client, each a paired run: the same agent and
+task straight to Amazon Bedrock, and through a development build of the Anyray gateway,
+on Claude Sonnet 5. Every scenario ran three rounds, with a re-run when a pair was not
+usable. A round counts only when both arms solved the task.
 
-Over 37 counted rounds the direct sessions cost **$17.57** and the same sessions through
-Anyray **$9.39 (0.53×)**. Anyray was cheaper in 33 rounds, and below 1.0× on the median
-in 16 of 17 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but name.
+Over 52 counted rounds the direct sessions cost **$41.24** and the same sessions through
+Anyray **$19.90 (0.48×)**. Anyray was cheaper in 48 rounds, and below 1.0× on the median
+in 17 of 18 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but name.
 
 | Scenario | Client | Rounds won | Direct (median) | Anyray (median) | Ratio (median) |
 |---|---|---|---|---|---|
+| `sdk-docs` | SDK tool loop | 3/3 | $1.466 | $0.341 | 0.21× |
 | `cobra-flag-groups`, 200-tool MCP seat | Claude Code | 3/3 | $0.186 | $0.039 | 0.21× |
+| `framework-docs` | Agent-framework graph agent | 3/3 | $1.500 | $0.378 | 0.25× |
 | `cobra-dispatch`, 200-tool MCP seat | Claude Code | 3/3 | $0.338 | $0.083 | 0.26× |
-| `pyrepo-state-docs` | Claude Code | 1/1 | $2.430 | $0.638 | 0.26× |
-| `sdk-docs` | SDK tool loop | 1/1 | $1.090 | $0.341 | 0.31× |
-| `framework-docs` | Agent-framework graph agent | 1/1 | $1.296 | $0.428 | 0.33× |
-| `gin-long-session` | Claude Code | 1/1 | $0.870 | $0.454 | 0.52× |
-| `pyrepo-pillar-docs` | Claude Code | 1/1 | $1.408 | $0.753 | 0.54× |
+| `pyrepo-pillar-docs` | Claude Code | 3/3 | $1.667 | $0.708 | 0.35× |
+| `pyrepo-state-docs` | Claude Code | 3/3 | $2.081 | $0.662 | 0.35× |
+| `gin-long-session` | Claude Code | 3/3 | $0.870 | $0.462 | 0.53× |
 | `gin-test-triage` | Claude Code | 3/3 | $0.357 | $0.183 | 0.55× |
-| `gin-doc-audit` | Claude Code | 1/1 | $2.128 | $1.285 | 0.60× |
-| `pyrepo-docs` | Claude Code | 1/1 | $1.264 | $0.828 | 0.66× |
+| `pyrepo-docs` | Claude Code | 3/3 | $1.347 | $0.738 | 0.55× |
+| `pyrepo-long-session` | Claude Code | 2/2 | $1.838 | $1.290 | 0.70× |
 | `cobra-dispatch` | Claude Code | 3/3 | $0.106 | $0.094 | 0.73× |
 | `cobra-3pause` | Claude Code | 3/3 | $0.670 | $0.496 | 0.74× |
+| `gin-doc-audit` | Claude Code | 2/2 | $1.819 | $1.313 | 0.75× |
 | `cobra-flag-groups` | Claude Code | 2/3 | $0.050 | $0.040 | 0.79× |
 | `cobra-walkaway` | Claude Code | 3/3 | $0.096 | $0.078 | 0.87× |
 | `pyrepo-loader` | Claude Code | 3/3 | $0.216 | $0.182 | 0.91× |
@@ -41,14 +41,14 @@ in 16 of 17 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but nam
 
 Where the difference comes from:
 
-- **Doc and code-trace tasks:** the main agent reads the code itself with ranged batch
-  reads instead of fanning the trace out to subagents (`pyrepo-docs` direct ran 3
-  subagents; `pyrepo-state-docs` 4).
 - **Clients that send no cache markers** (`sdk-docs`, `framework-docs`): the gateway
   adds cache breakpoints, so most of each request's input becomes a cache read.
 - **A seat with many MCP tools:** gateway tool deferral keeps the tool schemas out of
   every request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it
   still defers about 7k tokens of rarely used tools per request.
+- **Doc and code-trace tasks:** the main agent reads the code itself with ranged batch
+  reads instead of fanning the trace out to subagents (the direct arms ran 3 to 6;
+  the Anyray arms none).
 - **Long test output** (`gin-test-triage`, `gin-long-session`): failures are grepped
   instead of read whole, and long command output is folded.
 
@@ -56,16 +56,25 @@ Where it is close:
 
 - On a task of 4 to 8 requests, Anyray's built-in saving is a few percent, while one
   optional step (say, reading 25 lines before an edit) changes a session's cost by about
-  20%. Single rounds of these land on either side of 1.0×, which is why they ran three.
+  20%, so single rounds land on either side of 1.0×.
 - `cobra-pause` (1.00×): the prompt cache expires during the 6-minute pause, and both
   arms pay the same re-write.
-- `cobra-web-flags` (1.01×): the cost follows how much code the agent checks around the
-  web lookup; one round where the direct agent took an unusually short path was 1.45×.
-- `pyrepo-long-session` is missing: in both of its rounds an arm wrote its answer draft to
-  `/tmp`, outside its checkout, which the harness excludes on purpose.
+- `cobra-web-flags` (1.01×): Anyray Connect's read hint, which drives the doc-task
+  savings, leads the agent to read more code than this mostly-web task needs. With the
+  hint off the scenario ran 0.89× over 4 rounds.
 
-These are one to three rounds per scenario: direction, not a confidence interval. The
-Rule 0 verdict below needs at least 8 valid rounds per scenario.
+Notes:
+
+- `gin-doc-audit` and `pyrepo-long-session` have two counted rounds: in their other
+  rounds the direct arm wrote scratch files to `/tmp`, outside its checkout, which the
+  harness excludes on purpose. Every round of both, counted or not, was cheaper through
+  Anyray.
+- Quality misses: the Anyray arm once fell just under the citation bar on
+  `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
+  files); the direct arm missed twice (one `sdk-docs` round with no answer, one
+  `pyrepo-long-session` round with ambiguous `lazy.py` citations).
+- Three rounds per scenario give a median, not a confidence interval. The Rule 0 verdict
+  below needs at least 8 valid rounds per scenario.
 
 ## The agent benchmark
 
