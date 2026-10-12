@@ -30,6 +30,10 @@ import {
 } from '../lib/scannerLong.mjs';
 
 const stubTool = (name, _desc, _schema, handler) => ({ name, handler });
+// The built-in tools @anthropic-ai/claude-agent-sdk 0.3.296 (CLI 2.1.296) lists in its init
+// message for tools: { type: 'preset', preset: 'claude_code' } (probed on the dev gateway,
+// 2026-10-12). A `tools` entry outside it is silently dropped: TodoWrite was.
+const SDK_0_3_296_PRESET_TOOLS = ['Task', 'Bash', 'CronCreate', 'CronDelete', 'CronList', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'NotebookEdit', 'Read', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'TaskCreate', 'TaskGet', 'TaskList', 'TaskStop', 'TaskUpdate', 'WebFetch', 'WebSearch', 'Workflow', 'Write'];
 const textOf = (r) => r.content.map((c) => c.text).join('');
 const SEED = 4242;
 const ROWS = 48;
@@ -240,8 +244,11 @@ test('the long app names the task-list, run, reflect loop and subagent delegatio
     assert.ok(sub.tools.includes(t), `subagent has ${t}`);
   }
   assert.ok(sub.maxTurns >= 30, 'a subagent may run a long thread');
-  assert.ok(LONG_BUILTIN_TOOLS.includes('TodoWrite'));
-  assert.ok(LONG_BUILTIN_TOOLS.some((x) => x === 'Agent' || x === 'Task'));
+  // The task list is the SDK's task tools; TodoWrite is not a tool in this CLI build.
+  for (const t of ['Task', 'TaskCreate', 'TaskUpdate', 'TaskList']) assert.ok(LONG_BUILTIN_TOOLS.includes(t), `app has ${t}`);
+  for (const t of LONG_BUILTIN_TOOLS) assert.ok(SDK_0_3_296_PRESET_TOOLS.includes(t), `${t} is not a tool the SDK exposes`);
+  assert.match(LONG_SYSTEM_PROMPT, /TaskCreate/);
+  assert.doesNotMatch(LONG_SYSTEM_PROMPT, /TodoWrite/);
   assert.ok(!LONG_BUILTIN_TOOLS.includes('Bash') && !LONG_BUILTIN_TOOLS.includes('Read'), 'no shell or filesystem tools');
 });
 

@@ -2,7 +2,7 @@ title: "Claude Agent SDK security scanner, long session (Novee's shape)"
 # The long version of sdk-app-scanner (ANY-1105): a Claude Agent SDK application
 # (settingSources [], a custom system prompt, no shell or filesystem tools) shaped like
 # Novee's real agent. One large system prompt describes the vulnerability classes and
-# where to look. The main agent writes its own task list (TodoWrite), runs the tasks one
+# where to look. The main agent writes its own task list (TaskCreate/TaskUpdate), runs the tasks one
 # by one, then reflects ("what have I not done yet? what else should I test?") and
 # repeats until a reflection finds nothing new, or the turn cap below ends the loop. It
 # decides when to start `scanner` subagents (the SDK `agents` map), several at once when
