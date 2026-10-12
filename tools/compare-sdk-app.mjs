@@ -1,5 +1,6 @@
-// Pairwise cost comparison for an sdk-app-scanner result file. The lane has three arms on
-// one gateway — A (harness-retrieval off), B (on), C (optimize-off baseline bypass) — so
+// Pairwise cost comparison for an sdk-app lane result file (sdk-app-scanner,
+// sdk-app-code-scan). The arms share one gateway — A (harness-retrieval off), B (on),
+// C (optimize-off baseline bypass), D (B plus connect's anyray_read_batch) — so
 // the Rule 0 read is per PAIR: B/A and B/C are the flip's win conditions (D5), A/C is what
 // the gateway's other strategies do on this shape. The report states the D4 precondition
 // first (did B's mechanism run at all), then for each pair, over rounds where BOTH arms
@@ -78,7 +79,29 @@ export const pairsFor = (arms) => {
   if (has('B') && has('A')) out.push(['B', 'A']);
   if (has('B') && has('C')) out.push(['B', 'C']);
   if (has('A') && has('C')) out.push(['A', 'C']);
+  // D is B plus connect's batch read: D/B isolates the batch read, D/A is D against the
+  // retrieval-off SDK app.
+  if (has('D') && has('B')) out.push(['D', 'B']);
+  if (has('D') && has('A')) out.push(['D', 'A']);
   return out;
+};
+
+/**
+ * D's precondition, read before any D ratio: did the batch read run? A D session counts
+ * when its agents called anyray_read_batch at least once with at least one call not
+ * errored. At least half the D sessions must have, and a file with no D session never
+ * passes. A D that never batch-read measured B plus the tool's prefix bytes, not the tool.
+ */
+export const readBatchPrecondition = (rounds) => {
+  const withD = rounds.filter((r) => r.sessions?.D);
+  const usedRounds = withD
+    .filter((r) => {
+      const rb = r.sessions.D.totals?.readBatch;
+      return Number.isFinite(rb?.calls) && rb.calls > 0 && rb.calls > (rb.errors ?? 0);
+    })
+    .map((r) => r.round);
+  const required = Math.ceil(withD.length / 2);
+  return { sessions: withD.length, used: usedRounds.length, usedRounds, required, pass: withD.length > 0 && usedRounds.length >= required };
 };
 
 /** The whole file's comparison: every applicable pair, plus the recorded retrieval
@@ -92,6 +115,7 @@ export const compareFile = (record) => {
     arms,
     rounds: rounds.length,
     d4: d4Precondition(rounds),
+    readBatch: readBatchPrecondition(rounds),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     retrievalEvidence: record.retrievalEvidence ?? null,
   };
@@ -102,13 +126,20 @@ const num = (x) => (x == null ? 'n/a' : String(Math.round(x * 10) / 10));
 
 /** The text report: header, the D4 precondition, then each pair. */
 export const formatReport = (out) => {
-  const lines = [`sdk-app-scanner [${out.arms.join(',')}] ${out.rounds} round(s), model ${out.model ?? 'n/a'}`];
+  const lines = [`${out.scenario ?? 'sdk-app-scanner'} [${out.arms.join(',')}] ${out.rounds} round(s), model ${out.model ?? 'n/a'}`];
   const d = out.d4;
   if (!d || d.sessions === 0) lines.push('D4 precondition: n/a, no B session in this file');
   else {
     lines.push(
       `D4 precondition (B sessions with evidence direct and fresh handles > 0): ${d.minted}/${d.sessions}, need ${d.required} -> ${d.pass ? 'PASS' : 'FAIL: the mechanism did not run, so no ratio below is a verdict'}` +
         (d.mintedRounds.length ? ` (rounds ${d.mintedRounds.join(', ')})` : '')
+    );
+  }
+  const rb = out.readBatch;
+  if (rb && rb.sessions > 0) {
+    lines.push(
+      `read_batch precondition (D sessions that called anyray_read_batch with a call not errored): ${rb.used}/${rb.sessions}, need ${rb.required} -> ${rb.pass ? 'PASS' : 'FAIL: the batch read did not run, so no D ratio below is a verdict'}` +
+        (rb.usedRounds.length ? ` (rounds ${rb.usedRounds.join(', ')})` : '')
     );
   }
   for (const p of out.pairs) {

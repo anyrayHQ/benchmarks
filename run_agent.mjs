@@ -246,7 +246,7 @@ export function parseSeedHome(spec) {
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 // Scenarios another runner drives (run_sdk_app.mjs): an Agent SDK app with no Claude Code
 // hooks, so no connect work mode either. This harness refuses them.
-export const APP_SCENARIOS = ['sdk-app-scanner'];
+export const APP_SCENARIOS = ['sdk-app-scanner', 'sdk-app-code-scan'];
 
 /**
  * anyray-connect turns its main-agent read hint and Explore-subagent decline off when
