@@ -219,8 +219,11 @@ test("after the session, reads what connect's hooks left in the arm HOME: cached
     hookTeeFiles: 2,
     anyrayFiles: ['connect.json', 'hook-tee', 'refresh-state.json'],
     hookLogRead: null,
+    hookDigestRouters: null,
+    hookTeeDigest: null,
+    hookHints: null,
   });
-  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [], hookLogRead: null });
+  assert.deepEqual(connectActivity(armHome()), { fleetHookPolicy: null, refreshed: false, hookTeeFiles: 0, anyrayFiles: [], hookLogRead: null, hookDigestRouters: null, hookTeeDigest: null, hookHints: null });
 });
 
 test("keeps the test-log Read lane's counts (never its records) from the arm HOME before it goes", () => {
@@ -236,6 +239,96 @@ test("keeps the test-log Read lane's counts (never its records) from the arm HOM
   assert.ok(!JSON.stringify(activity).includes('a'.repeat(64)), 'no record key leaves the HOME');
   writeFileSync(join(home, '.anyray', 'hook-log-reads.json'), 'not json');
   assert.equal(connectActivity(home).hookLogRead, null);
+});
+
+test("keeps the digest cost gate's counts per router and the tee ledger's digest counts, never a label, a session or a stray field", () => {
+  const home = armHome();
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  const session = 'c'.repeat(64);
+  const stray = 'synthetic-not-a-count';
+  writeFileSync(join(home, '.anyray', 'hook-digest-routers.json'), JSON.stringify({
+    labels: [{ session, tee: 'synthetic-tee', router: 'test-run', version: 2, at: 1 }],
+    routers: [
+      { router: 'test-run', version: 2, at: 5, emits: 3, rereads: 1, note: stray },
+      { router: 'grep', version: 1, at: 6, emits: 0, rereads: 0 },
+      null, // a row another build wrote is skipped, never the whole file
+      stray,
+      { router: `${stray} with spaces`, version: 1, at: 7, emits: 1, rereads: 0 },
+      { router: 'grep', version: '2', at: 8, emits: 1, rereads: 0 },
+      { router: 'log-dedup', version: 1, at: 9, emits: -1, rereads: 0 },
+      { version: 1, at: 10, emits: 1, rereads: 0 }, // no router: not the string "undefined"
+    ],
+  }));
+  writeFileSync(join(home, '.anyray', 'hook-tee-ledger.json'), JSON.stringify({
+    sessions: [{ key: session, at: 1, emitted: [], rangedEmitted: [], suppressed: [session] }],
+    shapes: [], gateways: [],
+    teeRereads: 4, rangedEmits: 0, rangedRereads: 0, rangedSliceSum: 0, rangedSlices: 0,
+    digestEmits: 6, digestRereads: stray,
+  }));
+  const activity = connectActivity(home);
+  assert.deepEqual(activity.hookDigestRouters, [
+    { router: 'test-run', version: 2, emits: 3, rereads: 1 },
+    { router: 'grep', version: 1, emits: 0, rereads: 0 },
+  ]);
+  assert.deepEqual(activity.hookTeeDigest, { digestEmits: 6, digestRereads: null, teeRereads: 4 });
+  const json = JSON.stringify(activity);
+  assert.ok(!json.includes(session), 'no hashed session leaves the HOME');
+  assert.ok(!json.includes('synthetic-tee'), 'no tee id either');
+  assert.ok(!json.includes(stray), 'only counts and router names leave the HOME');
+  for (const file of ['hook-digest-routers.json', 'hook-tee-ledger.json']) writeFileSync(join(home, '.anyray', file), 'not json');
+  assert.equal(connectActivity(home).hookDigestRouters, null);
+  assert.equal(connectActivity(home).hookTeeDigest, null);
+});
+
+test("keeps only the truncated-test-run hint's wording counts from the arm HOME, never another hint or a stray string", () => {
+  const home = armHome();
+  mkdirSync(join(home, '.anyray'), { recursive: true });
+  const file = join(home, '.anyray', 'hook-hints.json');
+  const stray = 'synthetic-not-a-hint-count';
+  writeFileSync(file, JSON.stringify({
+    truncatedTestRun: { first_10k: 3, head_tail: 5, another_wording: 7, note: stray },
+    anotherHint: { first_10k: 11, head_tail: 13, note: stray },
+    note: stray,
+  }));
+  const activity = connectActivity(home);
+  assert.deepEqual(activity.hookHints, { truncatedTestRun: { first_10k: 3, head_tail: 5 } });
+  assert.ok(!JSON.stringify(activity).includes(stray), 'only the two known wording counts leave the HOME');
+
+  for (const counts of [
+    { first_10k: 0, head_tail: Number.MAX_SAFE_INTEGER },
+    { first_10k: Number.MAX_SAFE_INTEGER, head_tail: 0 },
+  ]) {
+    writeFileSync(file, JSON.stringify({ truncatedTestRun: counts }));
+    assert.deepEqual(connectActivity(home).hookHints, { truncatedTestRun: counts });
+  }
+  for (const invalid of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '2', stray, true, null, [], {}, undefined]) {
+    for (const wording of ['first_10k', 'head_tail']) {
+      writeFileSync(file, JSON.stringify({ truncatedTestRun: { first_10k: 3, head_tail: 5, [wording]: invalid } }));
+      const activity = connectActivity(home);
+      assert.deepEqual(activity.hookHints, { truncatedTestRun: { first_10k: 3, head_tail: 5, [wording]: null } }, `${wording}: ${JSON.stringify(invalid)}`);
+      assert.ok(!JSON.stringify(activity).includes(stray), 'an invalid count never leaks its string');
+    }
+  }
+  writeFileSync(file, JSON.stringify({ truncatedTestRun: {} }));
+  assert.deepEqual(connectActivity(home).hookHints, { truncatedTestRun: { first_10k: null, head_tail: null } });
+
+  for (const state of [
+    {}, null, [], stray,
+    { anotherHint: { first_10k: 3, head_tail: 5 } },
+    { truncatedTestRun: null },
+    { truncatedTestRun: stray },
+    { truncatedTestRun: 3 },
+    { truncatedTestRun: false },
+    { truncatedTestRun: [] },
+  ]) {
+    writeFileSync(file, JSON.stringify(state));
+    const activity = connectActivity(home);
+    assert.equal(activity.hookHints, null, JSON.stringify(state));
+    assert.ok(!JSON.stringify(activity).includes(stray), 'malformed hint state never leaks its string');
+  }
+  writeFileSync(file, 'not json');
+  assert.equal(connectActivity(home).hookHints, null);
+  assert.equal(connectActivity(armHome()).hookHints, null);
 });
 
 // ---- the connect-configured arm combined with --read-trim, --arm-env and the HOME guard ----

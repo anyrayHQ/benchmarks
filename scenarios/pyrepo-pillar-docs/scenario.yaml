@@ -12,7 +12,7 @@ task: >-
   and cached on the minion, and how both are exposed to execution modules and
   templates (__grains__, __pillar__). Output the documentation as Markdown in your
   final answer, with a section per stage, and cite the code for every claim as
-  path:line.
+  path:line with the path relative to the repository root.
 citations:
   min: 10
   resolveRate: 0.9

@@ -45,8 +45,9 @@
 //      turn cap and subagent setting, into <scenario>--control--<label|compare>-control.json;
 //      its solved-pair median and range are printed as the noise band beside the verdict)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 4 --kinds observation_mask --provider bedrock
-//     (--provider bedrock: direct = Claude Code's own Bedrock client on an AWS profile;
-//      anyray = connect's org lane, the gateway routing to Bedrock; see lib/bedrock.mjs)
+//     (--provider bedrock: direct = Claude Code's own Bedrock client on an AWS profile,
+//      small/fast model Bedrock Haiku 5.5 (ANYRAY_BEDROCK_SMALL_MODEL); anyray = connect's
+//      org lane, the gateway routing to Bedrock; see lib/bedrock.mjs)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 6 --kinds observation_mask --parallel 3
 //     (--parallel N: up to N rounds at once, default 2, max 4; each round is still A ‖ B,
 //      so N rounds is up to 2N Claude sessions on the one subscription. --parallel 1 runs
@@ -66,6 +67,8 @@
 //   ANYRAY_BENCH_EXTRA_HEADERS='x-example: on' node run_agent.mjs --scenario s --compare gateway --strategy thinking_trim
 //     (both slots are the anyray arm with the same kinds and metadata, each with its own
 //      session id so traces and spend stay apart; B alone sends the extra headers)
+//   ANYRAY_BENCH_SHARED_HEADERS='x-anyray-tool-defer: off' node run_agent.mjs --compare gateway …
+//     (headers every Anyray arm sends, for a setting both arms must share)
 //   node run_agent.mjs --scenario s --compare gateway --kinds observation_mask --experiment-b my-exp-b
 //     (--experiment-b <name>: arm B alone sends experiment=<name> in x-anyray-metadata, so a
 //      gateway rule keyed on it (`bench-rule params <name> --params …`) is the treatment: same
@@ -78,7 +81,10 @@
 //      one connect change. Each arm's setup records its build's sha256 prefix, never the
 //      path; refused when both builds are the same. The file must be called anyray-connect,
 //      the command name the arm's checks expect. Keep both outside the temp dir:
-//      connect installs no hooks or MCP server from a binary it finds there)
+//      connect installs no hooks or MCP server from a binary it finds there. With a pinned
+//      build every Anyray arm starts from a no-app profile, so an installed Connect app
+//      cannot take the configure over, and fails unless its hooks and MCP server run that
+//      build: lib/agentRun.mjs armSeeds, lib/connectChecks.mjs checkConnectBinary)
 //   node run_agent.mjs --scenario pyrepo-docs --rounds 4 --kinds observation_mask \
 //     --claude-bin ~/.local/share/claude/versions/2.1.286
 //     (--claude-bin <abs path>, or ANYRAY_CLAUDE_BIN (the flag wins): the Claude Code binary
@@ -94,22 +100,24 @@
 //   `npm run agent:report`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { basename, isAbsolute, join } from 'node:path';
+import { basename, isAbsolute, join, normalize } from 'node:path';
+import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, binDigest } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText } from './lib/agentRun.mjs';
 import { ANYRAY_BIN } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
+import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
 import { experimentRules, sameRules, validExperimentName } from './lib/benchRule.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
-import { bedrockOptions, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
+import { bedrockOptions, bedrockSmallModel, probeGatewayRoute, assertBedrockRoute, modelMismatch } from './lib/bedrock.mjs';
 import { formatChecks } from './lib/connectChecks.mjs';
 import { runSdkAgent } from './lib/sdkAgent.mjs';
 import { runFrameworkAgent } from './lib/frameworkAgent.mjs';
@@ -144,6 +152,11 @@ function parseParallel(v) {
 
 function parseMaxTurns(v) {
   if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--max-turns needs a positive integer, got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
+  return Number(v);
+}
+
+function parseTimeoutMin(v) {
+  if (!/^[0-9]+$/.test(v ?? '') || Number(v) < 1) throw new Error(`--timeout-min needs a positive integer (minutes), got ${v === undefined ? 'nothing' : JSON.stringify(v)}`);
   return Number(v);
 }
 
@@ -205,6 +218,27 @@ function postureOf(pairs, arm) {
   return out;
 }
 
+/**
+ * `--seed-home .anyray/hook-digest-routers.json=/abs/file` → { path, file, sha256 }: a file
+ * placed in every Anyray arm's HOME before anyray-connect configures it (lib/agentRun.mjs
+ * seedArmHome). The path is relative and stays inside the HOME; the file must exist.
+ */
+/** --mcp-catalog <n>: a positive integer count of synthetic MCP tools. */
+export function parseMcpCatalog(value) {
+  const n = Number(value);
+  if (!/^\d+$/.test(String(value ?? '')) || !Number.isInteger(n) || n <= 0) throw new Error('--mcp-catalog needs a positive integer tool count');
+  return n;
+}
+
+export function parseSeedHome(spec) {
+  const at = String(spec ?? '').indexOf('=');
+  const path = at > 0 ? String(spec).slice(0, at) : '';
+  const file = at > 0 ? String(spec).slice(at + 1) : '';
+  if (!path || path === '.' || isAbsolute(path) || normalize(path) !== path || path.split('/').includes('..')) throw new Error(`--seed-home takes <relative path in the arm HOME>=<absolute file>, got ${JSON.stringify(spec ?? null)}`);
+  if (!isAbsolute(file) || !existsSync(file)) throw new Error(`--seed-home ${path}: the file must be an absolute path that exists`);
+  return { path, file, sha256: createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 16) };
+}
+
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 
@@ -231,16 +265,19 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
+    else if (argv[i] === '--mcp-catalog') a.mcpCatalog = parseMcpCatalog(argv[++i]); // both arms: a stub MCP server listing N synthetic tools (catalog weight)
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--experiment-b') a.experimentB = argv[++i] ?? ''; // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
     else if (argv[i] === '--retry-invalid') a.retryInvalid = parseRetryInvalid(argv[++i]); // run a round the verdict would drop again, up to N extra rounds
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
+    else if (argv[i] === '--timeout-min') a.timeoutMin = parseTimeoutMin(argv[++i]); // both arms: overrides scenario.timeoutMin (the session's wall-clock cap)
     else if (argv[i] === '--inter-turn-delay-sec') a.interTurnDelaySec = Number(argv[++i]);
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
+    else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
@@ -259,7 +296,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents || a.mcpCatalog || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -313,6 +350,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
+  if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
   if (gateway && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
@@ -327,8 +365,8 @@ export function parseArgs(argv, env = process.env) {
 
 /** The scenario as both arms run it: --max-turns replaces its turn cap. */
 export const effectiveScenario = (scenario, args) =>
-  args.maxTurns || args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined
-    ? { ...scenario, ...(args.maxTurns ? { maxTurns: args.maxTurns } : {}), ...(args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined ? { interTurnDelaySec: args.interTurnDelaySec } : {}) }
+  args.maxTurns || args.timeoutMin || args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined
+    ? { ...scenario, ...(args.maxTurns ? { maxTurns: args.maxTurns } : {}), ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), ...(args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined ? { interTurnDelaySec: args.interTurnDelaySec } : {}) }
     : scenario;
 
 /**
@@ -349,6 +387,7 @@ export const controlArgs = (args) => ({
   readTrimB: false,
   connectBinB: undefined,
   connectBinBDigest: undefined,
+  seedHome: undefined, // no Anyray arm to seed
   redrawHoldout: 0,
   readTrim: false,
   hookPosture: {},
@@ -391,13 +430,22 @@ export const slotOptions = (args, arms, slot) => ({
   env: args.env?.[slot] ?? {},
   kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
   kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
-  extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : [],
+  // ANYRAY_BENCH_SHARED_HEADERS on every Anyray arm, then the treatment on B.
+  extraHeaders: [
+    ...(arms[slot] === 'anyray' ? args.sharedHeaders ?? [] : []),
+    ...(carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : []),
+  ],
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
+  ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // both slots: the same synthetic catalog on either arm
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
   ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
+  // --connect-bin-b: A's build (ANYRAY_CONNECT_BIN) is pinned as much as B's, so both arms
+  // start from the same no-app profile and must run exactly their build.
+  ...(arms[slot] === 'anyray' && args.connectBinB ? { connectBinPinned: true } : {}),
+  ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
@@ -406,6 +454,8 @@ export const slotOptions = (args, arms, slot) => ({
 /** What the run asked of the arms beyond --kinds / --read-trim, as recorded (header names only). */
 export const requestRecord = (args) => ({
   noSubagents: !!args.noSubagents,
+  ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), // the session cap both arms ran under
+  ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // synthetic MCP tools both arms carried
   bare: !!args.bare,
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
@@ -420,8 +470,10 @@ export const requestRecord = (args) => ({
   ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
+  ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
+  ...(args.seedHome?.length ? { seedHome: args.seedHome.map(({ path, sha256 }) => ({ path, sha256 })) } : {}), // never the source path
 });
 
 /** results/agent/<scenario>--<compare>[--<label>].json */
@@ -432,9 +484,15 @@ export const resultFileName = (args) => `${args.scenario}--${args.compare}${args
  * cost: the round is an error, never a ratio of 0 or ∞.
  */
 export function roundRatio(a, b) {
-  const missing = [['A', a], ['B', b]].filter(([, s]) => s.totals.costUsd == null).map(([n]) => n);
-  if (missing.length) return { ratio: null, error: `${missing.join(' and ')} ended without a result (no cost)` };
-  return { ratio: a.totals.costUsd ? b.totals.costUsd / a.totals.costUsd : null };
+  const missing = [['A', a], ['B', b]].filter(([, s]) => s.totals.costUsd == null);
+  if (!missing.length) return { ratio: a.totals.costUsd ? b.totals.costUsd / a.totals.costUsd : null };
+  const plain = missing.filter(([, s]) => !s.totals.timedOutAfterAnswer).map(([n]) => n);
+  const cut = missing.filter(([, s]) => s.totals.timedOutAfterAnswer).map(([n]) => n);
+  const why = [
+    ...(plain.length ? [`${plain.join(' and ')} ended without a result (no cost)`] : []),
+    ...(cut.length ? [`${cut.join(' and ')} answered, then timed out before Claude Code reported a cost`] : []),
+  ];
+  return { ratio: null, error: why.join('; ') };
 }
 
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
@@ -582,7 +640,7 @@ export const whyNot = (reasons) => {
 };
 
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
-function summarize(session, pricing) {
+export function summarize(session, pricing) {
   const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
   let mainIn = 0;
   let subIn = 0;
@@ -622,6 +680,18 @@ function summarize(session, pricing) {
   t.cacheWrite = mu.reduce((a, m) => a + (m.cacheCreationInputTokens ?? 0), 0);
   t.output = mu.reduce((a, m) => a + (m.outputTokens ?? 0), 0);
   t.costUsd = session.result?.costUsd ?? null;
+  if (session.timedOutAfterAnswer) {
+    // Killed at the timeout after answering, with no result event (lib/agentRun.mjs
+    // parseSession): graded on that answer, but with no cost. Claude Code never reported
+    // its billed total, a background agent was still running (that is why the result was
+    // held back), and stream-json cannot rebuild the bill: subagent requests carry no final
+    // usage and not all of them reach the stream.
+    t.timedOutAfterAnswer = true;
+    t.agentsRunningAtEnd = session.agentsRunningAtEnd ?? 0;
+  }
+  t.endReason = session.end?.reason ?? null; // exited | answered | timeout | aborted
+  t.answeredAtMs = session.answeredAtMs ?? null; // ms from session start to its final answer
+  if (session.reportedFindings) t.reportedFindings = session.reportedFindings.length; // graded with the answer text
   t.subagentInputShare = mainIn + subIn ? subIn / (mainIn + subIn) : 0;
   t.turns = session.result?.numTurns ?? null;
   t.wallMs = session.wallMs;
@@ -646,19 +716,24 @@ export const armLabel = (args, arms, slot) => {
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
 };
 
+/** The round line's note on how a session ended: answered time, and a timeout if it hit one. */
+export const endNote = (t) =>
+  (t.answeredAtMs != null ? ` · answered at ${Math.round(t.answeredAtMs / 1000)}s` : '') +
+  (t.timedOutAfterAnswer ? ` · TIMED OUT after answering (${t.agentsRunningAtEnd} agent(s) still running; no cost)` : t.endReason === 'timeout' ? ' · TIMED OUT' : '');
+
 /** The round line's gateway-ping part: '' for a direct arm, 'n/a' when unreadable. */
 export const pingNote = (t) =>
   t.gatewayPingCount === undefined ? ''
     : t.gatewayPingCount === null ? ' · pings n/a'
     : ` · ${t.gatewayPingCount} pings $${t.gatewayPingCostUsd.toFixed(3)} (client $${t.clientCostUsd?.toFixed(3)})`;
 
-function solved(scenario, session) {
+export function solved(scenario, session) {
   if (scenario.check) return !!session.check?.passed;
   if (scenario.citations) {
     const c = session.citations ?? { total: 0, resolved: 0 };
     return c.resolved >= scenario.citations.min && c.resolved / Math.max(1, c.total) >= (scenario.citations.resolveRate ?? 0.9);
   }
-  const text = session.result?.text ?? '';
+  const text = answerText(session);
   return (scenario.keyFacts ?? []).every((f) => text.includes(f));
 }
 
@@ -862,13 +937,15 @@ async function main() {
  */
 export async function resolveBedrock(run, { env = process.env, probe = probeGatewayRoute } = {}) {
   const opts = bedrockOptions(env);
+  // The direct arm's small/fast model (lib/bedrock.mjs): what the gateway arm's Claude Code picks itself.
+  const withSmall = (b) => ({ ...b, ...bedrockSmallModel(b.model, opts.smallModel) });
   if (!run.gatewayUrl) {
     if (!opts.model) throw new Error('--provider bedrock without a gateway needs ANYRAY_BEDROCK_MODEL (the Bedrock model id)');
-    return { ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' };
+    return withSmall({ ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' });
   }
   const route = await probe({ gatewayUrl: run.gatewayUrl, clientKey: resolveBenchKey(env, () => {}).key, model: run.model });
   const served = assertBedrockRoute(route, { pinned: opts.model });
-  return { ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model };
+  return withSmall({ ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model });
 }
 
 /** What runComparison reaches outside the process through; tests stub them. */
@@ -927,7 +1004,8 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     };
     const [sa, sb] = await Promise.allSettled([runArm('a'), runArm('b')]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
-      const error = (sa.reason ?? sb.reason)?.message ?? 'SDK arm failed';
+      // Name each arm that failed, so a round lost to one lane's transport says which lane.
+      const error = [['direct', sa], ['anyray', sb]].filter(([, s]) => s.status === 'rejected').map(([arm, s]) => `${arm}: ${s.reason?.message ?? 'SDK arm failed'}`).join('; ');
       insertRound(record.rounds, { round, error });
       log(`  round ${round} failed: ${error}`);
       await save();
@@ -975,6 +1053,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   }
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
+  args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
   if (args.connectBinB) {
     if (!existsSync(args.connectBinB)) throw new Error(`--connect-bin-b: no anyray-connect at ${args.connectBinB}`);
     args.connectBinBDigest = binDigest(args.connectBinB);
@@ -1009,7 +1088,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   if (args.provider === 'bedrock') {
     args.bedrock ??= await resolveBedrock(run);
     record.bedrock = args.bedrock;
-    log(`provider bedrock: direct arm on AWS profile "${args.bedrock.profile}" (${args.bedrock.region}) as ${args.bedrock.model}` + (args.bedrock.gatewayServedAs ? `; the gateway serves ${run.model} as ${args.bedrock.gatewayServedAs}` : ''));
+    log(`provider bedrock: direct arm on AWS profile "${args.bedrock.profile}" (${args.bedrock.region}) as ${args.bedrock.model}, small/fast model ${args.bedrock.smallModel ?? "Claude Code's own"}` + (args.bedrock.gatewayServedAs ? `; the gateway serves ${run.model} as ${args.bedrock.gatewayServedAs}` : ''));
     if (/anthropic\./.test(args.bedrock.gatewayServedAs ?? '') && args.bedrock.gatewayServedAs !== args.bedrock.model) log(`  WARNING: the arms are on different Bedrock ids (${args.bedrock.model} vs ${args.bedrock.gatewayServedAs})`);
   }
   record.request = requestRecord(args);
@@ -1101,6 +1180,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
       gatewaySpend,
     };
+    // A model family the arms ran on different models (say Haiku for Claude Code's side
+    // calls) is a client difference that would read as a gateway one.
+    const modelsDiffer = modelMismatch(sessions.a.totals.models, sessions.b.totals.models);
+    if (Object.keys(modelsDiffer).length) {
+      r.modelsDiffer = modelsDiffer;
+      log(`  round ${round} WARNING: the arms ran different models (${Object.entries(modelsDiffer).map(([f, m]) => `${f}: A ${m.a.join(', ')} vs B ${m.b.join(', ')}`).join('; ')})`);
+    }
     if (viaGateway.length) {
       r.gatewayReplicas = { before: replicasBefore, after: await gatewayReplicaStarts(run.gatewayUrl) };
       r.gatewayRestarted = restartedDuring(r.gatewayReplicas.before, r.gatewayReplicas.after);
@@ -1114,6 +1200,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       r.traces = traces.b ?? null;
       // What the gateway reported doing with the requested kinds, per request.
       r.optimization = sessions.b.optimization?.tally ?? null;
+      // What the gateway booked as saved against what the pair actually cost (direct arm only).
+      if (args.compare === 'anyray') {
+        const check = savingsCheck({ directUsd: sessions.a.totals.costUsd, anyrayUsd: sessions.b.totals.costUsd, traces: r.traces });
+        if (check) r.savingsCheck = check;
+      }
       if (args.compare === 'gateway') {
         r.tracesA = traces.a ?? null;
         r.optimizationA = sessions.a.optimization?.tally ?? null;
@@ -1150,6 +1241,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       `  round ${round} ${slot.toUpperCase()} ${armLabel(args, arms, slot)}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns${subagentNote(t)} · ${t.parallelToolTurns} parallel-tool turns · ${t.cacheBreaks} cache breaks` +
       ` · start ${t.start.read} read / ${t.start.written} written` +
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
+      endNote(t) +
       (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       whyNot(sessions[slot].budgetNoticeReasons) +
@@ -1160,7 +1252,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
         (r.heldOut && viaGateway.some((slot) => r.heldOut[slot].length) ? `\n  round ${round} held out by the gateway's session gate: ${viaGateway.map((slot) => `${slot.toUpperCase()} ${r.heldOut[slot].join(', ') || 'none'}`).join(' · ')}` : '') +
         (r.optimizationA ? `\n  round ${round} A ${formatKindTally(r.optimizationA)}` : '') +
-        (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '')
+        (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '') +
+        (r.savingsCheck ? `\n${savingsCheckNote(round, r.savingsCheck)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds));
     record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
@@ -1201,6 +1294,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   record.verdict = benchVerdict(record.rounds);
   record.subagentLoad = subagentLoadSummary(record.rounds);
   record.claudeVersions = claudeVersions(record.rounds);
+  const booked = savingsCheckSummary(record.rounds);
+  if (booked.rounds) {
+    record.savingsCheck = booked;
+    log(`gateway booked $${booked.bookedUsd.toFixed(3)} saved vs measured $${booked.measuredUsd.toFixed(3)} over ${booked.rounds} round(s)` +
+      (booked.lostButBooked ? `; WARNING: ${booked.lostButBooked} round(s) booked a saving while Anyray cost more` : '') +
+      (booked.overclaim > booked.lostButBooked ? `; ${booked.overclaim - booked.lostButBooked} more booked more than they saved` : ''));
+  }
   await save();
   return { record, file, viaGateway };
 }

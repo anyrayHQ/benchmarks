@@ -6,7 +6,11 @@ title: "Test triage in gin-gonic/gin — two regressions, verbose test output"
 repo:
   git: https://github.com/gin-gonic/gin.git
   ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
-patch: bugs.patch
+# bugs.patch plants the regressions.
+# fixed-ports-lock.patch adds a TestMain that makes concurrent test runs of the gin
+# package take turns: several of its tests bind fixed ports, and both arms of a round
+# run `go test` on one machine at the same time.
+patch: [bugs.patch, fixed-ports-lock.patch]
 # Imported as a single commit, so the bugs can't be found with git diff/log.
 hidePatch: true
 task: >-

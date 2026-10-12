@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
-import { armConfig, benchExtraHeaders, describeSetup, followupDelayMs, subagentArgs } from '../lib/agentRun.mjs';
+import { armConfig, benchExtraHeaders, benchSharedHeaders, describeSetup, followupDelayMs, subagentArgs } from '../lib/agentRun.mjs';
 import { gatewayReplicaStarts, replicaStarts, restartedDuring } from '../lib/traces.mjs';
 import { parseArgs, requestRecord, roundTag, slotOptions } from '../run_agent.mjs';
 
@@ -77,6 +77,20 @@ test('parseArgs: --experiment needs --compare anyray and cannot be combined with
 test('benchExtraHeaders: newline-separated "name: value" lines, blank lines ignored', () => {
   assert.deepEqual(benchExtraHeaders({}), []);
   assert.deepEqual(benchExtraHeaders({ ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-cache-ttl: 1h\n\nx-trace: a:b\n' }), ['x-anyray-cache-ttl: 1h', 'x-trace: a:b']);
+});
+
+test('benchSharedHeaders: parsed like the treatment, and never a name the treatment sets', () => {
+  assert.deepEqual(benchSharedHeaders({}), []);
+  assert.deepEqual(benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-tool-defer: off\n' }), ['x-anyray-tool-defer: off']);
+  assert.throws(() => benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-api-key: k' }), /ANYRAY_BENCH_SHARED_HEADERS cannot set/);
+  assert.throws(
+    () => benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'X-Anyray-Tool-Defer: off', ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-tool-defer: on' }),
+    /in both/
+  );
+  assert.deepEqual(
+    benchSharedHeaders({ ANYRAY_BENCH_SHARED_HEADERS: 'x-anyray-tool-defer: off', ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-retrieval-tools: lazy' }),
+    ['x-anyray-tool-defer: off']
+  );
 });
 
 test('benchExtraHeaders refuses a malformed line or a header the harness owns', () => {
@@ -193,6 +207,36 @@ test('pyrepo scenarios: pinned, one grading mode each', () => {
     assert.match(s.repo.ref, /^[0-9a-f]{40}$/, name);
     assert.equal([s.check, s.citations, s.keyFacts].filter(Boolean).length, 1, name);
   }
+});
+
+test('citation-graded scenarios: every turn that asks for path:line asks for repository-root paths', () => {
+  // The grader rejects a bare file name that several files share (lazy.py in a repo with
+  // more than one), so a turn that leaves the path's form open fails rounds at random.
+  const names = readdirSync(new URL('../scenarios/', import.meta.url)).filter((n) => scenario(n).citations);
+  assert.ok(names.includes('pyrepo-long-session'));
+  for (const name of names) {
+    const s = scenario(name);
+    for (const turn of [s.task, ...(s.followups ?? [])].filter((t) => /path:line/.test(t))) {
+      assert.match(turn, /relative to the repository root|from\s+the repository root|repository-relative/, `${name}: ${turn}`);
+    }
+  }
+});
+
+test('gin scenarios: each applies the same fixed-ports lock patch, hidden in the import commit', () => {
+  const names = readdirSync(new URL('../scenarios/', import.meta.url)).filter((n) => /gin-gonic\/gin/.test(scenario(n).repo?.git ?? ''));
+  assert.deepEqual(names.sort(), ['gin-doc-audit', 'gin-long-session', 'gin-test-triage']);
+  const copies = new Set();
+  for (const name of names) {
+    const s = scenario(name);
+    assert.ok([s.patch].flat().includes('fixed-ports-lock.patch'), name);
+    assert.equal(s.hidePatch, true, name);
+    copies.add(readFileSync(new URL(`../scenarios/${name}/fixed-ports-lock.patch`, import.meta.url), 'utf8'));
+  }
+  assert.equal(copies.size, 1, 'the copies differ');
+  const [patch] = copies;
+  // A new test file only: it touches neither the library code nor the planted bugs.
+  assert.deepEqual([...patch.matchAll(/^\+\+\+ b\/(\S+)/gm)].map((m) => m[1]), ['testmain_test.go']);
+  assert.match(patch, /^new file mode/m);
 });
 
 // ---- the connect arm's HOME matches a real user's ------------------------------------

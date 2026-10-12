@@ -7,7 +7,11 @@ title: "Long session in gin-gonic/gin — six user turns over one codebase"
 repo:
   git: https://github.com/gin-gonic/gin.git
   ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
-patch: bugs.patch
+# bugs.patch plants the regressions.
+# fixed-ports-lock.patch adds a TestMain that makes concurrent test runs of the gin
+# package take turns: several of its tests bind fixed ports, and both arms of a round
+# run `go test` on one machine at the same time.
+patch: [bugs.patch, fixed-ports-lock.patch]
 hidePatch: true
 task: >-
   CI is red on this branch. Run `go test -v ./...` and read its full output (don't

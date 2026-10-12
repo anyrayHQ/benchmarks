@@ -11,11 +11,16 @@ task: >-
   fetch tool and explain, citing both, how cobra's flag handling relies on
   pflag's interspersed-argument and shorthand behavior. Cite file and function
   names from the repo and quote the README section names you used.
+# Facts match case-sensitively. "interspersed" is lowercase because both sources
+# spell it that way: the pflag README ("flags can be interspersed with arguments")
+# and cobra's own code comments. The README has no section with "Interspersed" in
+# its name, and cobra's library code never calls SetInterspersed, so a capital-I
+# fact only passed answers that named that API or started a heading with the word.
 keyFacts:
   - "ParseFlags"
   - "command.go"
   - "FlagSet"
-  - "Interspersed"
+  - "interspersed"
   - "shorthand"
 maxTurns: 25
 timeoutMin: 8
