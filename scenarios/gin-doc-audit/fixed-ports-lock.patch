@@ -1,9 +1,9 @@
 diff --git a/testmain_test.go b/testmain_test.go
 new file mode 100644
-index 0000000..2bd64a5
+index 0000000..0000000
 --- /dev/null
 +++ b/testmain_test.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,37 @@
 +//go:build darwin || linux
 +
 +package gin
@@ -20,6 +20,8 @@ index 0000000..2bd64a5
 +// binary exits, so two runs of this package's tests on one machine at the same time fail
 +// with "address already in use". TestMain makes such runs take turns: the binary holds an
 +// exclusive lock on a shared file until it exits, waiting at most a minute to get it.
++// The unix socket also gets a temp dir of this binary's own, so a run that outlived the
++// wait or left a stale socket behind can't break another run's TestUnixSocket.
 +var fixedPortsLock *os.File
 +
 +func TestMain(m *testing.M) {
@@ -30,6 +32,12 @@ index 0000000..2bd64a5
 +				break
 +			}
 +		}
++	}
++	if dir, err := os.MkdirTemp("", "gin-t"); err == nil {
++		os.Setenv("TMPDIR", dir)
++		code := m.Run()
++		os.RemoveAll(dir)
++		os.Exit(code)
 +	}
 +	os.Exit(m.Run())
 +}

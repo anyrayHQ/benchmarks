@@ -372,7 +372,8 @@ requests to test behavior beyond the five-minute cache lifetime. `--max-turns` m
 stay between 8 and 30; the scenario continues early answers until at least eight
 model requests have run. A final reply with no text (Sonnet 5 can end a turn on thinking
 alone) gets one more answer-only request with the same tools; an answer still empty is
-graded `error_no_answer`. The round line prints each arm's cache-read share. The result
+graded `error_no_answer`. `--retry-invalid N` runs a round again when either arm failed
+or did not solve it, as on the Claude Code scenarios. The round line prints each arm's cache-read share. The result
 file stores every request's token usage, estimated cost, and latency, plus the usual
 paired verdict and citation check. Run `node tools/bench-verdict.mjs` on that file to
 recalculate the verdict. A live run is required to establish route parity and measured
