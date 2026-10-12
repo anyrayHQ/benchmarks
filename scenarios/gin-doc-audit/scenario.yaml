@@ -22,7 +22,9 @@ task: >-
 citations:
   min: 8
   resolveRate: 0.9
-maxTurns: 25
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
 # A run that splits the audit across background agents answers in 3.5 to 6 minutes, so
 # 6 minutes cut the slower ones off before their answer. A session ends once it has
 # answered, so the longer cap adds no idle time.

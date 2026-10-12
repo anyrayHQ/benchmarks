@@ -522,7 +522,12 @@ settings afterwards.
 ### Other run options
 
 - `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in
-  each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`).
+  each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`). Below 80, anyray-connect
+  turns off its main-agent read hint and Explore-subagent decline (it reads the cap off the
+  Claude Code process), so the Anyray arm runs without what a production session (no cap)
+  gets. The run warns, and the result records `connectWorkMode: "off_turn_cap"`. Every
+  Claude Code scenario is capped at 80 for that reason; results recorded before 2026-10-12
+  ran at 20 to 40 turns, with the mode off.
 - `--claude-bin <abs path>` / `ANYRAY_CLAUDE_BIN`: the Claude Code binary both arms spawn
   (see "Keeping the pair like for like"). Recorded in `request.claudeBin` (`source`,
   `version`) when pinned, and in each arm's setup as `claudeVersion` / `claudeBinSource`.
