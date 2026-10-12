@@ -5,7 +5,8 @@
 // first (did B's mechanism run at all), then for each pair, over rounds where BOTH arms
 // are valid and both costs are finite and positive, the per-round ratios, win count
 // (ratio < 1), median, Q3 and max, plus recall and turn medians. Reading only; no model
-// traffic. Run: node tools/compare-sdk-app.mjs results/agent/sdk-app-scanner--<label>.json
+// traffic. Run: node tools/compare-sdk-app.mjs results/agent/<scenario>--<label>.json
+// [--spend-mints <file>], the file giving B's fresh mints per round from its spend rows.
 
 import { readFileSync } from 'node:fs';
 import { quantile } from '../lib/stats.mjs';
@@ -69,20 +70,35 @@ export const comparePair = (rounds, treatment, control) => {
 
 /**
  * D4, read before any ratio: did B's mechanism run? A B session counts as minted only
- * when its per-session evidence shows `direct` requests AND fresh handles above zero; an
- * unknown mint count (null) or an unread session is not proof. At least half the B
- * sessions must have minted, and a file with no B session never passes.
+ * when its per-session evidence shows `direct` requests AND fresh handles above zero. A
+ * mint count the self-check could not read (null) is UNKNOWN, kept apart from a read of
+ * zero: it is not proof of a mint, and not proof the mechanism never ran either.
+ * `spendMints` ({ [round]: { B: n } }, counted from the B key's spend rows by an operator
+ * with database access) answers an unknown; the self-check's own count wins when it has
+ * one. At least half the B sessions must have minted; no B session never passes.
  */
-export const d4Precondition = (rounds) => {
+export const d4Precondition = (rounds, { spendMints = null } = {}) => {
   const withB = rounds.filter((r) => r.sessions?.B);
-  const mintedRounds = withB
-    .filter((r) => {
-      const ev = r.sessions.B.retrieval;
-      return (ev?.evidence?.direct ?? 0) > 0 && Number.isFinite(ev?.freshEmitted) && ev.freshEmitted > 0;
-    })
-    .map((r) => r.round);
+  const mintedRounds = [];
+  const unknownRounds = [];
+  for (const r of withB) {
+    const ev = r.sessions.B.retrieval;
+    if (!((ev?.evidence?.direct ?? 0) > 0)) continue;
+    const spend = spendMints?.[r.round]?.B;
+    const fresh = Number.isFinite(ev.freshEmitted) ? ev.freshEmitted : Number.isFinite(spend) ? spend : null;
+    if (fresh === null) unknownRounds.push(r.round);
+    else if (fresh > 0) mintedRounds.push(r.round);
+  }
   const required = Math.ceil(withB.length / 2);
-  return { sessions: withB.length, minted: mintedRounds.length, mintedRounds, required, pass: withB.length > 0 && mintedRounds.length >= required };
+  return {
+    sessions: withB.length,
+    minted: mintedRounds.length,
+    mintedRounds,
+    unknown: unknownRounds.length,
+    unknownRounds,
+    required,
+    pass: withB.length > 0 && mintedRounds.length >= required,
+  };
 };
 
 /** Which pairs to compute, by the arms the file actually ran. */
@@ -97,7 +113,7 @@ export const pairsFor = (arms) => {
 
 /** The whole file's comparison: every applicable pair, plus the recorded retrieval
  *  evidence so the D4 precondition can be read beside the D5 ratios. */
-export const compareFile = (record) => {
+export const compareFile = (record, { spendMints = null } = {}) => {
   const arms = record.arms ?? ['A', 'B', 'C'];
   const rounds = record.rounds ?? [];
   return {
@@ -105,7 +121,7 @@ export const compareFile = (record) => {
     model: record.model ?? null,
     arms,
     rounds: rounds.length,
-    d4: d4Precondition(rounds),
+    d4: d4Precondition(rounds, { spendMints }),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     retrievalEvidence: record.retrievalEvidence ?? null,
   };
@@ -120,8 +136,14 @@ export const formatReport = (out) => {
   const d = out.d4;
   if (!d || d.sessions === 0) lines.push('D4 precondition: n/a, no B session in this file');
   else {
+    const unknownCanPass = !d.pass && d.minted + (d.unknown ?? 0) >= d.required;
+    const verdict = d.pass
+      ? 'PASS'
+      : unknownCanPass
+        ? `UNKNOWN: the self-check could not count mints for round(s) ${d.unknownRounds.join(', ')}; count them from the B key's spend rows and pass --spend-mints`
+        : 'FAIL: the mechanism did not run, so no ratio below is a verdict';
     lines.push(
-      `D4 precondition (B sessions with evidence direct and fresh handles > 0): ${d.minted}/${d.sessions}, need ${d.required} -> ${d.pass ? 'PASS' : 'FAIL: the mechanism did not run, so no ratio below is a verdict'}` +
+      `D4 precondition (B sessions with evidence direct and fresh handles > 0): ${d.minted}/${d.sessions}, need ${d.required} -> ${verdict}` +
         (d.mintedRounds.length ? ` (rounds ${d.mintedRounds.join(', ')})` : '')
     );
   }
@@ -144,10 +166,13 @@ export const formatReport = (out) => {
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [file] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const at = argv.indexOf('--spend-mints');
+  const spendMints = at >= 0 ? JSON.parse(readFileSync(argv[at + 1], 'utf8')) : null;
+  const [file] = argv.filter((_, i) => at < 0 || (i !== at && i !== at + 1));
   if (!file) {
-    console.error('usage: node tools/compare-sdk-app.mjs <result.json>');
+    console.error('usage: node tools/compare-sdk-app.mjs <result.json> [--spend-mints <{ "<round>": { "B": n } }.json>]');
     process.exit(2);
   }
-  console.log(formatReport(compareFile(JSON.parse(readFileSync(file, 'utf8')))));
+  console.log(formatReport(compareFile(JSON.parse(readFileSync(file, 'utf8')), { spendMints })));
 }

@@ -161,3 +161,34 @@ test('comparePair reads turns as main-thread requests when the session counted t
   const p = comparePair([r(1, 60, 70), r(2, 80, 90)], 'B', 'A');
   assert.deepEqual(p.turns, { treatment: 70, control: 80 });
 });
+
+test('D4 keeps an unknown mint count apart from a session that minted nothing', () => {
+  // The self-check could not count mints (its sdk-agent readBack row had no emitted).
+  const rounds = [{ round: 1, sessions: { B: bSession(169, null) } }];
+  const d = d4Precondition(rounds);
+  assert.equal(d.pass, false);
+  assert.equal(d.unknown, 1);
+  assert.deepEqual(d.unknownRounds, [1]);
+  const text = formatReport({ scenario: 's', arms: ['B'], rounds: 1, model: 'm', d4: d, pairs: [] });
+  assert.match(text, /D4 precondition .*UNKNOWN/);
+  assert.doesNotMatch(text, /did not run/, 'an unread count is not proof the mechanism never ran');
+  // A session that read zero is still a FAIL, not unknown.
+  const zero = d4Precondition([{ round: 1, sessions: { B: bSession(169, 0) } }]);
+  assert.equal(zero.unknown, 0);
+  assert.match(formatReport({ scenario: 's', arms: ['B'], rounds: 1, model: 'm', d4: zero, pairs: [] }), /FAIL/);
+});
+
+test('D4 reads a spend-row mint count for a round the self-check could not count', () => {
+  const rounds = [{ round: 1, sessions: { B: bSession(169, null) } }, { round: 2, sessions: { B: bSession(150, null) } }];
+  const d = d4Precondition(rounds, { spendMints: { 1: { B: 53 }, 2: { B: 0 } } });
+  assert.equal(d.minted, 1);
+  assert.deepEqual(d.mintedRounds, [1]);
+  assert.equal(d.unknown, 0);
+  assert.equal(d.pass, true);
+  // The self-check's own count wins when it has one; spend rows fill only an unknown.
+  const own = d4Precondition([{ round: 1, sessions: { B: bSession(10, 0) } }], { spendMints: { 1: { B: 9 } } });
+  assert.equal(own.minted, 0);
+  // A malformed spend count is no evidence.
+  assert.equal(d4Precondition(rounds, { spendMints: { 1: { B: 'lots' } } }).unknown, 2);
+  assert.equal(compareFile({ arms: ['B'], rounds }, { spendMints: { 1: { B: 53 } } }).d4.minted, 1);
+});
