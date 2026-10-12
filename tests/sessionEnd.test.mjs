@@ -254,7 +254,7 @@ test('driveSession keeps each request start and end of the partial-message strea
 
 // --- driveSession: pause / follow-up scenarios ------------------------------------------------
 
-const PAUSE_SCENARIOS = ['cobra-pause', 'cobra-3pause', 'gin-long-session', 'pyrepo-long-session', 'pyrepo-long-session-cold'];
+const PAUSE_SCENARIOS = ['cobra-pause', 'cobra-3pause', 'gin-long-session', 'pyrepo-long-session', 'pyrepo-long-session-cold', 'pyrepo-long-session-pause'];
 const loadScenario = (name) => parseYaml(readFileSync(join(root, 'scenarios', name, 'scenario.yaml'), 'utf8'));
 
 for (const name of PAUSE_SCENARIOS) {

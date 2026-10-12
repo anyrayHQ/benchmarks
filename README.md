@@ -214,6 +214,7 @@ are recorded in the round's `redraws`. Name every kind the gateway may hold out 
 | `pyrepo-loader` | a large Python codebase (pinned) | Explain how an execution module is found and loaded | Key facts in the answer |
 | `pyrepo-long-session` | a large Python codebase (pinned) | Five user turns of code walkthroughs over one large Python codebase | Path:line citations resolve |
 | `pyrepo-long-session-cold` | a large Python codebase (pinned) | The same five turns with three 62-minute pauses, so three turns start with the prompt cache expired (about 4 hours a round) | Path:line citations resolve |
+| `pyrepo-long-session-pause` | a large Python codebase (pinned) | The same five turns with three 7-minute pauses, for arms on 5-minute cache entries (API key, Bedrock): three cold turns in about an hour | Path:line citations resolve |
 | `sdk-docs` | a large Python codebase (pinned) | SDK tool loop without client cache markers, direct Bedrock vs gateway | Path:line citations resolve |
 | `framework-docs` | a large Python codebase (pinned) | The `pyrepo-docs` task run by an agent-framework graph agent, direct Bedrock vs gateway | Path:line citations resolve |
 
