@@ -295,6 +295,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
+    else if (argv[i] === '--persist-session') a.persistSession = true; // both arms keep their transcript, as Claude Code does outside the bench (hooks that read it see one)
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
@@ -314,7 +315,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -467,6 +468,7 @@ export const slotOptions = (args, arms, slot) => ({
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
+  ...(args.persistSession ? { persistSession: true } : {}), // --persist-session: both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
 });
 
@@ -487,6 +489,7 @@ export const requestRecord = (args) => ({
   ...(Object.keys(args.hookPostureB ?? {}).length ? { hookPostureB: args.hookPostureB } : {}), // the switches arm B alone pins
   ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
   ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
+  ...(args.persistSession ? { persistSession: true } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
   ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),

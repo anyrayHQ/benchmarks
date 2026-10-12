@@ -553,6 +553,10 @@ settings afterwards.
   `bench-rule params`). Recorded in `request.experimentB`.
 - `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
   (see the gateway comparison above). Stopped attempts are not in the round's cost.
+- `--persist-session`: both arms keep their Claude Code transcript, as Claude Code does outside
+  the bench. By default the harness runs `--no-session-persistence` unless a pinned hook switch
+  reads the transcript, so connect hooks that read it (the digest cost gate's usage, read trim,
+  the serial-lookup note) see none. Transcripts in the real HOME are removed after the session.
 - `--retry-invalid N`: when a round would be dropped from the verdict (an arm not solved, a
   failed round, a file outside the checkout, a gateway restart), run another round in its
   place, up to N extra rounds in all. The dropped round stays in the result file and the
