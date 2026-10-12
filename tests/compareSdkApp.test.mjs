@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pairRounds, comparePair, pairsFor, compareFile } from '../tools/compare-sdk-app.mjs';
+import { pairRounds, comparePair, pairsFor, compareFile, d4Precondition, formatReport } from '../tools/compare-sdk-app.mjs';
 
 const roundOf = (round, costs, solved, recall) => ({
   round,
@@ -66,4 +66,60 @@ test('compareFile summarizes the file and carries the retrieval evidence through
   assert.equal(out.pairs[0].treatment, 'A');
   assert.equal(out.pairs[0].control, 'C');
   assert.deepEqual(out.retrievalEvidence, { key: { state: 'measured', freshEmitted: 0 } });
+});
+
+const bSession = (direct, freshEmitted) => ({ totals: { costUsd: 1 }, retrieval: { requests: 10, evidence: direct ? { direct } : { no_discovery: 10 }, freshEmitted } });
+
+test('d4Precondition counts B sessions that minted: evidence direct AND fresh handles above zero', () => {
+  const rounds = [
+    { round: 1, sessions: { B: bSession(8, 3) } }, // minted
+    { round: 2, sessions: { B: bSession(8, 0) } }, // direct but nothing minted
+    { round: 3, sessions: { B: bSession(0, 5) } }, // mints counted but never direct
+    { round: 4, sessions: { B: bSession(8, null) } }, // mint count unknown: not proof
+    { round: 5, sessions: { B: { totals: { costUsd: 1 } } } }, // no evidence read
+    { round: 6, sessions: { A: { totals: { costUsd: 1 } } } }, // no B session: not counted
+  ];
+  const d = d4Precondition(rounds);
+  assert.equal(d.sessions, 5);
+  assert.equal(d.minted, 1);
+  assert.deepEqual(d.mintedRounds, [1]);
+  assert.equal(d.required, 3);
+  assert.equal(d.pass, false);
+  const ok = d4Precondition([1, 2, 3, 4].map((round) => ({ round, sessions: { B: bSession(round < 3 ? 5 : 0, round < 3 ? 2 : 0) } })));
+  assert.equal(ok.minted, 2);
+  assert.equal(ok.required, 2);
+  assert.equal(ok.pass, true);
+  assert.equal(d4Precondition([]).pass, false, 'no B sessions is never a pass');
+});
+
+test('the report states the D4 precondition before any ratio', () => {
+  const record = {
+    arms: ['A', 'B', 'C'],
+    rounds: [1, 2].map((round) => ({
+      round,
+      sessions: { A: { totals: { costUsd: 1, turns: 10 } }, B: { ...bSession(4, 2), totals: { costUsd: 0.8, turns: 11 } }, C: { totals: { costUsd: 0.9, turns: 10 } } },
+      quality: { A: true, B: true, C: true },
+      recall: { A: 9, B: 9, C: 8 },
+    })),
+  };
+  const text = formatReport(compareFile(record));
+  const d4At = text.indexOf('D4');
+  const firstRatio = text.search(/B\/A|B\/C|A\/C/);
+  assert.ok(d4At >= 0, 'the report names D4');
+  assert.ok(firstRatio > d4At, 'D4 comes before the first pair');
+  for (const pair of ['B/A', 'B/C', 'A/C']) assert.ok(text.includes(pair), `report covers ${pair}`);
+});
+
+test('comparePair carries recall and turns medians for each side', () => {
+  const rounds = [1, 2, 3].map((round) => ({
+    round,
+    sessions: { A: { totals: { costUsd: 1, turns: 10 } }, B: { totals: { costUsd: 0.9, turns: 10 + round } } },
+    quality: { A: true, B: true },
+    recall: { A: 9, B: 8 + round % 2 },
+  }));
+  const p = comparePair(rounds, 'B', 'A');
+  assert.equal(p.recall.control, 9);
+  assert.equal(p.recall.treatment, 9);
+  assert.equal(p.turns.control, 10);
+  assert.equal(p.turns.treatment, 12);
 });

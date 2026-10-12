@@ -97,3 +97,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 }
+
+// RED stubs (replaced in the green step)
+export const d4Precondition = () => ({});
+export const formatReport = () => "";

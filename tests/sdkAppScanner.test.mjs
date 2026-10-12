@@ -21,6 +21,8 @@ import {
   armEnvFor,
   armMcpServers,
   mainScannerPrompt,
+  evidenceDelta,
+  budgetDecision,
 } from '../lib/agentSdkApp.mjs';
 
 const stubTool = (name, _desc, _schema, handler) => ({ name, handler });
@@ -176,32 +178,93 @@ test('foldAppSession extracts parallel spawns and accepted findings, and prices 
   assert.equal(gradeAppSession(s).recall, 1);
 });
 
-test('armEnvFor wires each arm as the setup guide will', () => {
-  const g = { arm: 'anyray-a', gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic', model: 'claude-haiku-4-5', harnessRetrieval: 'off', sessionId: 'sid-A' };
-  const envA = armEnvFor(g);
+test('armEnvFor wires A and B to the gateway with the harness switch, C as the optimize-off baseline', () => {
+  const base = { gatewayUrl: 'https://gw.example', model: 'claude-sonnet-5', sessionId: 'sid' };
+  const envA = armEnvFor({ ...base, arm: 'A', clientKey: 'ark_synthetic-a' });
   assert.equal(envA.ANTHROPIC_BASE_URL, 'https://gw.example');
-  assert.equal(envA.ANTHROPIC_API_KEY, 'ark_synthetic');
+  assert.equal(envA.ANTHROPIC_API_KEY, 'ark_synthetic-a');
   assert.match(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-metadata: .*"tool":"sdk-agent"/);
   assert.match(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval: off/);
-  assert.ok(!('CLAUDE_CODE_USE_BEDROCK' in envA));
-  const envB = armEnvFor({ ...g, arm: 'anyray-b', harnessRetrieval: 'on' });
+  assert.doesNotMatch(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-optimize/);
+  const envB = armEnvFor({ ...base, arm: 'B', clientKey: 'ark_synthetic-b' });
   assert.match(envB.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval: on/);
-  const envC = armEnvFor({ arm: 'direct', bedrock: { profile: 'p', region: 'us-east-1', smallModel: 'm' }, model: 'claude-haiku-4-5' });
-  assert.equal(envC.CLAUDE_CODE_USE_BEDROCK, '1');
-  assert.ok(!('ANTHROPIC_BASE_URL' in envC) && !('ANTHROPIC_CUSTOM_HEADERS' in envC));
+  assert.doesNotMatch(envB.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-optimize/);
+  // C: the same gateway route and model, optimization bypassed, no harness switch.
+  const envC = armEnvFor({ ...base, arm: 'C', clientKey: 'ark_synthetic-c' });
+  assert.equal(envC.ANTHROPIC_BASE_URL, 'https://gw.example');
+  assert.equal(envC.ANTHROPIC_API_KEY, 'ark_synthetic-c');
+  assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-optimize: off/);
+  assert.doesNotMatch(envC.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval/);
+  assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /"tool":"sdk-agent"/);
+  for (const env of [envA, envB, envC]) assert.ok(!('CLAUDE_CODE_USE_BEDROCK' in env));
+  assert.throws(() => armEnvFor({ ...base, arm: 'D', clientKey: 'k' }), /arm/);
 });
 
-test('armMcpServers adds the gateway read path only on gateway arms', () => {
-  const gw = armMcpServers({ arm: 'anyray-a', scannerServer: { s: 1 }, gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic' });
-  assert.ok(gw.servers.scanner);
-  assert.equal(gw.servers.anyray.type, 'http');
-  assert.equal(gw.servers.anyray.url, 'https://gw.example/mcp');
-  assert.equal(gw.servers.anyray.headers['x-anyray-api-key'], 'ark_synthetic');
-  assert.deepEqual(gw.anyrayTools, ['mcp__anyray__anyray_retrieve', 'mcp__anyray__anyray_recall']);
-  const direct = armMcpServers({ arm: 'direct', scannerServer: { s: 1 } });
-  assert.ok(direct.servers.scanner);
-  assert.ok(!('anyray' in direct.servers));
-  assert.deepEqual(direct.anyrayTools, []);
+test('armMcpServers adds the gateway read path on A and B only', () => {
+  for (const arm of ['A', 'B']) {
+    const gw = armMcpServers({ arm, scannerServer: { s: 1 }, gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic' });
+    assert.ok(gw.servers.scanner);
+    assert.equal(gw.servers.anyray.type, 'http');
+    assert.equal(gw.servers.anyray.url, 'https://gw.example/mcp');
+    assert.equal(gw.servers.anyray.headers['x-anyray-api-key'], 'ark_synthetic');
+    assert.deepEqual(gw.anyrayTools, ['mcp__anyray__anyray_retrieve', 'mcp__anyray__anyray_recall']);
+  }
+  const c = armMcpServers({ arm: 'C', scannerServer: { s: 1 }, gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic' });
+  assert.ok(c.servers.scanner);
+  assert.ok(!('anyray' in c.servers));
+  assert.deepEqual(c.anyrayTools, []);
+});
+
+const envelope = (requests, evidence, emitted) => ({
+  state: 'measured',
+  windowHours: 24,
+  runtimes: requests ? [{ clientTool: 'sdk-agent', verdict: 'wired', requests, evidence }] : [],
+  ...(emitted === 'absent' ? {} : { readBack: emitted === undefined ? [] : [{ clientTool: 'sdk-agent', ...(emitted === null ? {} : { emitted }), retrieved: 0, missed: 0 }] }),
+});
+
+test('evidenceDelta is the sdk-agent runtime growth across one session', () => {
+  const before = envelope(10, { no_discovery: 10 }, 0);
+  const after = envelope(31, { no_discovery: 12, direct: 19 }, 4);
+  const d = evidenceDelta(before, after);
+  assert.equal(d.requests, 21);
+  assert.deepEqual(d.evidence, { no_discovery: 2, direct: 19 });
+  assert.equal(d.freshEmitted, 4);
+  // A key that had no runtime yet starts from zero.
+  const first = evidenceDelta(envelope(0), envelope(5, { direct: 5 }, 2));
+  assert.equal(first.requests, 5);
+  assert.deepEqual(first.evidence, { direct: 5 });
+  assert.equal(first.freshEmitted, 2);
+});
+
+test('evidenceDelta never reads an unknown mint count as zero', () => {
+  // readBack measured but the tool row carries no emitted count: legacy rows made it partial.
+  assert.equal(evidenceDelta(envelope(1, { direct: 1 }, 0), envelope(3, { direct: 3 }, null)).freshEmitted, null);
+  // The store did not measure read-back at all.
+  assert.equal(evidenceDelta(envelope(1, { direct: 1 }, 'absent'), envelope(3, { direct: 3 }, 'absent')).freshEmitted, null);
+  // A read that could not answer is no evidence at all, never an empty delta.
+  assert.equal(evidenceDelta({ state: 'unavailable' }, envelope(3, { direct: 3 }, 1)), null);
+  assert.equal(evidenceDelta(envelope(1, { direct: 1 }, 0), { state: 'unavailable' }), null);
+  // A tool with mints but no requests row yet still counts its mints from zero.
+  assert.equal(evidenceDelta(envelope(0, {}, undefined), envelope(2, { direct: 2 }, 3)).freshEmitted, 3);
+});
+
+test('budgetDecision is a hard cap and aborts once three rounds project over it', () => {
+  // Under budget, no projection yet: go.
+  assert.deepEqual(budgetDecision({ roundCosts: [], rounds: 20, budget: 120 }), { stop: false });
+  assert.deepEqual(budgetDecision({ roundCosts: [5, 6], rounds: 20, budget: 120 }), { stop: false });
+  // Three rounds averaging $7 project $140 over 20 rounds: abort.
+  const over = budgetDecision({ roundCosts: [6, 7, 8], rounds: 20, budget: 120 });
+  assert.equal(over.stop, true);
+  assert.equal(over.reason, 'projected_over_budget');
+  assert.equal(over.projectedUsd, 140);
+  // Three rounds averaging $5 project $100: continue.
+  assert.deepEqual(budgetDecision({ roundCosts: [5, 5, 5], rounds: 20, budget: 120 }), { stop: false });
+  // Hard cap: never start a round the costliest round so far would push past the budget.
+  const cap = budgetDecision({ roundCosts: [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6], rounds: 30, budget: 120 });
+  assert.equal(cap.stop, true);
+  assert.equal(cap.reason, 'budget_cap');
+  assert.deepEqual(budgetDecision({ roundCosts: [1, 1, 1], rounds: 3, budget: 8 }), { stop: false });
+  assert.equal(budgetDecision({ roundCosts: [3, 3], rounds: 3, budget: 8 }).reason, 'budget_cap');
 });
 
 test('mainScannerPrompt partitions the rows into three disjoint slices', () => {
