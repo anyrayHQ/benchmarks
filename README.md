@@ -426,7 +426,8 @@ Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 6
 | D | B plus Anyray Connect's local MCP server, offering `anyray_read_batch` |
 
 For arm D the runner first enrolls Connect in a private HOME, once per run, the way an
-agent host does it (`D.key` must be an agent key). It then mounts only Connect's MCP
+agent host does it (`D.key` must be an agent key). It configures no client there: the
+server needs only the enrolled profile. It then mounts only Connect's MCP
 server (`anyray-connect __anyray-mcp-server claude`, HOME set to that private HOME) in
 the app as `anyray-connect`. The app runs under its own environment and never reads that
 HOME. Before the first paid round, the runner checks with `tools/list` that the server

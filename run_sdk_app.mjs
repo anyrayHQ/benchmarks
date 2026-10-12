@@ -218,7 +218,7 @@ async function connectMount({ dir, scenarioFile, gatewayUrl, clientKey }) {
       advertised: probe.tools,
       allowed: tools.allowed,
       disallowed: tools.disallowed,
-      connect: { ...home.setup, checks: (home.checks ?? []).map((c) => ({ name: c.name, ok: c.ok })), seeded: home.seeded },
+      connect: { ...home.setup, seeded: home.seeded },
     },
   };
 }

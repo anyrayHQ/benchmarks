@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
@@ -13,6 +13,7 @@ import {
   connectMcpServerConfig,
   probeMcpTools,
   prepareConnectHome,
+  enrollConnectProfile,
 } from '../lib/connectMcp.mjs';
 import { NO_APP_PROFILE } from '../lib/agentRun.mjs';
 import { parseArgs as parseAppArgs, SCENARIOS } from '../run_sdk_app.mjs';
@@ -135,25 +136,107 @@ test('probeMcpTools reports a server that exits or never answers, without throwi
   assert.match(missing.error, /spawn failed/);
 });
 
-test('prepareConnectHome enrolls a private HOME on the org lane with the D key, always from the no-app profile', () => {
+// A stand-in for connect's spawn: records argv and env, writes the profile a service-key
+// apply commits before any adapter runs, and prints the NDJSON `applied` event. `connected`
+// is empty by default: the D HOME has no ~/.claude, so connect configures no client.
+const fakeRun = ({ status = 0, connected = [], applied = true, profile = (env) => ({ gateway: 'https://gw.example', clientKey: env.ANYRAY_CLIENT_KEY }), stderr = '' } = {}) => {
+  const calls = [];
+  const run = (bin, args, opts) => {
+    calls.push({ bin, args, env: opts.env });
+    const prof = profile(opts.env);
+    if (prof) {
+      mkdirSync(join(opts.env.HOME, '.anyray'), { recursive: true });
+      writeFileSync(join(opts.env.HOME, '.anyray', 'connect.json'), JSON.stringify(prof));
+    }
+    const event = { event: 'applied', connected, queued: [], held: [], manual: [], failed: [], keyKind: 'service' };
+    return { status, stdout: applied ? `${JSON.stringify(event)}\n` : '', stderr };
+  };
+  return { run, calls };
+};
+
+const withHome = (fn) => {
+  const dir = mkdtempSync(join(tmpdir(), 'connect-d-'));
+  const bin = join(dir, 'anyray-connect');
+  writeFileSync(bin, '');
+  const home = join(dir, 'home');
+  mkdirSync(home);
+  try {
+    return fn({ dir, bin, home });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+test('enrollConnectProfile: the agent-host apply, accepted with NO client configured once the profile names the gateway and D key', () => {
+  withHome(({ bin, home }) => {
+    const { run, calls } = fakeRun();
+    const r = enrollConnectProfile({ home, gatewayUrl: 'https://gw.example', clientKey: 'ark_svc_synthetic-d', bin, realHome: '/nonexistent-real-home', run });
+    assert.equal(r.configured, true, r.reason);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].args, ['--gateway', 'https://gw.example', '--tools', 'claude-code', '--org', '--yes', '--json']);
+    assert.equal(calls[0].env.HOME, home);
+    assert.equal(calls[0].env.ANYRAY_CLIENT_KEY, 'ark_svc_synthetic-d');
+    assert.ok(!calls[0].args.join(' ').includes('ark_svc_synthetic-d'), 'the key rides the env, never argv');
+    assert.deepEqual(r.setup.connected, []);
+    assert.equal(r.setup.keyKind, 'service');
+    assert.deepEqual(r.setup.profile, { gatewayMatches: true, keyMatches: true });
+    assert.ok(!JSON.stringify(r).includes('ark_svc_synthetic-d'), 'the result never carries the key');
+  });
+});
+
+test('enrollConnectProfile refuses an apply that did not enroll the profile D needs', () => {
+  const refused = (opts, home, bin) => enrollConnectProfile({ home, gatewayUrl: 'https://gw.example', clientKey: 'ark_svc_synthetic-d', bin, realHome: '/nonexistent-real-home', ...opts });
+  withHome(({ bin, home }) => {
+    const exit = refused({ run: fakeRun({ status: 1, applied: false, stderr: 'rejected key ark_svc_synthetic-d' }).run }, home, bin);
+    assert.equal(exit.configured, false);
+    assert.match(exit.reason, /exited 1/);
+    assert.ok(!exit.reason.includes('ark_svc_synthetic-d'), 'a reason quoting the key is scrubbed');
+  });
+  withHome(({ bin, home }) => assert.match(refused({ run: fakeRun({ applied: false }).run }, home, bin).reason, /no applied event/));
+  withHome(({ bin, home }) => assert.match(refused({ run: fakeRun({ profile: () => null }).run }, home, bin).reason, /no profile/));
+  withHome(({ bin, home }) => assert.match(refused({ run: fakeRun({ profile: (env) => ({ gateway: 'https://other.example', clientKey: env.ANYRAY_CLIENT_KEY }) }).run }, home, bin).reason, /gateway/));
+  withHome(({ bin, home }) => assert.match(refused({ run: fakeRun({ profile: () => ({ gateway: 'https://gw.example', clientKey: 'ark_svc_synthetic-other' }) }).run }, home, bin).reason, /key/));
+  withHome(({ bin, home }) => {
+    // A ~/.claude in the HOME would let connect write Claude Code config there: refused before running it.
+    mkdirSync(join(home, '.claude'));
+    const { run, calls } = fakeRun();
+    assert.match(refused({ run }, home, bin).reason, /\.claude/);
+    assert.equal(calls.length, 0);
+  });
+  withHome(({ home }) => assert.match(refused({ run: fakeRun().run }, home, '/nonexistent/anyray-connect').reason, /not found/));
+  withHome(({ bin, home }) => assert.match(refused({ run: fakeRun().run, clientKey: '' }, home, bin).reason, /no key/));
+  // Never the real HOME.
+  withHome(({ bin, home }) => assert.throws(() => enrollConnectProfile({ home, gatewayUrl: 'https://gw.example', clientKey: 'k', bin, realHome: home, run: fakeRun().run }), /real HOME/));
+});
+
+test('prepareConnectHome enrolls a private HOME with the profile-only enrollment by default, always from the no-app profile', () => {
   const parent = mkdtempSync(join(tmpdir(), 'connect-parent-'));
   try {
-    const calls = [];
-    const configure = (a) => {
-      calls.push(a);
-      return { configured: true, setup: { lane: a.lane }, checks: [{ name: 'c', ok: true }] };
-    };
-    const r = prepareConnectHome({ gatewayUrl: 'https://gw.example', clientKey: 'ark_svc_synthetic', parent, bin: BIN, binPinned: true, configure });
-    assert.equal(r.configured, true);
+    const bin = join(parent, 'anyray-connect');
+    writeFileSync(bin, '');
+    // The dev-gateway failure this guards: connect applied with no client connected.
+    const { run, calls } = fakeRun({ connected: [] });
+    const r = prepareConnectHome({ gatewayUrl: 'https://gw.example', clientKey: 'ark_svc_synthetic', parent, bin, run });
+    assert.equal(r.configured, true, r.reason);
     assert.ok(realpathSync(r.home).startsWith(realpathSync(parent) + sep), 'the HOME is under the bench session dir');
     assert.equal(calls.length, 1);
-    assert.deepEqual({ home: calls[0].home, gatewayUrl: calls[0].gatewayUrl, clientKey: calls[0].clientKey, lane: calls[0].lane, bin: calls[0].bin }, { home: r.home, gatewayUrl: 'https://gw.example', clientKey: 'ark_svc_synthetic', lane: 'org', bin: BIN });
-    assert.equal(readFileSync(join(r.home, NO_APP_PROFILE.path), 'utf8'), NO_APP_PROFILE.content);
-    // Unpinned too: D runs `bin` itself, so no installed app may enroll in its place. A
-    // refused enrollment comes back with its reason.
-    const no = prepareConnectHome({ gatewayUrl: 'https://gw.example', clientKey: 'k', parent, bin: BIN, binPinned: false, configure: () => ({ configured: false, reason: 'no service key' }) });
+    assert.equal(calls[0].env.HOME, r.home);
+    assert.ok(!existsSync(join(r.home, '.claude')), 'no Claude Code config in the connect HOME');
+    // D runs `bin` itself, so no installed app may enroll in its place: the no-app profile
+    // is in place before connect runs.
+    const seen = [];
+    const no = prepareConnectHome({
+      gatewayUrl: 'https://gw.example',
+      clientKey: 'k',
+      parent,
+      bin,
+      configure: (a) => {
+        seen.push(readFileSync(join(a.home, NO_APP_PROFILE.path), 'utf8'));
+        return { configured: false, reason: 'no service key' };
+      },
+    });
+    assert.deepEqual(seen, [NO_APP_PROFILE.content]);
     assert.deepEqual({ configured: no.configured, reason: no.reason }, { configured: false, reason: 'no service key' });
-    assert.equal(readFileSync(join(no.home, NO_APP_PROFILE.path), 'utf8'), NO_APP_PROFILE.content);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }
