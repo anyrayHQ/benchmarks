@@ -396,3 +396,63 @@ test('compare: D pairs against B (the batch read alone) and A, and its precondit
   assert.match(text, /^sdk-app-code-scan \[B,D\]/);
   assert.match(text, /read_batch precondition .*1\/1, need 1 -> PASS/);
 });
+
+// The Agent SDK streams one assistant event per content block, every one carrying the
+// message_start usage (output_tokens a placeholder). Found on the arm D smoke: 14 requests
+// recorded 139 output tokens and three spawns from one response read as maxParallelSpawn 1.
+const blockEvent = (id, agent, block, outputTokens = 3) => ({
+  type: 'assistant',
+  parent_tool_use_id: agent,
+  message: { id, model: 'claude-sonnet-5-5', usage: { input_tokens: 10, cache_read_input_tokens: 1000, cache_creation_input_tokens: 500, output_tokens: outputTokens }, content: [block] },
+});
+
+test('foldAppSession counts spawns per response, not per streamed block', () => {
+  const s = foldAppSession([
+    blockEvent('m1', null, { type: 'tool_use', id: 't1', name: 'Agent', input: {} }),
+    blockEvent('m1', null, { type: 'tool_use', id: 't2', name: 'Agent', input: {} }),
+    blockEvent('m1', null, { type: 'tool_use', id: 't3', name: 'Agent', input: {} }),
+    blockEvent('m2', null, { type: 'tool_use', id: 't4', name: 'Agent', input: {} }),
+    { type: 'result', subtype: 'success', num_turns: 2, result: '' },
+  ], { pricing, model: 'claude-sonnet-5-5' });
+  assert.equal(s.totals.requests, 2);
+  assert.equal(s.totals.subagentSpawns, 4);
+  assert.equal(s.totals.maxParallelSpawn, 3);
+  assert.equal(s.totals.spawnedInParallel, true);
+});
+
+test("foldAppSession prices the session from the result's modelUsage, which carries the real output tokens", () => {
+  const messages = [
+    blockEvent('m1', null, { type: 'text', text: 'a' }),
+    blockEvent('s1', 't1', { type: 'text', text: 'b' }),
+    {
+      type: 'result',
+      subtype: 'success',
+      num_turns: 1,
+      total_cost_usd: 0.5,
+      result: '',
+      modelUsage: { 'claude-sonnet-5-5': { inputTokens: 20, outputTokens: 4000, cacheReadInputTokens: 2000, cacheCreationInputTokens: 1000, webSearchRequests: 0, costUSD: 0.5, contextWindow: 200000, maxOutputTokens: 64000 } },
+    },
+  ];
+  const s = foldAppSession(messages, { pricing, model: 'claude-sonnet-5-5' });
+  // 20 + 2000 * 0.05 + 1000 * 1.25 = 1370 input units at $2/M, 4000 output at $10/M.
+  const expected = (1370 * 2 + 4000 * 10) / 1e6;
+  assert.ok(Math.abs(s.totals.costUsd - expected) < 1e-12, `${s.totals.costUsd} vs ${expected}`);
+  assert.equal(s.totals.costSource, 'modelUsage');
+  assert.equal(s.totals.output, 4000);
+  // The per-request sum stays, labelled: its output is the stream's placeholder.
+  assert.equal(s.totals.requestOutput, 6);
+  assert.ok(s.totals.requestCostUsd < s.totals.costUsd);
+  // The request-level cache counts and modelUsage's agree when modelUsage covers every agent.
+  assert.deepEqual(s.totals.modelUsage, { 'claude-sonnet-5-5': { input: 20, output: 4000, cacheRead: 2000, cacheWrite: 1000, costUsd: 0.5 } });
+});
+
+test('foldAppSession falls back to the per-request sum when the result carries no modelUsage, and says so', () => {
+  const s = foldAppSession([blockEvent('m1', null, { type: 'text', text: 'a' }, 7), { type: 'result', subtype: 'success', num_turns: 1, result: '' }], { pricing, model: 'claude-sonnet-5-5' });
+  assert.equal(s.totals.costSource, 'requests');
+  assert.equal(s.totals.output, 7);
+  assert.equal(s.totals.costUsd, s.totals.requestCostUsd);
+  // An unpriced model in modelUsage gives no cost rather than a partial one.
+  const u = foldAppSession([{ type: 'result', subtype: 'success', num_turns: 1, result: '', modelUsage: { 'unknown-model': { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0 } } }], { pricing, model: 'claude-sonnet-5-5' });
+  assert.equal(u.totals.costUsd, null);
+  assert.equal(u.totals.costSource, 'modelUsage');
+});
