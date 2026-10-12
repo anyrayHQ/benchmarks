@@ -7,8 +7,9 @@ title: "Claude Agent SDK security scanner over synthetic recorded traffic + a li
 # ReportFindings + answerText contract; the ten keyFacts are the markers each vulnerability
 # carries (synthetic by construction). The modelled origin is Novee's scanner (ANY-559).
 #
-# Arms (set by the runner, not here): A = gateway with x-anyray-harness-retrieval off,
-# B = gateway with it on, C = direct Bedrock. All synthetic data; no repo checkout.
+# Arms (set by the runner, not here), each on its own gateway key: A = harness-retrieval
+# off, B = on, C = the optimize-off baseline bypass (x-anyray-optimize: off, no /mcp read
+# path). All synthetic data; no repo checkout.
 task: >-
   Scan a web service for security vulnerabilities across its recorded traffic and live
   endpoints, quoting the exact offending string for each finding.

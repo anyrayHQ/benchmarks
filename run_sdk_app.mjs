@@ -1,40 +1,41 @@
-// Runner for the sdk-app-scanner lane (ANY-1093). Each round runs the selected arms —
-// A (gateway, x-anyray-harness-retrieval off), B (gateway, on), C (direct Bedrock) — as a
-// Claude Agent SDK application, and records per session: cost, turns, subagent spawns and
-// whether they went out in parallel, findings recall, and (gateway arms) the key's
-// retrieval evidence (evidenceClass counts + fresh handles) for the D4 mint precondition.
-// Compare the ratios with tools/compare-sdk-app.mjs.
+// Runner for the sdk-app-scanner lane (ANY-1093). Each round runs the selected arms
+// concurrently as a Claude Agent SDK application, every arm on the same gateway, route and
+// model but on its OWN key — A (x-anyray-harness-retrieval off), B (on), C (the
+// optimize-off baseline bypass, no /mcp read path) — and records per session: cost, turns,
+// subagent spawns and whether they went out in parallel, findings recall, and the D4
+// evidence: the growth of the arm key's /connect/self-check report across the session
+// (classified sdk-agent requests by evidence class, fresh handles minted). Compare with
+// tools/compare-sdk-app.mjs.
 //
-// It never prints a key, bounds spend with --budget, and aborts a hung session rather than
-// leaving a child to be pkill'd. Synthetic fixtures only.
+// Keys come from 0600 files named <arm>.key in --keys-dir; a key is never on argv and never
+// printed. --budget (default $120) is a hard cap: a round never starts if the costliest
+// round so far would push the total past it, and the run aborts when the first three rounds
+// project past it. Synthetic fixtures only.
 //
-//   node run_sdk_app.mjs --arms A,C --rounds 2 --model claude-haiku-4-5 \
-//     --gateway <url> --client-key <ark_…> --key-id <id> --admin-key <aak_…|token> \
-//     --budget 15 --label dryrun
-//
-// Flags may instead come from the environment: ANYRAY_GATEWAY_URL, ANYRAY_BENCH_CLIENT_KEY
-// (or ANYRAY_CLIENT_KEY), ANYRAY_ADMIN_KEY, ANYRAY_SDK_APP_KEY_ID, plus the ANYRAY_BEDROCK_*
-// options the shared bedrock helper reads.
+//   node run_sdk_app.mjs --gateway <url> --keys-dir <dir with A.key B.key C.key> \
+//     --model claude-sonnet-5-5 --rounds 20 --budget 120 --label <label>
 
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { bedrockOptions, bedrockSmallModel, probeGatewayRoute, assertBedrockRoute } from './lib/bedrock.mjs';
-import { resolveBenchKey } from './lib/benchKey.mjs';
-import { runSdkAppAgent } from './lib/agentSdkApp.mjs';
+import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision } from './lib/agentSdkApp.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
 import { VULNERABILITIES, httpVulnerabilities } from './tools/traffic-fixture/vulnerabilities.mjs';
 
 const ROOT = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
-const ARMS = new Set(['A', 'B', 'C']);
-const HARNESS = { A: 'off', B: 'on', C: null };
+export const DEFAULT_BUDGET_USD = 120;
+// The self-check is served from a 15 s evidence cache and the last spend rows land just
+// after the response, so the "after" read waits past both and repeats until it is stable.
+const SELF_CHECK_SETTLE_MS = 20_000;
+const SELF_CHECK_MAX_READS = 4;
 
 export function parseArgs(argv, env = process.env) {
-  const a = { arms: ['A', 'B', 'C'], rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: Infinity, keyId: env.ANYRAY_SDK_APP_KEY_ID || null, adminKey: env.ANYRAY_ADMIN_KEY || null, gateway: null, clientKey: null };
+  const a = { arms: Object.keys(ARMS), rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     if (v === '--arms') a.arms = String(argv[++i] ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -42,79 +43,75 @@ export function parseArgs(argv, env = process.env) {
     else if (v === '--model') a.model = argv[++i];
     else if (v === '--label') a.label = argv[++i];
     else if (v === '--budget') a.budget = Number(argv[++i]);
-    else if (v === '--key-id') a.keyId = argv[++i];
-    else if (v === '--admin-key') a.adminKey = argv[++i];
     else if (v === '--gateway') a.gateway = argv[++i];
-    else if (v === '--client-key') a.clientKey = argv[++i];
+    else if (v === '--keys-dir') a.keysDir = argv[++i];
     else throw new Error(`unknown flag ${v}`);
   }
-  if (!a.arms.length || a.arms.some((x) => !ARMS.has(x))) throw new Error('--arms takes a comma list of A, B, C');
+  if (!a.arms.length || a.arms.some((x) => !Object.hasOwn(ARMS, x))) throw new Error(`--arms takes a comma list of ${Object.keys(ARMS).join(', ')}`);
   a.arms = [...new Set(a.arms)].sort();
   if (!Number.isInteger(a.rounds) || a.rounds < 1) throw new Error('--rounds must be a positive integer');
-  if (!(a.budget > 0)) throw new Error('--budget must be a positive number of dollars');
+  if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error('--budget must be a positive number of dollars');
+  if (!a.keysDir) throw new Error('--keys-dir is required: a directory with one 0600 <arm>.key file per arm');
   return a;
 }
 
-/**
- * The direct arm's Bedrock model id and small/fast model, mirroring run_agent.mjs's
- * resolveBedrock: ANYRAY_BEDROCK_MODEL pins it, else one 1-token request through the
- * gateway's org lane reads back the id the gateway serves (which must be Bedrock).
- */
-export async function resolveBedrock({ gatewayUrl, model, clientKey, env = process.env, probe = probeGatewayRoute } = {}) {
-  const opts = bedrockOptions(env);
-  const withSmall = (b) => ({ ...b, ...bedrockSmallModel(b.model, opts.smallModel) });
-  if (!gatewayUrl) {
-    if (!opts.model) throw new Error('arm C without a gateway needs ANYRAY_BEDROCK_MODEL (the Bedrock model id)');
-    return withSmall({ ...opts, modelSource: 'ANYRAY_BEDROCK_MODEL' });
+/** One key per arm from `<dir>/<arm>.key`. Refuses a file group or others can read, an
+ *  empty one, and two arms sharing a key (the per-session evidence is read per key). */
+export function readArmKeys(dir, arms) {
+  const keys = {};
+  for (const arm of arms) {
+    const file = join(dir, `${arm}.key`);
+    const mode = statSync(file).mode & 0o777;
+    if (mode & 0o077) throw new Error(`${file} is mode ${mode.toString(8)}; chmod 600 it`);
+    const key = readFileSync(file, 'utf8').trim();
+    if (!key) throw new Error(`${file} is empty`);
+    keys[arm] = key;
   }
-  const route = await probe({ gatewayUrl, clientKey, model });
-  const served = assertBedrockRoute(route, { pinned: opts.model });
-  return withSmall({ ...opts, model: opts.model ?? served, modelSource: opts.model ? 'ANYRAY_BEDROCK_MODEL' : 'gateway route probe', gatewayServedAs: served ?? route.model });
+  if (new Set(Object.values(keys)).size !== arms.length) throw new Error('each arm needs its own key');
+  return keys;
 }
 
-/** The key's retrieval evidence for the sdk-agent runtime, from GET /admin/v1/keys/:id
- *  (the console's own read): evidenceClass counts and fresh handles minted. Never throws. */
-export async function readKeyRetrieval(gatewayUrl, adminKey, keyId, { fetchImpl = fetch } = {}) {
-  if (!gatewayUrl || !adminKey || !keyId) return { unavailable: 'need gateway, admin key and key id' };
-  try {
-    const res = await fetchImpl(`${gatewayUrl}/admin/v1/keys/${encodeURIComponent(keyId)}`, { headers: { authorization: `Bearer ${adminKey}` } });
-    if (!res.ok) return { unavailable: `GET /admin/v1/keys/:id ${res.status}` };
-    const body = await res.json();
-    const rr = body.record?.retrievalRuntimes ?? body.retrievalRuntimes;
-    if (!rr || rr.state !== 'measured') return { state: rr?.state ?? 'unknown', windowHours: rr?.windowHours };
-    // The store may label a runtime by its user-agent, not the x-anyray-metadata tool,
-    // so surface every runtime's evidence and the sdk-agent match if one exists; the D4
-    // precondition is read off evidenceClass + fresh handles whichever label carried it.
-    const sdk = (rr.runtimes ?? []).find((r) => r.clientTool === 'sdk-agent');
-    const readBack = (rr.readBack ?? []).find((r) => r.clientTool === 'sdk-agent');
-    return {
-      state: 'measured',
-      windowHours: rr.windowHours,
-      runtimes: (rr.runtimes ?? []).map((r) => ({ clientTool: r.clientTool, verdict: r.verdict, requests: r.requests, evidence: r.evidence })),
-      readBack: (rr.readBack ?? []).map((r) => ({ clientTool: r.clientTool, emitted: r.emitted ?? null, retrieved: r.retrieved, missed: r.missed })),
-      sdkAgent: sdk ? { verdict: sdk.verdict, requests: sdk.requests, evidence: sdk.evidence, freshEmitted: readBack?.emitted ?? null } : null,
-    };
-  } catch (e) {
-    return { unavailable: String(e?.name ?? e).slice(0, 80) };
+const readAll = async (gatewayUrl, keys, arms) => {
+  const out = {};
+  for (const arm of arms) out[arm] = await readSelfCheckRetrieval(gatewayUrl, keys[arm]);
+  return out;
+};
+
+/** The "after" reads: wait out the evidence cache, then re-read until two consecutive
+ *  reads agree for every arm (the last rows have landed) or the read budget runs out. */
+const settledReads = async (gatewayUrl, keys, arms) => {
+  let prev = null;
+  let cur = null;
+  for (let n = 0; n < SELF_CHECK_MAX_READS; n++) {
+    await sleep(SELF_CHECK_SETTLE_MS);
+    cur = await readAll(gatewayUrl, keys, arms);
+    if (prev && arms.every((arm) => JSON.stringify(prev[arm]) === JSON.stringify(cur[arm]))) break;
+    prev = cur;
   }
-}
+  return cur;
+};
+
+/** A session's dollars for the budget: the priced usage, else the SDK's own figure. */
+const sessionCost = (s) => (Number.isFinite(s?.totals?.costUsd) ? s.totals.costUsd : Number.isFinite(s?.totals?.sdkCostUsd) ? s.totals.sdkCostUsd : 0);
+
+const evidenceLine = (ev) => {
+  if (!ev) return 'evidence unread';
+  const classes = Object.entries(ev.evidence).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
+  return `evidence ${ev.requests} req (${classes}), fresh handles ${ev.freshEmitted ?? 'unknown'}`;
+};
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const cfg = loadConfig();
-  const gatewayUrl = (args.gateway || cfg.run.gatewayUrl || '').replace(/\/$/, '');
-  const clientKey = args.clientKey || resolveBenchKey(process.env, () => {}).key;
-  const needsGateway = args.arms.some((x) => x !== 'C');
-  if (needsGateway && (!gatewayUrl || !clientKey)) throw new Error('gateway arms need --gateway and --client-key (or ANYRAY_GATEWAY_URL / ANYRAY_BENCH_CLIENT_KEY)');
+  // loadConfig applies config.yaml's blocked_gateways to the flag as well as the env.
+  const cfg = loadConfig({ env: { ...process.env, ...(args.gateway && { ANYRAY_GATEWAY_URL: args.gateway }) } });
+  const gatewayUrl = cfg.run.gatewayUrl;
+  if (!gatewayUrl) throw new Error('every arm runs through the gateway: pass --gateway or set ANYRAY_GATEWAY_URL');
+  const keys = readArmKeys(args.keysDir, args.arms);
 
   const dir = join(ROOT, 'scenarios', 'sdk-app-scanner');
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
   const rows = scenarioFile.fixture?.rows ?? 24;
   const seed = scenarioFile.fixture?.seed ?? 1337;
-
-  // Direct arm (C) model: the Bedrock id, read back through the gateway's route when one
-  // is available. Resolve only when needed.
-  const bedrock = args.arms.includes('C') ? await resolveBedrock({ gatewayUrl, model: args.model, clientKey }).catch((e) => { throw new Error(`cannot resolve Bedrock for arm C: ${e.message}`); }) : null;
 
   const out = join(ROOT, 'results', 'agent');
   mkdirSync(out, { recursive: true });
@@ -130,34 +127,38 @@ async function main() {
   Object.assign(record, {
     scenario: 'sdk-app-scanner',
     model: args.model,
-    provider: 'bedrock',
     arms: args.arms,
-    gateway: gatewayUrl || null,
-    ...(bedrock && { bedrock: { model: bedrock.model, region: bedrock.region, smallModel: bedrock.smallModel } }),
+    armSpecs: Object.fromEntries(args.arms.map((arm) => [arm, ARMS[arm]])),
+    gateway: gatewayUrl,
     fixture: { rows, seed, markers: VULNERABILITIES.length, planted: planted.planted },
-    budgetUsd: args.budget === Infinity ? null : args.budget,
+    budgetUsd: args.budget,
   });
   const save = () => writeFileSync(file, JSON.stringify(record, null, 2));
   save();
 
   const stamp = Date.now();
   const first = Math.max(0, ...record.rounds.map((r) => r.round ?? 0)) + 1;
-  console.log(`sdk-app-scanner [${args.arms.join(',')}] rounds ${first}–${first + args.rounds - 1}, model ${args.model}${bedrock ? `, direct ${bedrock.model}` : ''}`);
-  let spent = 0;
+  console.log(`sdk-app-scanner [${args.arms.join(',')}] rounds ${first}–${first + args.rounds - 1}, model ${args.model}, budget $${args.budget}`);
+  const roundCosts = [];
   try {
     for (let k = 0; k < args.rounds; k++) {
       const round = first + k;
-      if (spent >= args.budget) { console.log(`  budget $${args.budget} reached ($${spent.toFixed(3)}); stopping before round ${round}`); break; }
+      const budget = budgetDecision({ roundCosts, rounds: args.rounds, budget: args.budget });
+      if (budget.stop) {
+        record.budgetStop = { ...budget, beforeRound: round };
+        save();
+        console.log(`  budget stop before round ${round}: ${JSON.stringify(budget)}`);
+        break;
+      }
       const startedAt = new Date().toISOString();
+      const before = await readAll(gatewayUrl, keys, args.arms);
       const runArm = (arm) =>
         runSdkAppAgent({
-          arm: arm === 'C' ? 'direct' : 'anyray-' + arm.toLowerCase(),
+          arm,
           scenario: { ...scenarioFile, cwd: workDir },
           model: args.model,
           gatewayUrl,
-          clientKey,
-          bedrock,
-          harnessRetrieval: HARNESS[arm],
+          clientKey: keys[arm],
           sessionId: `sdk-app-scanner-${arm}-r${round}-${stamp}`,
           dbPath,
           fixtureUrl: fixture.url,
@@ -166,50 +167,46 @@ async function main() {
           pricing: cfg.pricing,
           timeoutMs: (scenarioFile.timeoutMin ?? 10) * 60000,
           deps: { query, createSdkMcpServer, tool },
-        }).then((s) => ({ ...s, arm }));
+        });
       const settled = await Promise.allSettled(args.arms.map(runArm));
+      const after = await settledReads(gatewayUrl, keys, args.arms);
       const sessions = {};
       const quality = {};
       const recall = {};
       for (const [i, s] of settled.entries()) {
         const arm = args.arms[i];
+        const retrieval = evidenceDelta(before[arm], after[arm]);
+        const reads = { before: before[arm]?.state ?? 'unavailable', after: after[arm]?.state ?? 'unavailable' };
         if (s.status === 'rejected') {
-          sessions[arm] = { error: String(s.reason?.message ?? s.reason).slice(0, 160) };
+          sessions[arm] = { arm, error: String(s.reason?.name ?? 'error').slice(0, 80), retrieval, selfCheck: reads };
           quality[arm] = false;
           recall[arm] = 0;
           continue;
         }
         const v = s.value;
-        sessions[arm] = { arm, harnessRetrieval: HARNESS[arm], totals: v.totals, recall: v.recall, found: v.found, missed: v.missed, solved: v.solved, wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId };
-        quality[arm] = v.solved;
+        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId, retrieval, selfCheck: reads };
+        quality[arm] = v.completed;
         recall[arm] = v.recall;
-        if (Number.isFinite(v.totals?.costUsd)) spent += v.totals.costUsd;
       }
-      const r = { round, startedAt, endedAt: new Date().toISOString(), sessions, quality, recall };
-      record.rounds.push(r);
+      const roundCost = args.arms.reduce((n, arm) => n + sessionCost(sessions[arm]), 0);
+      roundCosts.push(roundCost);
+      record.rounds.push({ round, startedAt, endedAt: new Date().toISOString(), costUsd: roundCost, sessions, quality, recall });
       save();
       for (const arm of args.arms) {
         const s = sessions[arm];
-        if (s.error && !s.totals) { console.log(`  round ${round} ${arm}: error ${s.error}`); continue; }
+        if (!s.totals) { console.log(`  round ${round} ${arm}: error ${s.error} · ${evidenceLine(s.retrieval)}`); continue; }
         const t = s.totals;
-        console.log(`  round ${round} ${arm} (${HARNESS[arm] ?? 'direct'}): $${t.costUsd?.toFixed(4) ?? 'n/a'} · ${t.turns} turns · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, parallel ${t.spawnedInParallel}) · recall ${s.recall}/${VULNERABILITIES.length} · ${s.solved ? 'solved' : 'NOT solved'}${s.error ? ` [${s.error}]` : ''}`);
+        const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}`;
+        console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} · ${t.turns} turns · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, parallel ${t.spawnedInParallel}) · recall ${s.recall}/${VULNERABILITIES.length} · ${s.completed ? 'completed' : 'NOT completed'}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
       }
-      console.log(`  round ${round} spent so far $${spent.toFixed(3)}`);
+      console.log(`  round ${round} $${roundCost.toFixed(3)}; spent so far $${roundCosts.reduce((a, b) => a + b, 0).toFixed(3)}`);
     }
   } finally {
     await fixture.close();
     rmSync(fixtureDir, { recursive: true, force: true });
     rmSync(workDir, { recursive: true, force: true });
   }
-
-  // D4: the key's retrieval evidence for the gateway arms (shared key, so read once).
-  if (needsGateway && args.adminKey && args.keyId) {
-    const ev = await readKeyRetrieval(gatewayUrl, args.adminKey, args.keyId);
-    record.retrievalEvidence = { key: ev };
-    save();
-    console.log(`  retrieval evidence (key ${args.keyId.slice(0, 6)}…): ${JSON.stringify(ev)}`);
-  }
-  console.log(`\nwrote ${file}; total spend $${spent.toFixed(3)}`);
+  console.log(`\nwrote ${file}; total spend $${roundCosts.reduce((a, b) => a + b, 0).toFixed(3)}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
