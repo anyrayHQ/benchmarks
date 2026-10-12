@@ -245,6 +245,20 @@ export function parseSeedHome(spec) {
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 
+/**
+ * anyray-connect turns its main-agent read hint and Explore-subagent decline off when
+ * the Claude Code session runs under `--max-turns` below this (WORK_MODE_MIN_TURN_CAP in
+ * the monorepo's connect/src/util/readBatchNudge.ts). It reads the cap off the process
+ * Claude Code names in CLAUDE_PID, which is the session this harness spawns, so a
+ * scenario capped lower measures connect without the mode production sessions (no cap)
+ * get. Keep the two in step.
+ */
+export const CONNECT_WORK_MODE_MIN_TURNS = 80;
+
+/** Whether connect's work mode is on for a Claude Code scenario as run; null for an SDK scenario. */
+export const connectWorkMode = (name, scenario) =>
+  SDK_SCENARIOS.includes(name) ? null : (scenario.maxTurns ?? 40) >= CONNECT_WORK_MODE_MIN_TURNS ? 'on' : 'off_turn_cap';
+
 export function parseArgs(argv, env = process.env) {
   const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, treatment: 'b', kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
   const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
@@ -1094,6 +1108,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   rmSync(probe, { recursive: true, force: true });
   record.compare = args.compare;
   record.label = args.label;
+  // A cap below connect's floor measures connect without the mode a production session has.
+  record.connectWorkMode = connectWorkMode(args.scenario, scenario);
+  if (record.connectWorkMode === 'off_turn_cap') {
+    console.warn(`turn cap ${scenario.maxTurns ?? 40} is below ${CONNECT_WORK_MODE_MIN_TURNS}: anyray-connect's read hint and Explore decline are off for this run (production sessions have no cap)`);
+  }
   record.gateway = run.gatewayUrl;
   record.readTrim = args.readTrim;
   record.kinds = args.kinds; // what the Anyray arm requested (x-anyray-optimization-kinds)

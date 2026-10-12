@@ -24,5 +24,7 @@ followups:
   - "Read tree.go in full, then explain how the router matches a path with parameters and wildcards."
   - "Finally: list every file you changed and summarize each change in one line."
 check: "go test ./..."
-maxTurns: 30
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
 timeoutMin: 20
