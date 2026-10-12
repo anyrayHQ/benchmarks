@@ -340,15 +340,20 @@ test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slo
   assert.match(s.b.readTrim, /^on for this session only/);
 });
 
-test('--persist-session: both arms keep their transcript, and the request records it', () => {
-  const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--persist-session']);
-  assert.equal(args.persistSession, true);
+test('sessions persist by default; --no-persist-session turns it off for both arms, and the request records which', () => {
   const arms = { a: 'direct', b: 'anyray' };
-  assert.equal(slotOptions(args, arms, 'a').persistSession, true);
-  assert.equal(slotOptions(args, arms, 'b').persistSession, true);
-  assert.equal(requestRecord(args).persistSession, true);
   const plain = parseArgs(['--scenario', 's', '--kinds', 'observation_mask']);
+  assert.equal('persistSession' in slotOptions(plain, arms, 'a'), false, 'runAgent persists by default');
   assert.equal('persistSession' in slotOptions(plain, arms, 'b'), false);
-  assert.equal('persistSession' in requestRecord(plain), false);
-  assert.throws(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--persist-session']), /sdk-docs supports/);
+  assert.equal(requestRecord(plain).persistSession, true);
+  assert.equal(requestRecord(parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--persist-session'])).persistSession, true);
+  const off = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--no-persist-session']);
+  assert.equal(slotOptions(off, arms, 'a').persistSession, false);
+  assert.equal(slotOptions(off, arms, 'b').persistSession, false);
+  assert.equal(requestRecord(off).persistSession, false);
+  // SDK scenarios run no Claude Code: no transcript to keep, and either flag is refused.
+  assert.doesNotThrow(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock']));
+  for (const flag of ['--persist-session', '--no-persist-session']) {
+    assert.throws(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', flag]), /sdk-docs supports/);
+  }
 });
