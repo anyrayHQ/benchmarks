@@ -249,7 +249,8 @@ when the previous answer is done. `patch:` is one file or a list, applied in ord
 single commit, so the planted bug can't be found with `git diff` or `git log`. The gin
 scenarios also apply `fixed-ports-lock.patch`: several gin tests bind fixed ports, and
 both arms run `go test` on one machine at once, so the patch adds a `TestMain` that makes
-concurrent runs of that package's tests take turns. No test or library code changes.
+concurrent runs of that package's tests take turns, and gives each test binary its own
+temp dir, so `TestUnixSocket` never meets another run's socket. No test or library code changes.
 `followupDelaySec` idles before each follow-up, the way a person pausing would: one
 number for every follow-up, or a list with one per follow-up (the last repeats).
 `gatewaySettleSec` waits that long after the session before reading the gateway's ping

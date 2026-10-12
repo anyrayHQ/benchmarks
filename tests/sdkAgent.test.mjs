@@ -269,3 +269,55 @@ test('a failed SDK round names the arm that failed and its cause', async () => {
     assert.equal(result.record.rounds[0].error, 'direct: SDK Bedrock request failed (exit 255): Read timeout on endpoint URL');
   } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('--retry-invalid runs an SDK round again when an arm answered nothing', async () => {
+  const label = `offline-retry-${process.pid}-${Date.now()}`;
+  const args = parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--rounds', '1', '--retry-invalid', '1', '--label', label]);
+  const workDirs = [];
+  const lines = [];
+  const deps = {
+    clientKey: 'fake-key',
+    resolveBedrock: async () => bedrock,
+    prepareRepo: () => { const dir = fresh(); workDirs.push(dir); return dir; },
+    describeRepo: () => ({ files: 1 }),
+    // Round 1's direct arm ends without an answer (as when it runs out of answer tokens); round 2 is clean.
+    runSdkAgent: async ({ arm, scenario, sessionId }) => {
+      const empty = arm === 'direct' && /-r1-/.test(sessionId);
+      return { requests: [], totals: { costUsd: arm === 'direct' ? 0.00002 : 0.00001, input: 10, cacheRead: 0, cacheWrite: 0, output: 1, turns: 1, requests: 1, outsideCheckout: 0 }, result: { text: empty ? '' : 'cited' }, citations: empty ? null : { total: scenario.citations.min, resolved: scenario.citations.min }, setup: {} };
+    },
+    log: (s) => lines.push(s),
+  };
+  const cfg = { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid', model: 'claude-sonnet-5' }, pricing };
+  let file;
+  try {
+    const { record, file: f } = await runComparison(args, cfg, { deps });
+    file = f;
+    assert.deepEqual(record.rounds.map((r) => [r.round, r.quality.a && r.quality.b]), [[1, false], [2, true]]);
+    assert.deepEqual(record.retries, [{ round: 1, reasons: ['not solved'], retriedAs: 2 }]);
+    assert.equal(record.request.retryInvalid, 1);
+    assert.equal(record.verdict.n, 1);
+    assert.ok(lines.some((l) => /round 1 is not usable \(not solved\); running round 2 in its place \(retry 1\/1\)/.test(l)));
+  } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--retry-invalid retries a failed SDK round too, and stops at N', async () => {
+  const label = `offline-retry-fail-${process.pid}-${Date.now()}`;
+  const args = parseArgs(['--scenario', 'framework-docs', '--provider', 'bedrock', '--rounds', '1', '--retry-invalid', '1', '--label', label]);
+  const workDirs = [];
+  const deps = {
+    clientKey: 'fake-key',
+    resolveBedrock: async () => bedrock,
+    prepareRepo: () => { const dir = fresh(); workDirs.push(dir); return dir; },
+    describeRepo: () => ({ files: 1 }),
+    runSdkAgent: async ({ arm }) => { if (arm === 'direct') throw new Error('Bedrock throttled'); return { requests: [], totals: { costUsd: 0.00001 }, result: { text: 'x' }, citations: null, setup: {} }; },
+    log: () => {},
+  };
+  const cfg = { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid', model: 'claude-sonnet-5' }, pricing };
+  let file;
+  try {
+    const { record, file: f } = await runComparison(args, cfg, { deps });
+    file = f;
+    assert.deepEqual(record.rounds.map((r) => [r.round, r.error]), [[1, 'direct: Bedrock throttled'], [2, 'direct: Bedrock throttled']]);
+    assert.deepEqual(record.retries.map((x) => x.retriedAs), [2]);
+  } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
+});
