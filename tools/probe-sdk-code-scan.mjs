@@ -92,7 +92,7 @@ async function main() {
       args: server.args,
       env: server.env,
       cwd: work,
-      call: { name: READ_BATCH_TOOL, arguments: { reads: [{ path: s1.files[0], offset: 1, limit: 40 }, { path: s2.files[0], offset: 1, limit: 40 }] } },
+      call: { name: READ_BATCH_TOOL, arguments: { reads: [{ path: s1.audit[0].file, offset: 1, limit: 40 }, { path: s2.audit[0].file, offset: 1, limit: 40 }] } },
     });
     report.server = { command: server.command.split('/').pop(), args: server.args, envKeys: Object.keys(server.env), alwaysLoad: server.alwaysLoad, ...probe };
     if (probe.error) throw new Error(`connect's MCP server: ${probe.error}`);

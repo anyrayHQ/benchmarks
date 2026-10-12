@@ -409,11 +409,14 @@ file.
 ### Agent SDK app: code scan with Connect's batch read
 
 `sdk-app-code-scan` is a Claude Agent SDK application, run by `run_sdk_app.mjs`, not
-`run_agent.mjs`. Its main agent sends three `auditor` subagents out in parallel over three
-slices of the pinned Python codebase. They read the code with the SDK's Read, Grep and
-Glob tools. `seeded-vulns.patch` plants nine vulnerabilities, three per slice, and is
-imported as one commit. A round is graded on how many of the nine key facts the report and
-its accepted ReportFindings quote.
+`run_agent.mjs`. Its main agent sends three `auditor` subagents out in parallel, each with
+a list of security-critical functions in the pinned Python codebase. They trace them with
+the SDK's Read, Grep and Glob tools. `seeded-vulns.patch` plants nine vulnerabilities,
+three per slice, and is imported as one commit. Each audited function calls a helper that
+decides the outcome, defined at the end of another module (eight of nine past line 1,000),
+so finding one takes a search, then reads of located ranges in several files. A round is
+graded on how many of the nine deciding constants the report and its accepted
+ReportFindings quote.
 
 Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 600) in
 `--keys-dir`:

@@ -230,7 +230,7 @@ async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing
     total: scenarioFile.keyFacts.length,
     record: {
       repo: { git: scenarioFile.repo.git, ref: scenarioFile.repo.ref, patch: scenarioFile.patch, hidePatch: Boolean(scenarioFile.hidePatch) },
-      slices: scenarioFile.slices.map((s) => ({ name: s.name, files: s.files })),
+      slices: scenarioFile.slices.map((s) => ({ name: s.name, audit: s.audit })),
       keyFacts: scenarioFile.keyFacts.length,
       ...(d && { connectMcp: d.record }),
     },

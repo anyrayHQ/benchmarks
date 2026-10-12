@@ -28,58 +28,102 @@ const BIN = '/opt/fake/anyray-connect';
 const HOME = '/opt/fake/connect-home';
 const PROBED = [{ name: 'anyray_retrieve' }, { name: 'anyray_recall' }, { name: READ_BATCH_TOOL }];
 const connectFor = () => ({ name: CONNECT_MCP_SERVER, server: connectMcpServerConfig({ home: HOME, bin: BIN, path: '/usr/bin' }), tools: connectArmTools(PROBED) });
-const base = { scenario: { maxTurns: 16, subagentMaxTurns: 60, slices: [{ name: 's', files: ['a.py'] }], keyFacts: ['X'] }, work: '/work/checkout', model: 'claude-sonnet-5-5', gatewayUrl: 'https://gw.example', sessionId: 'sid' };
+const base = { scenario: { maxTurns: 16, subagentMaxTurns: 60, slices: [{ name: 's', audit: [{ file: 'a.py', functions: ['f'] }] }], keyFacts: ['X'] }, work: '/work/checkout', model: 'claude-sonnet-5-5', gatewayUrl: 'https://gw.example', sessionId: 'sid' };
 const READ_BATCH = `mcp__${CONNECT_MCP_SERVER}__${READ_BATCH_TOOL}`;
 
 // --- the scenario and its seeded patch --------------------------------------------------
 
-test('the scenario pins a repo, hides its patch, and names three slices and nine key facts', () => {
+test('the scenario pins a repo, hides its patch, and names three slices of functions and nine key facts', () => {
   const s = scenario();
   assert.match(s.repo.ref, /^[0-9a-f]{40}$/);
   assert.equal(s.patch, 'seeded-vulns.patch');
   assert.equal(s.hidePatch, true);
   assert.equal(s.slices.length, 3);
+  for (const sl of s.slices) {
+    assert.ok(sl.audit.length > 0, `${sl.name} audits something`);
+    for (const a of sl.audit) assert.ok(a.file && a.functions.length > 0, `${sl.name}: ${a.file} names functions`);
+  }
   assert.equal(s.keyFacts.length, 9);
   assert.equal(new Set(s.keyFacts).size, 9);
+  assert.deepEqual(s.seeded.map((x) => x.fact).sort(), [...s.keyFacts].sort(), 'every fact has a seeded entry');
   assert.ok(s.maxTurns > 0 && s.subagentMaxTurns > 0 && s.timeoutMin > 0);
 });
 
-test('every key fact is planted by the patch on an added line, in a file of exactly one slice, three per slice', () => {
-  const s = scenario();
-  const files = new Map(s.slices.flatMap((sl, i) => sl.files.map((f) => [f, i])));
-  // Added lines by file, and every line the patch keeps or removes.
+/** The patch's added lines per file, each with its line number in the patched file, and every line it keeps or removes. */
+const patchLines = () => {
   const added = new Map();
   const kept = [];
   let file = null;
-  for (const line of patchText().split('\n')) {
-    const m = /^\+\+\+ b\/(.+)$/.exec(line);
-    if (m) {
-      file = m[1];
+  let line = 0;
+  for (const l of patchText().split('\n')) {
+    const f = /^\+\+\+ b\/(.+)$/.exec(l);
+    if (f) {
+      file = f[1];
       continue;
     }
-    if (line.startsWith('---') || line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('@@')) continue;
-    if (line.startsWith('+')) added.set(file, [...(added.get(file) ?? []), line]);
-    else kept.push(line);
+    const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+    if (h) {
+      line = Number(h[1]);
+      continue;
+    }
+    if (l.startsWith('---') || l.startsWith('diff ') || l.startsWith('index ')) continue;
+    if (l.startsWith('+')) {
+      added.set(file, [...(added.get(file) ?? []), { n: line, text: l.slice(1) }]);
+      line++;
+    } else if (l.startsWith('-')) kept.push(l);
+    else {
+      kept.push(l);
+      line++;
+    }
   }
+  return { added, kept };
+};
+
+test('each vulnerability sits behind a call chain: the audited file calls a helper whose deciding constant is only in another range, deep in its module', () => {
+  const s = scenario();
+  const { added, kept } = patchLines();
+  const audited = (i) => new Set(s.slices[i].audit.map((a) => a.file));
   const perSlice = s.slices.map(() => 0);
-  for (const fact of s.keyFacts) {
-    const where = [...added].filter(([, lines]) => lines.some((l) => l.includes(fact))).map(([f]) => f);
-    assert.equal(where.length, 1, `${fact} must be planted in exactly one file, found ${where.join(', ') || 'none'}`);
-    assert.ok(files.has(where[0]), `${fact} is planted in ${where[0]}, which no slice audits`);
-    perSlice[files.get(where[0])]++;
-    // Only the seeded lines may carry it: a context or removed line would mean the fact
-    // predates the patch and an unplanted line could earn the point.
+  let pastOnePage = 0;
+  for (const { fact, slice, sink, helper, definedIn } of s.seeded) {
+    perSlice[slice]++;
+    assert.ok(audited(slice).has(sink), `${fact}: ${sink} is audited by slice ${slice}`);
+    // Planted only where the helper is defined, on added lines: no audited line shows it.
+    const where = [...added].filter(([, lines]) => lines.some((l) => l.text.includes(fact))).map(([f]) => f);
+    assert.deepEqual(where, [definedIn], `${fact} must be planted in ${definedIn} only, found ${where.join(', ') || 'none'}`);
     assert.ok(!kept.some((l) => l.includes(fact)), `${fact} appears on a line the patch did not add`);
+    // The helper is defined at the end of its module: past line 400 always, past one Read page (1,000 lines) for most.
+    const def = defLine(added, definedIn, helper);
+    assert.ok(def > 400, `${helper} is defined at ${definedIn}:${def}, not deep`);
+    // The audited file calls the helper (an added line) without naming the constant: in
+    // the one slice where both live in one file, the call sits far above the definition.
+    const callSite = (added.get(sink) ?? []).filter((l) => l.text.trim() && (sink !== definedIn || l.n < def));
+    assert.ok(callSite.some((l) => l.text.includes(`${helper}(`)), `${sink} must call ${helper}`);
+    assert.ok(!callSite.some((l) => l.text.includes(fact)), `${sink}'s call site must not show ${fact}`);
+    if (sink === definedIn) assert.ok(def - Math.max(...callSite.map((l) => l.n)) > 1000, `${helper}'s definition is not a page away from its call`);
+    if (def > 1000) pastOnePage++;
   }
   assert.deepEqual(perSlice, [3, 3, 3]);
+  assert.ok(pastOnePage >= 8, `only ${pastOnePage} of 9 helpers sit past line 1,000`);
 });
 
-test('the main prompt dispatches one auditor per slice in a single response and names every file', () => {
+/** The patched-file line of `def <helper>(` among the patch's added lines. */
+const defLine = (added, file, helper) => (added.get(file) ?? []).find((l) => l.text.startsWith(`def ${helper}(`))?.n ?? 0;
+
+test('the main prompt dispatches one auditor per slice in a single response and names the functions, never the helpers or their modules', () => {
   const s = scenario();
   const p = mainCodeScanPrompt(s.slices);
   assert.match(p, /SINGLE response/);
   assert.match(p, /exactly 3 `auditor` subagents in parallel/);
-  for (const f of s.slices.flatMap((sl) => sl.files)) assert.ok(p.includes(f), `prompt must name ${f}`);
+  for (const a of s.slices.flatMap((sl) => sl.audit)) {
+    assert.ok(p.includes(a.file), `prompt must name ${a.file}`);
+    for (const f of a.functions) assert.ok(p.includes(f), `prompt must name ${f}`);
+  }
+  for (const { helper, definedIn, fact, sink } of s.seeded) {
+    assert.ok(!p.includes(helper), `prompt must not name ${helper}`);
+    assert.ok(!p.includes(fact), `prompt must not name ${fact}`);
+    if (definedIn !== sink) assert.ok(!p.includes(definedIn), `prompt must not name ${definedIn}`);
+  }
   assert.throws(() => mainCodeScanPrompt([]), /slices/);
 });
 
@@ -348,7 +392,7 @@ test('runCodeScanAgent runs D with its options in its checkout and grades findin
   const r = await runCodeScanAgent({ arm: 'D', scenario: s, work: '/work/d', model: 'claude-sonnet-5-5', gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic', sessionId: 'sid-d', pricing, connect: connectFor(), deps: { query } });
   assert.equal(seen.options.cwd, '/work/d');
   assert.ok(seen.options.allowedTools.includes(READ_BATCH));
-  assert.ok(seen.prompt.includes(s.slices[0].files[0]));
+  assert.ok(seen.prompt.includes(s.slices[0].audit[0].file));
   assert.equal(r.completed, true);
   assert.equal(r.recall, facts.length);
   assert.equal(r.solved, true);
