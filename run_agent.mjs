@@ -244,6 +244,9 @@ export function parseSeedHome(spec) {
 
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
+// Scenarios another runner drives (run_sdk_app.mjs): an Agent SDK app with no Claude Code
+// hooks, so no connect work mode either. This harness refuses them.
+export const APP_SCENARIOS = ['sdk-app-scanner'];
 
 /**
  * anyray-connect turns its main-agent read hint and Explore-subagent decline off when
@@ -301,6 +304,7 @@ export function parseArgs(argv, env = process.env) {
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
+  if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
   // --read-trim(-b) is readTrim=on: one posture, so both spellings reach every check below.
   a.hookPosture = postureOf(pins.all, 'every Anyray arm');
   postureOf([...pins.all, ...pins.b], 'arm B'); // --hook-posture reaches B too
