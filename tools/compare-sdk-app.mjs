@@ -36,6 +36,7 @@ export const comparePair = (rounds, treatment, control) => {
   const recallDelta = used.map((r) => recallOf(r, treatment) - recallOf(r, control));
   const medianOf = (pick) => quantile(used.map(pick).filter(Number.isFinite), 0.5);
   const totalsOf = (r, arm) => r.sessions[arm].totals;
+  const turnsOf = (r, arm) => totalsOf(r, arm).mainTurns ?? totalsOf(r, arm).turns;
   // Subagent threads pooled over every round, so one long thread is weighed as one thread.
   const pooledSubTurns = (arm) => quantile(used.flatMap((r) => totalsOf(r, arm).subagentTurns ?? []).filter(Number.isFinite), 0.5);
   return {
@@ -57,7 +58,9 @@ export const comparePair = (rounds, treatment, control) => {
     })),
     recallNeverWorseBy2: recallDelta.every((d) => d > -2),
     recall: { treatment: medianOf((r) => recallOf(r, treatment)), control: medianOf((r) => recallOf(r, control)) },
-    turns: { treatment: medianOf((r) => r.sessions[treatment].totals.turns), control: medianOf((r) => r.sessions[control].totals.turns) },
+    // Turns are main-thread API requests where the session counted them; the SDK's own
+    // num_turns counts per tool call (48 for a 13-request thread in the ANY-1105 smoke).
+    turns: { treatment: medianOf((r) => turnsOf(r, treatment)), control: medianOf((r) => turnsOf(r, control)) },
     spawns: { treatment: medianOf((r) => totalsOf(r, treatment).subagentSpawns), control: medianOf((r) => totalsOf(r, control).subagentSpawns) },
     parallel: { treatment: used.filter((r) => totalsOf(r, treatment).spawnedInParallel === true).length, control: used.filter((r) => totalsOf(r, control).spawnedInParallel === true).length },
     subagentTurns: { treatment: pooledSubTurns(treatment), control: pooledSubTurns(control) },

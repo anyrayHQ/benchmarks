@@ -149,3 +149,15 @@ test('comparePair carries subagent spawns, parallel launches and subagent thread
   assert.match(report, /parallel 2\/2 vs 1\/2/);
   assert.match(report, /subagent turns median 11 vs 20/);
 });
+
+test('comparePair reads turns as main-thread requests when the session counted them', () => {
+  // The SDK's num_turns counted 48 for a 13-request main thread; mainTurns is the request count.
+  const r = (round, b, a) => ({
+    round,
+    sessions: { B: { totals: { costUsd: 1, turns: b * 4, mainTurns: b } }, A: { totals: { costUsd: 1, turns: a * 4, mainTurns: a } } },
+    quality: { A: true, B: true },
+    recall: { A: 1, B: 1 },
+  });
+  const p = comparePair([r(1, 60, 70), r(2, 80, 90)], 'B', 'A');
+  assert.deepEqual(p.turns, { treatment: 70, control: 80 });
+});

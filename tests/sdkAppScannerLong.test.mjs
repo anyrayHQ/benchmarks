@@ -25,6 +25,10 @@ import {
   longSubagentDefinition,
   makeCustomerFileTool,
   makeReportFindingTool,
+  makeTrafficListTool,
+  makeTrafficGetTool,
+  longProfile,
+  LONG_SUBAGENT_PROMPT,
   LONG_BUILTIN_TOOLS,
   gradeLongSession,
 } from '../lib/scannerLong.mjs';
@@ -237,10 +241,10 @@ test('the long app names the task-list, run, reflect loop and subagent delegatio
     assert.ok(LONG_SYSTEM_PROMPT.toLowerCase().includes(cls.toLowerCase()), `taxonomy names ${cls}`);
   }
   const main = longMainPrompt({ rows: ROWS, files: [...customerFiles({ seed: SEED }).keys()] });
-  assert.match(main, new RegExp(`${ROWS} rows`));
+  assert.match(main, new RegExp(`${ROWS} captured requests, ids 0 to ${ROWS - 1}`));
   for (const name of customerFiles({ seed: SEED }).keys()) assert.ok(main.includes(name));
   const sub = longSubagentDefinition(['mcp__anyray__anyray_retrieve']);
-  for (const t of ['mcp__scanner__traffic_query', 'mcp__scanner__http_get', 'mcp__scanner__customer_file', 'mcp__scanner__report_finding', 'mcp__anyray__anyray_retrieve']) {
+  for (const t of ['mcp__scanner__traffic_list', 'mcp__scanner__traffic_get', 'mcp__scanner__http_get', 'mcp__scanner__customer_file', 'mcp__scanner__report_finding', 'mcp__anyray__anyray_retrieve']) {
     assert.ok(sub.tools.includes(t), `subagent has ${t}`);
   }
   assert.ok(sub.maxTurns >= 30, 'a subagent may run a long thread');
@@ -329,4 +333,46 @@ test('run_sdk_app takes --scenario for either app lane and refuses any other', a
   assert.equal(parseArgs(['--keys-dir', '/k', '--scenario', 'sdk-app-scanner-long']).scenario, 'sdk-app-scanner-long');
   assert.throws(() => parseArgs(['--keys-dir', '/k', '--scenario', 'pyrepo-docs']), /--scenario/);
   assert.deepEqual(Object.keys(SCENARIO_PROFILES).sort(), ['sdk-app-scanner', 'sdk-app-scanner-long']);
+});
+
+test('the long app reads recorded traffic by list and get, with no SQL search', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scan-lg-'));
+  try {
+    const target = buildScannerTarget(dir, { seed: SEED, rows: ROWS });
+    const list = makeTrafficListTool(target.dbPath, { tool: stubTool });
+    const page = JSON.parse(textOf(await list.handler({ offset: 10, limit: 5 })));
+    assert.deepEqual(page.rows.map((r) => r.id), [10, 11, 12, 13, 14]);
+    assert.equal(page.total, ROWS);
+    for (const r of page.rows) {
+      assert.deepEqual(Object.keys(r).sort(), ['bytes', 'captured_at', 'id', 'method', 'status', 'url']);
+    }
+    // A page is metadata only, so a listing never carries a body or a marker.
+    const all = textOf(await list.handler({ limit: 50 }));
+    assert.equal(JSON.parse(all).rows.length, ROWS);
+    for (const m of scannerMarkers()) assert.ok(!all.includes(m), 'a listing never shows a marker');
+    // And capped at 50 rows a page, on a table larger than that.
+    const big = buildScannerTarget(join(dir, 'big'), { seed: SEED, rows: 80 });
+    const bigList = makeTrafficListTool(big.dbPath, { tool: stubTool });
+    const capped = JSON.parse(textOf(await bigList.handler({ limit: 500 })));
+    assert.equal(capped.rows.length, 50);
+    assert.equal(capped.total, 80);
+    const get = makeTrafficGetTool(target.dbPath, { tool: stubTool });
+    const row = JSON.parse(textOf(await get.handler({ id: 2 })));
+    assert.equal(row.id, 2);
+    assert.ok(row.response_body.length >= MIN_ROW_BYTES);
+    assert.match(textOf(await get.handler({ id: 9999 })), /traffic_get error/);
+    assert.match(textOf(await get.handler({ id: 1.5 })), /traffic_get error/);
+    const names = longProfile({ dbPath: target.dbPath, filesDir: target.filesDir, fixtureUrl: 'http://127.0.0.1:1', rows: ROWS, files: [] })
+      .scannerTools({ tool: stubTool, fetchImpl: fetch }).map((t) => t.name);
+    assert.deepEqual(names.sort(), ['customer_file', 'http_get', 'report_finding', 'traffic_get', 'traffic_list']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('both long prompts make one tool call per response a rule', () => {
+  for (const p of [LONG_SYSTEM_PROMPT, LONG_SUBAGENT_PROMPT]) {
+    assert.match(p, /exactly one tool call per response/i);
+    assert.doesNotMatch(p, /traffic_query|SELECT/);
+  }
 });
