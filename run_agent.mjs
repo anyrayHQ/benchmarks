@@ -70,6 +70,9 @@
 //   ANYRAY_BENCH_SHARED_HEADERS='x-anyray-tool-defer: off' node run_agent.mjs --compare gateway …
 //     (headers every Anyray arm sends, for a setting both arms must share)
 //   node run_agent.mjs --scenario s --compare gateway --kinds observation_mask --experiment-b my-exp-b
+//   node run_agent.mjs --scenario s --compare gateway --kinds command_digest --experiment-b planner-off --treatment a
+//     (--treatment a: B carries the switch-off, so the DEFAULT in A is under test; the verdict
+//     reads every ratio as A/B and refuses to score a treatment that applied nothing)
 //     (--experiment-b <name>: arm B alone sends experiment=<name> in x-anyray-metadata, so a
 //      gateway rule keyed on it (`bench-rule params <name> --params …`) is the treatment: same
 //      strategies in both arms, the rule's params on B only. Each round records the rule as
@@ -243,7 +246,7 @@ export function parseSeedHome(spec) {
 export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
 
 export function parseArgs(argv, env = process.env) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, treatment: 'b', kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
   const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
   let claudeBinFlag = null;
   for (let i = 0; i < argv.length; i++) {
@@ -268,6 +271,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--mcp-catalog') a.mcpCatalog = parseMcpCatalog(argv[++i]); // both arms: a stub MCP server listing N synthetic tools (catalog weight)
     else if (argv[i] === '--experiment') a.experiment = argv[++i]; // experiment=<name> in x-anyray-metadata, for a gateway rule
     else if (argv[i] === '--experiment-b') a.experimentB = argv[++i] ?? ''; // the same, on arm B only (--compare gateway)
+    else if (argv[i] === '--treatment') a.treatment = parseTreatment(argv[++i]); // which arm is under test: b (default) or a; the verdict reads the ratio as treatment ÷ control
     else if (argv[i] === '--redraw-holdout') a.redrawHoldout = parseRedraw(argv[++i]); // restart a pair the gateway drew into a holdout, up to N times
     else if (argv[i] === '--retry-invalid') a.retryInvalid = parseRetryInvalid(argv[++i]); // run a round the verdict would drop again, up to N extra rounds
     else if (argv[i] === '--max-turns') a.maxTurns = parseMaxTurns(argv[++i]); // both arms: overrides scenario.maxTurns
@@ -308,6 +312,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.readTrim && a.integrationLevel && a.integrationLevel !== 'gateway_hooks_mcp') throw new Error('--read-trim needs --integration-level gateway_hooks_mcp: lower levels cannot retrieve');
   if (a.withControl && a.compare === 'control') throw new Error('--with-control adds a direct-vs-direct control; --compare control already is one');
   if (a.experiment && a.strategy) throw new Error('--experiment and --strategy both set the experiment tag: use one');
+  if (a.treatment !== 'b' && a.compare !== 'gateway') throw new Error('--treatment a needs --compare gateway: only two gateway arms can have A under test');
   if (a.experimentB !== null) {
     if (a.compare !== 'gateway') throw new Error('--experiment-b needs --compare gateway: it tags arm B of two gateway arms');
     if (!validExperimentName(a.experimentB)) throw new Error(`--experiment-b must be a plain name (letters, digits, ".", "_", "-"), got ${JSON.stringify(a.experimentB)}`);
@@ -497,6 +502,13 @@ export function roundRatio(a, b) {
 
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
 export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gatewayRestarted);
+
+/** `--treatment a|b`: the arm the Rule 0 verdict is for. B by construction (`--experiment-b`,
+ * `--kinds-b` change B alone); `a` when the default is under test and B carries the switch-off. */
+function parseTreatment(value) {
+  if (value !== 'a' && value !== 'b') throw new Error(`--treatment must be a or b, got ${JSON.stringify(value ?? '')}`);
+  return value;
+}
 
 /** Main-agent requests that issued more than one tool call (Claude Code's parallel tool use). */
 export const parallelToolTurns = (requests) =>
@@ -751,13 +763,15 @@ const BAND_SAYS = {
  * crashes); then, with --with-control, the control's noise band; last, the pre-ANY-733
  * all-rounds line unchanged, so earlier outputs stay comparable.
  */
-export function formatVerdict({ scenario, compare, rounds, controlRounds }) {
+export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b' }) {
   const kept = rounds.filter((x) => !x.gatewayRestarted);
-  const v = solvedPairVerdict(kept);
+  const v = solvedPairVerdict(kept, { treatment });
   const p = v.stats;
+  const under = treatment === 'a' ? ' · treatment A (ratio A/B)' : '';
   const out = [
-    `\n${scenario} [${compare}] solved pairs ${v.k}/${v.n}: wins ${p.wins}/${v.k}, median ${x2(p.median)}, Q3 ${x2(p.q3)}, max ${x2(p.max)} → ${v.verdict}`,
+    `\n${scenario} [${compare}] solved pairs ${v.k}/${v.n}: wins ${p.wins}/${v.k}, median ${x2(p.median)}, Q3 ${x2(p.q3)}, max ${x2(p.max)}${under} → ${v.verdict}`,
   ];
+  if (v.treatmentEdits != null) out.push(`  treatment ${treatment.toUpperCase()} applied an optimization in ${v.treatmentEdits}/${v.k} solved pair(s)`);
   if (v.insufficient) out.push(`  verdict insufficient: ${v.reasons[0]}`);
   out.push(...v.reasons.slice(v.insufficient ? 1 : 0).map((x) => `  ${x}`));
   if (v.qualityEvents.length) out.push(`  quality events (one arm solved): ${v.qualityEvents.map((e) => `round ${e.round} ${e.solvedBy.toUpperCase()} only`).join(', ')}`);
@@ -784,7 +798,7 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds }) {
       out.push(`  median ${x2(p.median)} ${pos ? BAND_SAYS[pos] : 'n/a: no solved pairs to compare'}`);
     }
   }
-  const s = rule0(scoredRounds(rounds));
+  const s = rule0(scoredRounds(rounds), { treatment });
   const dropped = rounds.filter((x) => x.gatewayRestarted).map((x) => x.round);
   out.push(
     `  all rounds (pre-ANY-733 verdict, unsolved sessions included): ${scenario} [${compare}] after ${s.n} round(s): wins ${s.wins}/${s.n}, median ${s.median?.toFixed(2)}, Q3 ${s.q3?.toFixed(2)}, max ${s.max?.toFixed(2)} → ${s.verdict}` +
@@ -922,7 +936,7 @@ async function main() {
     record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
     writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
   }
-  console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds })}\n${formatVerdictBlock(record.verdict)}`);
+  console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, treatment: args.treatment })}\n${formatVerdictBlock(record.verdict)}`);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
     const kinds = slotKinds(args, slot)[0];
@@ -1255,8 +1269,8 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '') +
         (r.savingsCheck ? `\n${savingsCheckNote(round, r.savingsCheck)}` : '')
     );
-    record.stats = rule0(scoredRounds(record.rounds));
-    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted));
+    record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
     record.verdict = benchVerdict(record.rounds);
     record.subagentLoad = subagentLoadSummary(record.rounds); // per arm: requestsPerSubagent, pooled, and per round
     record.claudeVersions = claudeVersions(record.rounds); // per arm: which Claude Code versions the rounds ran, `mixed` when not one
