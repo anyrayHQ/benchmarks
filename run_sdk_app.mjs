@@ -22,10 +22,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision } from './lib/agentSdkApp.mjs';
+import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision, shortProfile } from './lib/agentSdkApp.mjs';
+import { longProfile } from './lib/scannerLong.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
 import { VULNERABILITIES, httpVulnerabilities } from './tools/traffic-fixture/vulnerabilities.mjs';
+import { buildScannerTarget, customerFiles, DEFAULT_ROWS, DEFAULT_SEED } from './tools/scanner-target/target.mjs';
+import { startScannerTargetServer } from './tools/scanner-target/server.mjs';
+import { SCANNER_VULNERABILITIES } from './tools/scanner-target/vulnerabilities.mjs';
 
 const ROOT = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 export const DEFAULT_BUDGET_USD = 120;
@@ -34,11 +38,48 @@ export const DEFAULT_BUDGET_USD = 120;
 const SELF_CHECK_SETTLE_MS = 20_000;
 const SELF_CHECK_MAX_READS = 4;
 
+/**
+ * The app lanes this runner drives, by scenario directory. `prepare` builds the scenario's
+ * synthetic data under `dir`, starts its live service, and returns the profile every arm
+ * runs, the fixture facts the result file records, and the service's `close`.
+ */
+export const SCENARIO_PROFILES = {
+  'sdk-app-scanner': {
+    prepare: async ({ scenarioFile, dir }) => {
+      const rows = scenarioFile.fixture?.rows ?? 24;
+      const seed = scenarioFile.fixture?.seed ?? 1337;
+      const dbPath = join(dir, 'traffic.sqlite');
+      const planted = buildTrafficDb(dbPath, { seed, rows });
+      const fixture = await startFixtureServer();
+      const endpoints = [...new Set(httpVulnerabilities().map((v) => v.path)), '/', '/health'];
+      return {
+        fixture: { rows, seed, markers: VULNERABILITIES.length, planted: planted.planted },
+        profile: shortProfile({ dbPath, fixtureUrl: fixture.url, rows, endpoints }),
+        close: fixture.close,
+      };
+    },
+  },
+  'sdk-app-scanner-long': {
+    prepare: async ({ scenarioFile, dir }) => {
+      const rows = scenarioFile.fixture?.rows ?? DEFAULT_ROWS;
+      const seed = scenarioFile.fixture?.seed ?? DEFAULT_SEED;
+      const target = buildScannerTarget(dir, { seed, rows });
+      const server = await startScannerTargetServer({ seed });
+      return {
+        fixture: { rows, seed, markers: SCANNER_VULNERABILITIES.length, planted: target.planted, files: [...customerFiles({ seed }).keys()] },
+        profile: longProfile({ dbPath: target.dbPath, filesDir: target.filesDir, fixtureUrl: server.url, rows, files: [...customerFiles({ seed }).keys()] }),
+        close: server.close,
+      };
+    },
+  },
+};
+
 export function parseArgs(argv, env = process.env) {
-  const a = { arms: Object.keys(ARMS), rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null };
+  const a = { scenario: 'sdk-app-scanner', arms: Object.keys(ARMS), rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
-    if (v === '--arms') a.arms = String(argv[++i] ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+    if (v === '--scenario') a.scenario = argv[++i];
+    else if (v === '--arms') a.arms = String(argv[++i] ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
     else if (v === '--rounds') a.rounds = Number(argv[++i]);
     else if (v === '--model') a.model = argv[++i];
     else if (v === '--label') a.label = argv[++i];
@@ -47,6 +88,7 @@ export function parseArgs(argv, env = process.env) {
     else if (v === '--keys-dir') a.keysDir = argv[++i];
     else throw new Error(`unknown flag ${v}`);
   }
+  if (!Object.hasOwn(SCENARIO_PROFILES, a.scenario)) throw new Error(`--scenario takes one of ${Object.keys(SCENARIO_PROFILES).join(', ')}`);
   if (!a.arms.length || a.arms.some((x) => !Object.hasOwn(ARMS, x))) throw new Error(`--arms takes a comma list of ${Object.keys(ARMS).join(', ')}`);
   a.arms = [...new Set(a.arms)].sort();
   if (!Number.isInteger(a.rounds) || a.rounds < 1) throw new Error('--rounds must be a positive integer');
@@ -108,29 +150,26 @@ async function main() {
   if (!gatewayUrl) throw new Error('every arm runs through the gateway: pass --gateway or set ANYRAY_GATEWAY_URL');
   const keys = readArmKeys(args.keysDir, args.arms);
 
-  const dir = join(ROOT, 'scenarios', 'sdk-app-scanner');
+  const dir = join(ROOT, 'scenarios', args.scenario);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
-  const rows = scenarioFile.fixture?.rows ?? 24;
-  const seed = scenarioFile.fixture?.seed ?? 1337;
 
   const out = join(ROOT, 'results', 'agent');
   mkdirSync(out, { recursive: true });
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sdk-app-fixture-'));
-  const dbPath = join(fixtureDir, 'traffic.sqlite');
-  const planted = buildTrafficDb(dbPath, { seed, rows });
-  const fixture = await startFixtureServer();
+  const prepared = await SCENARIO_PROFILES[args.scenario].prepare({ scenarioFile, dir: fixtureDir });
+  const markers = prepared.fixture.markers;
   const workDir = mkdtempSync(join(tmpdir(), 'sdk-app-work-'));
-  const endpoints = [...new Set(httpVulnerabilities().map((v) => v.path)), '/', '/health'];
 
-  const file = join(out, `sdk-app-scanner--${args.label ?? 'anyray'}.json`);
+  const file = join(out, `${args.scenario}--${args.label ?? 'anyray'}.json`);
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
   Object.assign(record, {
-    scenario: 'sdk-app-scanner',
+    scenario: args.scenario,
     model: args.model,
     arms: args.arms,
     armSpecs: Object.fromEntries(args.arms.map((arm) => [arm, ARMS[arm]])),
     gateway: gatewayUrl,
-    fixture: { rows, seed, markers: VULNERABILITIES.length, planted: planted.planted },
+    fixture: prepared.fixture,
+    maxTurns: scenarioFile.maxTurns ?? null,
     budgetUsd: args.budget,
   });
   const save = () => writeFileSync(file, JSON.stringify(record, null, 2));
@@ -138,7 +177,7 @@ async function main() {
 
   const stamp = Date.now();
   const first = Math.max(0, ...record.rounds.map((r) => r.round ?? 0)) + 1;
-  console.log(`sdk-app-scanner [${args.arms.join(',')}] rounds ${first}–${first + args.rounds - 1}, model ${args.model}, budget $${args.budget}`);
+  console.log(`${args.scenario} [${args.arms.join(',')}] rounds ${first}–${first + args.rounds - 1}, model ${args.model}, budget $${args.budget}`);
   const roundCosts = [];
   try {
     for (let k = 0; k < args.rounds; k++) {
@@ -159,11 +198,8 @@ async function main() {
           model: args.model,
           gatewayUrl,
           clientKey: keys[arm],
-          sessionId: `sdk-app-scanner-${arm}-r${round}-${stamp}`,
-          dbPath,
-          fixtureUrl: fixture.url,
-          endpoints,
-          rows,
+          sessionId: `${args.scenario}-${arm}-r${round}-${stamp}`,
+          profile: prepared.profile,
           pricing: cfg.pricing,
           timeoutMs: (scenarioFile.timeoutMin ?? 10) * 60000,
           deps: { query, createSdkMcpServer, tool },
@@ -184,7 +220,7 @@ async function main() {
           continue;
         }
         const v = s.value;
-        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId, retrieval, selfCheck: reads };
+        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, recallTotal: v.recallTotal, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, endedBy: v.endedBy, toolsSeen: v.toolsSeen, wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId, retrieval, selfCheck: reads };
         quality[arm] = v.completed;
         recall[arm] = v.recall;
       }
@@ -197,12 +233,12 @@ async function main() {
         if (!s.totals) { console.log(`  round ${round} ${arm}: error ${s.error} · ${evidenceLine(s.retrieval)}`); continue; }
         const t = s.totals;
         const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}`;
-        console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} · ${t.turns} turns · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, parallel ${t.spawnedInParallel}) · recall ${s.recall}/${VULNERABILITIES.length} · ${s.completed ? 'completed' : 'NOT completed'}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
+        console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} (sdk $${t.sdkCostUsd?.toFixed(4) ?? 'n/a'}) · ${t.turns} turns (main ${t.mainTurns}, subagents ${JSON.stringify(t.subagentTurns)}) · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, ${t.parallelSpawnMessages} parallel launches, max ${t.maxParallelSpawn}) · recall ${s.recall}/${markers} · ${s.completed ? `completed (${s.endedBy})` : `NOT completed (${s.endedBy})`}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
       }
       console.log(`  round ${round} $${roundCost.toFixed(3)}; spent so far $${roundCosts.reduce((a, b) => a + b, 0).toFixed(3)}`);
     }
   } finally {
-    await fixture.close();
+    await prepared.close();
     rmSync(fixtureDir, { recursive: true, force: true });
     rmSync(workDir, { recursive: true, force: true });
   }
@@ -215,3 +251,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
+

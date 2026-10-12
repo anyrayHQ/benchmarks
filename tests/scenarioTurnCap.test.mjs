@@ -46,3 +46,8 @@ test('--max-turns below 80 turns work mode off for the run', () => {
 test('the Agent SDK app lane is refused here: run_sdk_app.mjs drives it', () => {
   assert.throws(() => parseArgs(['--scenario', 'sdk-app-scanner']), /run_sdk_app\.mjs/);
 });
+
+test('the long Agent SDK app lane is refused here too', () => {
+  assert.ok(APP_SCENARIOS.includes('sdk-app-scanner-long'));
+  assert.throws(() => parseArgs(['--scenario', 'sdk-app-scanner-long']), /run_sdk_app\.mjs/);
+});

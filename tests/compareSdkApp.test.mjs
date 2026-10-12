@@ -123,3 +123,72 @@ test('comparePair carries recall and turns medians for each side', () => {
   assert.equal(p.turns.control, 10);
   assert.equal(p.turns.treatment, 12);
 });
+
+const shapedRound = (round, shape) => ({
+  round,
+  sessions: Object.fromEntries(Object.entries(shape).map(([arm, s]) => [arm, { totals: { costUsd: s.cost, turns: s.turns, mainTurns: s.turns, subagentSpawns: s.spawns, spawnedInParallel: s.parallel, subagentTurns: s.subTurns } }])),
+  quality: Object.fromEntries(Object.keys(shape).map((arm) => [arm, true])),
+  recall: Object.fromEntries(Object.keys(shape).map((arm) => [arm, 15])),
+});
+
+test('comparePair carries subagent spawns, parallel launches and subagent thread turns for each side', () => {
+  const rounds = [
+    shapedRound(1, { B: { cost: 1, turns: 70, spawns: 6, parallel: true, subTurns: [12, 14, 9] }, A: { cost: 2, turns: 64, spawns: 4, parallel: false, subTurns: [20, 22] } }),
+    shapedRound(2, { B: { cost: 1, turns: 80, spawns: 4, parallel: true, subTurns: [10] }, A: { cost: 2, turns: 66, spawns: 6, parallel: true, subTurns: [18, 30, 16] } }),
+  ];
+  const p = comparePair(rounds, 'B', 'A');
+  assert.deepEqual(p.spawns, { treatment: 5, control: 5 });
+  assert.deepEqual(p.parallel, { treatment: 2, control: 1 });
+  assert.deepEqual(p.subagentTurns, { treatment: 11, control: 20 });
+  assert.deepEqual(p.turns, { treatment: 75, control: 65 });
+  // Each round names its spawn counts, so a ratio is read beside who delegated more.
+  assert.deepEqual(p.ratios.map((r) => r.spawns), [{ treatment: 6, control: 4 }, { treatment: 4, control: 6 }]);
+  const report = formatReport({ scenario: 'sdk-app-scanner-long', arms: ['A', 'B'], rounds: 2, model: 'm', d4: { sessions: 0 }, pairs: [p] });
+  assert.match(report, /^sdk-app-scanner-long /);
+  assert.match(report, /spawns median 5 vs 5/);
+  assert.match(report, /parallel 2\/2 vs 1\/2/);
+  assert.match(report, /subagent turns median 11 vs 20/);
+});
+
+test('comparePair reads turns as main-thread requests when the session counted them', () => {
+  // The SDK's num_turns counted 48 for a 13-request main thread; mainTurns is the request count.
+  const r = (round, b, a) => ({
+    round,
+    sessions: { B: { totals: { costUsd: 1, turns: b * 4, mainTurns: b } }, A: { totals: { costUsd: 1, turns: a * 4, mainTurns: a } } },
+    quality: { A: true, B: true },
+    recall: { A: 1, B: 1 },
+  });
+  const p = comparePair([r(1, 60, 70), r(2, 80, 90)], 'B', 'A');
+  assert.deepEqual(p.turns, { treatment: 70, control: 80 });
+});
+
+test('D4 keeps an unknown mint count apart from a session that minted nothing', () => {
+  // The self-check could not count mints (its sdk-agent readBack row had no emitted).
+  const rounds = [{ round: 1, sessions: { B: bSession(169, null) } }];
+  const d = d4Precondition(rounds);
+  assert.equal(d.pass, false);
+  assert.equal(d.unknown, 1);
+  assert.deepEqual(d.unknownRounds, [1]);
+  const text = formatReport({ scenario: 's', arms: ['B'], rounds: 1, model: 'm', d4: d, pairs: [] });
+  assert.match(text, /D4 precondition .*UNKNOWN/);
+  assert.doesNotMatch(text, /did not run/, 'an unread count is not proof the mechanism never ran');
+  // A session that read zero is still a FAIL, not unknown.
+  const zero = d4Precondition([{ round: 1, sessions: { B: bSession(169, 0) } }]);
+  assert.equal(zero.unknown, 0);
+  assert.match(formatReport({ scenario: 's', arms: ['B'], rounds: 1, model: 'm', d4: zero, pairs: [] }), /FAIL/);
+});
+
+test('D4 reads a spend-row mint count for a round the self-check could not count', () => {
+  const rounds = [{ round: 1, sessions: { B: bSession(169, null) } }, { round: 2, sessions: { B: bSession(150, null) } }];
+  const d = d4Precondition(rounds, { spendMints: { 1: { B: 53 }, 2: { B: 0 } } });
+  assert.equal(d.minted, 1);
+  assert.deepEqual(d.mintedRounds, [1]);
+  assert.equal(d.unknown, 0);
+  assert.equal(d.pass, true);
+  // The self-check's own count wins when it has one; spend rows fill only an unknown.
+  const own = d4Precondition([{ round: 1, sessions: { B: bSession(10, 0) } }], { spendMints: { 1: { B: 9 } } });
+  assert.equal(own.minted, 0);
+  // A malformed spend count is no evidence.
+  assert.equal(d4Precondition(rounds, { spendMints: { 1: { B: 'lots' } } }).unknown, 2);
+  assert.equal(compareFile({ arms: ['B'], rounds }, { spendMints: { 1: { B: 53 } } }).d4.minted, 1);
+});
