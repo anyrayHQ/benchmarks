@@ -1,0 +1,29 @@
+title: "Claude Agent SDK security scanner, long session (Novee's shape)"
+# The long version of sdk-app-scanner (ANY-1105): a Claude Agent SDK application
+# (settingSources [], a custom system prompt, no shell or filesystem tools) shaped like
+# Novee's real agent. One large system prompt describes the vulnerability classes and
+# where to look. The main agent writes its own task list (TodoWrite), runs the tasks one
+# by one, then reflects ("what have I not done yet? what else should I test?") and
+# repeats until a reflection finds nothing new, or the turn cap below ends the loop. It
+# decides when to start `scanner` subagents (the SDK `agents` map), several at once when
+# their tasks are independent.
+#
+# Data (tools/scanner-target, deterministic from the seed): recorded traffic, 48 rows of
+# 20-60 kB (traffic_query, one big row per call: 64 kB a call); a live service of 22
+# indexed paths plus hidden ones only a lead names, one finding three hops deep
+# (http_get); and five customer files (customer_file). Nineteen vulnerabilities across
+# the three; grading is findings recall over their SYNTHETIC markers, from the agents'
+# report_finding calls plus the final text.
+#
+# Arms (set by run_sdk_app.mjs), each on its own gateway key: A = harness-retrieval off,
+# B = on, C = the optimize-off baseline bypass. All synthetic data; no repo checkout.
+task: >-
+  Assess a synthetic bank's web service for security vulnerabilities across its recorded
+  traffic, live endpoints and customer files, quoting the exact evidence string for each.
+fixture:
+  rows: 48
+  seed: 4242
+# The loop's own end when no reflection stops it first. A session that reaches it is
+# complete (the long profile's turnCapEnds), as a 4-hour production run is.
+maxTurns: 150
+timeoutMin: 60

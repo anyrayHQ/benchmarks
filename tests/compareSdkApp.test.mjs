@@ -123,3 +123,29 @@ test('comparePair carries recall and turns medians for each side', () => {
   assert.equal(p.turns.control, 10);
   assert.equal(p.turns.treatment, 12);
 });
+
+const shapedRound = (round, shape) => ({
+  round,
+  sessions: Object.fromEntries(Object.entries(shape).map(([arm, s]) => [arm, { totals: { costUsd: s.cost, turns: s.turns, mainTurns: s.turns, subagentSpawns: s.spawns, spawnedInParallel: s.parallel, subagentTurns: s.subTurns } }])),
+  quality: Object.fromEntries(Object.keys(shape).map((arm) => [arm, true])),
+  recall: Object.fromEntries(Object.keys(shape).map((arm) => [arm, 15])),
+});
+
+test('comparePair carries subagent spawns, parallel launches and subagent thread turns for each side', () => {
+  const rounds = [
+    shapedRound(1, { B: { cost: 1, turns: 70, spawns: 6, parallel: true, subTurns: [12, 14, 9] }, A: { cost: 2, turns: 64, spawns: 4, parallel: false, subTurns: [20, 22] } }),
+    shapedRound(2, { B: { cost: 1, turns: 80, spawns: 4, parallel: true, subTurns: [10] }, A: { cost: 2, turns: 66, spawns: 6, parallel: true, subTurns: [18, 30, 16] } }),
+  ];
+  const p = comparePair(rounds, 'B', 'A');
+  assert.deepEqual(p.spawns, { treatment: 5, control: 5 });
+  assert.deepEqual(p.parallel, { treatment: 2, control: 1 });
+  assert.deepEqual(p.subagentTurns, { treatment: 11, control: 20 });
+  assert.deepEqual(p.turns, { treatment: 75, control: 65 });
+  // Each round names its spawn counts, so a ratio is read beside who delegated more.
+  assert.deepEqual(p.ratios.map((r) => r.spawns), [{ treatment: 6, control: 4 }, { treatment: 4, control: 6 }]);
+  const report = formatReport({ scenario: 'sdk-app-scanner-long', arms: ['A', 'B'], rounds: 2, model: 'm', d4: { sessions: 0 }, pairs: [p] });
+  assert.match(report, /^sdk-app-scanner-long /);
+  assert.match(report, /spawns median 5 vs 5/);
+  assert.match(report, /parallel 2\/2 vs 1\/2/);
+  assert.match(report, /subagent turns median 11 vs 20/);
+});

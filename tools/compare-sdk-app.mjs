@@ -35,6 +35,9 @@ export const comparePair = (rounds, treatment, control) => {
   const recallOf = (r, arm) => r.recall?.[arm] ?? r.sessions[arm]?.recall ?? 0;
   const recallDelta = used.map((r) => recallOf(r, treatment) - recallOf(r, control));
   const medianOf = (pick) => quantile(used.map(pick).filter(Number.isFinite), 0.5);
+  const totalsOf = (r, arm) => r.sessions[arm].totals;
+  // Subagent threads pooled over every round, so one long thread is weighed as one thread.
+  const pooledSubTurns = (arm) => quantile(used.flatMap((r) => totalsOf(r, arm).subagentTurns ?? []).filter(Number.isFinite), 0.5);
   return {
     treatment,
     control,
@@ -46,10 +49,18 @@ export const comparePair = (rounds, treatment, control) => {
     q3: quantile(ratios, 0.75),
     max: used.length ? Math.max(...ratios) : null,
     min: used.length ? Math.min(...ratios) : null,
-    ratios: used.map((r, i) => ({ round: r.round, ratio: ratios[i], recallDelta: recallDelta[i] })),
+    ratios: used.map((r, i) => ({
+      round: r.round,
+      ratio: ratios[i],
+      recallDelta: recallDelta[i],
+      spawns: { treatment: totalsOf(r, treatment).subagentSpawns ?? null, control: totalsOf(r, control).subagentSpawns ?? null },
+    })),
     recallNeverWorseBy2: recallDelta.every((d) => d > -2),
     recall: { treatment: medianOf((r) => recallOf(r, treatment)), control: medianOf((r) => recallOf(r, control)) },
     turns: { treatment: medianOf((r) => r.sessions[treatment].totals.turns), control: medianOf((r) => r.sessions[control].totals.turns) },
+    spawns: { treatment: medianOf((r) => totalsOf(r, treatment).subagentSpawns), control: medianOf((r) => totalsOf(r, control).subagentSpawns) },
+    parallel: { treatment: used.filter((r) => totalsOf(r, treatment).spawnedInParallel === true).length, control: used.filter((r) => totalsOf(r, control).spawnedInParallel === true).length },
+    subagentTurns: { treatment: pooledSubTurns(treatment), control: pooledSubTurns(control) },
   };
 };
 
@@ -102,7 +113,7 @@ const num = (x) => (x == null ? 'n/a' : String(Math.round(x * 10) / 10));
 
 /** The text report: header, the D4 precondition, then each pair. */
 export const formatReport = (out) => {
-  const lines = [`sdk-app-scanner [${out.arms.join(',')}] ${out.rounds} round(s), model ${out.model ?? 'n/a'}`];
+  const lines = [`${out.scenario ?? 'sdk-app-scanner'} [${out.arms.join(',')}] ${out.rounds} round(s), model ${out.model ?? 'n/a'}`];
   const d = out.d4;
   if (!d || d.sessions === 0) lines.push('D4 precondition: n/a, no B session in this file');
   else {
@@ -115,9 +126,13 @@ export const formatReport = (out) => {
     lines.push(
       `  ${p.treatment}/${p.control}: valid pairs ${p.n}, wins ${p.wins}/${p.n}, median ${fmt(p.median)}, Q3 ${fmt(p.q3)}, max ${fmt(p.max)}` +
         ` | recall median ${num(p.recall?.treatment)} vs ${num(p.recall?.control)}, turns median ${num(p.turns?.treatment)} vs ${num(p.turns?.control)}` +
+        (p.spawns ? `, spawns median ${num(p.spawns.treatment)} vs ${num(p.spawns.control)}, parallel ${p.parallel.treatment}/${p.n} vs ${p.parallel.control}/${p.n}, subagent turns median ${num(p.subagentTurns.treatment)} vs ${num(p.subagentTurns.control)}` : '') +
         (p.recallNeverWorseBy2 ? '' : '  [recall dropped 2+ on a pair]')
     );
-    for (const r of p.ratios) lines.push(`    round ${r.round}: ${fmt(r.ratio)} (recall Δ ${r.recallDelta >= 0 ? '+' : ''}${r.recallDelta})`);
+    for (const r of p.ratios) {
+      const sp = r.spawns && r.spawns.treatment != null ? `, spawns ${r.spawns.treatment} vs ${r.spawns.control}` : '';
+      lines.push(`    round ${r.round}: ${fmt(r.ratio)} (recall Δ ${r.recallDelta >= 0 ? '+' : ''}${r.recallDelta}${sp})`);
+    }
   }
   if (out.retrievalEvidence) {
     for (const [arm, ev] of Object.entries(out.retrievalEvidence)) lines.push(`  retrieval evidence ${arm}: ${JSON.stringify(ev)}`);
