@@ -406,6 +406,58 @@ refuses any request to another host or with an `x-anyray-*` header it did not se
 Each request's usage, cost, latency and content block types are stored in the result
 file.
 
+### Agent SDK app: code scan with Connect's batch read
+
+`sdk-app-code-scan` is a Claude Agent SDK application, run by `run_sdk_app.mjs`, not
+`run_agent.mjs`. Its main agent sends three `auditor` subagents out in parallel, each with
+a list of security-critical functions in the pinned Python codebase. They trace them with
+the SDK's Read, Grep and Glob tools. `seeded-vulns.patch` plants nine vulnerabilities,
+three per slice, and is imported as one commit. Each audited function calls a helper that
+decides the outcome, defined at the end of another module (eight of nine past line 1,000),
+so finding one takes a search, then reads of located ranges in several files. A round is
+graded on how many of the nine deciding constants the report and its accepted
+ReportFindings quote.
+
+Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 600) in
+`--keys-dir`:
+
+| Arm | What the app gets |
+|---|---|
+| A | The gateway's `/mcp` read path, harness retrieval off |
+| B | The same, harness retrieval on |
+| C | No read path, optimization bypassed (`x-anyray-optimize: off`) |
+| D | B plus Anyray Connect's local MCP server, offering `anyray_read_batch` |
+
+For arm D the runner first enrolls Connect in a private HOME, once per run, the way an
+agent host does it (`D.key` must be an agent key). It configures no client there: the
+server needs only the enrolled profile. It then mounts only Connect's MCP
+server (`anyray-connect __anyray-mcp-server claude`, HOME set to that private HOME) in
+the app as `anyray-connect`. The app runs under its own environment and never reads that
+HOME. Before the first paid round, the runner checks with `tools/list` that the server
+offers the batch read, and stops if it does not. D hides the server's own
+`anyray_retrieve` and `anyray_recall`, so it differs from B by one tool.
+
+Check the wiring first. This makes no model request and needs no key:
+
+```bash
+node tools/probe-sdk-code-scan.mjs
+```
+
+It starts the server as D does in a fresh checkout, makes one batch read call, then starts
+the SDK with D's options against a closed local port and reads its init message. It shows
+which tools the model is offered and where the server runs. Then a paired run:
+
+```bash
+node run_sdk_app.mjs --scenario sdk-app-code-scan --arms A,D --gateway <url> \
+  --keys-dir <dir with A.key and D.key> --model claude-sonnet-5-5 --rounds 8 --budget 40 --label code-scan
+node tools/compare-sdk-app.mjs results/agent/sdk-app-code-scan--code-scan.json
+```
+
+The comparison prints D/A, plus D/B when B ran (that pair isolates the batch read). It
+first checks that D's agents called the batch read with at least one call not errored, in
+at least half the D sessions. Each session records its tool calls by name and its
+`readBatch` calls and errors.
+
 ### Connect's client-tool switches
 
 `--client-tool-policy name=true|false` (repeatable) sets one of anyray-connect's local
@@ -691,6 +743,9 @@ as required survive. Its results stay with you and are never committed anywhere.
 
 ```
 run_agent.mjs         paired agent rounds → results/agent/*.json
+run_sdk_app.mjs       Agent SDK app lanes (sdk-app-scanner, sdk-app-code-scan) → results/agent/*.json
+tools/compare-sdk-app.mjs  per-pair ratios for an Agent SDK app result file
+tools/probe-sdk-code-scan.mjs  offline check of arm D's Connect MCP mount
 report_agent.mjs      → results/agent/report.html
 scenarios/            one directory per task: scenario.yaml (+ patch)
 tools/bench-rule.mjs  strategies on/off for benchmark traffic only; params for one experiment tag
