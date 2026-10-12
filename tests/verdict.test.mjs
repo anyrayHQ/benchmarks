@@ -194,3 +194,44 @@ test('formatVerdict: gateway-restarted rounds are dropped from both lines and li
   assert.match(out, /solved pairs 3\/3/);
   assert.match(out, /dropped \(gateway restarted\): round\(s\) 2/);
 });
+
+// A treatment arm that never acted has nothing to measure (2026-10-12: the request-planner
+// bench read "neutral" over 19 pairs where the planner-on arm made no edit in any session).
+
+/** A round whose arms report their optimization tally: `applied` edits per kind on each arm. */
+const tallied = (round, ratio, appliedA, appliedB) => ({
+  ...rnd(round, ratio),
+  optimizationA: { requests: 10, byKind: { observation_mask: { applied: appliedA, skipped: {}, unconfirmed: 0 }, content_census: { applied: 10, skipped: {}, unconfirmed: 0 } }, otherApplied: {} },
+  optimization: { requests: 10, byKind: { observation_mask: { applied: appliedB, skipped: {}, unconfirmed: 0 }, content_census: { applied: 10, skipped: {}, unconfirmed: 0 } }, otherApplied: {} },
+});
+
+test('solvedPairVerdict: a treatment arm that applied no optimization in any solved pair is insufficient, the census aside', () => {
+  const idle = [0.8, 0.85, 0.9, 0.7, 0.95, 0.88].map((x, i) => tallied(i + 1, x, 0, 0));
+  const v = solvedPairVerdict(idle);
+  assert.equal(v.verdict, 'INSUFFICIENT');
+  assert.equal(v.treatmentEdits, 0);
+  assert.match(v.reasons[0], /treatment arm B applied no optimization in any of the 6 solved pairs/);
+  // One edited pair is enough to score; rounds with no tally at all (a control run, an older record) never trip it.
+  assert.equal(solvedPairVerdict([...idle.slice(1), tallied(7, 0.8, 0, 3)]).verdict, 'PASS');
+  assert.equal(solvedPairVerdict([0.8, 0.85, 0.9, 0.7, 0.95, 0.88].map((x, i) => rnd(i + 1, x))).verdict, 'PASS');
+});
+
+test('solvedPairVerdict: --treatment a scores the ratio as A over B and reads A’s edits', () => {
+  const rounds = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5].map((x, i) => tallied(i + 1, x, 2, 0));
+  const b = solvedPairVerdict(rounds);
+  assert.equal(b.verdict, 'INSUFFICIENT', 'B edited nothing');
+  const a = solvedPairVerdict(rounds, { treatment: 'a' });
+  assert.equal(a.treatment, 'a');
+  assert.equal(a.treatmentEdits, 6);
+  assert.equal(a.stats.median, 2, 'A costs twice B');
+  assert.equal(a.stats.wins, 0);
+  assert.equal(a.verdict, 'FAIL');
+  assert.match(formatVerdict({ scenario: 's', compare: 'gateway', rounds, treatment: 'a' }), /treatment A \(ratio A\/B\)/);
+});
+
+test('parseArgs: --treatment names the arm under test, b by default, and needs --compare gateway', () => {
+  assert.equal(parseArgs(base).treatment, 'b');
+  assert.equal(parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'observation_mask', '--treatment', 'a']).treatment, 'a');
+  assert.throws(() => parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'observation_mask', '--treatment', 'c']), /--treatment must be a or b/);
+  assert.throws(() => parseArgs([...base, '--treatment', 'a']), /--treatment a needs --compare gateway/);
+});
