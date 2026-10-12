@@ -95,6 +95,11 @@
 //      directory holding one. Without it `claude` comes from PATH, which auto-update moves
 //      between rounds. The run header prints the version; each arm's setup records it
 //      (`client`, `claudeVersion`, `claudeBinSource`, never the path), per round too)
+//   node run_agent.mjs --client codex --scenario gin-long-session --compare gateway \
+//     --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8
+//     (--client codex: both arms run `codex exec` on this machine's ChatGPT seat instead of
+//      Claude Code; see runCodexComparison and lib/codexAgent.mjs. --codex-model / --codex-effort
+//      pin the model and reasoning effort for both arms; --keep-codex-threads keeps the threads)
 // Each arm's round line also shows its subagent load: `N subagents · M sub-req (M/N per
 //   agent) · K main-req` (totals.subagentRequests, requestsPerSubagent, mainRequests); the
 //   end-of-run summary pools it per arm (`subagentLoad`) and lists the Claude Code versions
@@ -107,7 +112,8 @@ import { basename, isAbsolute, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent } from './lib/agentRun.mjs';
+import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults } from './lib/codexAgent.mjs';
 import { ANYRAY_BIN } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
@@ -300,11 +306,18 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
     else if (argv[i] === '--persist-session') a.persistSession = true; // the default: both arms keep their transcript, as Claude Code does outside the bench
     else if (argv[i] === '--no-persist-session') a.persistSession = false; // both arms run --no-session-persistence, as every run did before 2026-10-12
+    else if (argv[i] === '--client') a.client = argv[++i]; // claude-code (default) | codex: the agent both arms run
+    else if (argv[i] === '--codex-model') a.codexModel = argv[++i] ?? ''; // --client codex: the model both arms run (default: Codex's own)
+    else if (argv[i] === '--codex-effort') a.codexEffort = argv[++i] ?? ''; // --client codex: model_reasoning_effort for both arms (default: the model's own)
+    else if (argv[i] === '--keep-codex-threads') a.keepCodexThreads = true; // --client codex: leave the sessions' threads in ~/.codex (default: deleted after reading)
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
+  a.client ??= 'claude-code';
+  if (!['claude-code', 'codex'].includes(a.client)) throw new Error('--client claude-code|codex');
+  if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads)) throw new Error('--codex-model, --codex-effort and --keep-codex-threads need --client codex');
   // --read-trim(-b) is readTrim=on: one posture, so both spellings reach every check below.
   a.hookPosture = postureOf(pins.all, 'every Anyray arm');
   postureOf([...pins.all, ...pins.b], 'arm B'); // --hook-posture reaches B too
@@ -376,16 +389,35 @@ export function parseArgs(argv, env = process.env) {
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
   if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
+  if (a.client === 'codex') assertCodexArgs(a, { claudeBinFlag, pinsHooks });
   if (gateway && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
   a.label ??= a.strategy;
   if (a.provider === 'bedrock') a.label ??= 'bedrock'; // never mixed into a seat run's file
   if (a.bare) a.label = a.label ? `bare-${a.label}` : 'bare'; // never mixed into a connect-configured run's file
+  if (a.client === 'codex') a.label = a.label ? `codex-${a.label}` : 'codex'; // never mixed into a Claude Code run's file
   a.env = parseArmEnv(a.armEnv);
   assertArmEnvSafe(a.env.a);
   assertArmEnvSafe(a.env.b);
   return a;
+}
+
+const CODEX_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+const CODEX_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * --client codex runs `codex exec` in both arms (lib/codexAgent.mjs). Claude Code's own
+ * switches have no Codex counterpart, so they are refused rather than ignored.
+ */
+function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
+  if (SDK_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs its own SDK agent, not Codex`);
+  if (a.provider !== 'anthropic') throw new Error('--client codex runs on the ChatGPT seat: --provider does not apply');
+  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--connect-bin-b', a.connectBinB !== undefined], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
+  const used = claudeOnly.filter(([, on]) => on).map(([flag]) => flag);
+  if (used.length) throw new Error(`--client codex does not take ${used.join(', ')}: ${used.includes('--max-turns') ? 'Codex has no turn cap (use --timeout-min); ' : ''}those are Claude Code switches`);
+  if (a.codexModel !== undefined && !CODEX_MODEL.test(a.codexModel)) throw new Error(`--codex-model takes a model id, got ${JSON.stringify(a.codexModel)}`);
+  if (a.codexEffort !== undefined && !CODEX_EFFORTS.includes(a.codexEffort)) throw new Error(`--codex-effort must be ${CODEX_EFFORTS.join('|')}`);
 }
 
 /** The scenario as both arms run it: --max-turns replaces its turn cap. */
@@ -1088,6 +1120,169 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   return { record, file, viaGateway: [] };
 }
 
+/** What runCodexComparison reaches outside the process through; tests stub them. */
+const CODEX_LIVE = {
+  runCodexAgent, configureCodexArmHome, prepareRepo, describeRepo, write: writeFileSync, log: console.log,
+  sessionTraces, gatewayReplicaStarts, readOptimizerConfig: optimizerConfig, connectPolicy,
+  deleteThread: deleteCodexThread(), armHomeParent: () => sessionDirParent(),
+};
+
+/**
+ * Paired Codex CLI sessions (--client codex). The same pairing, verdict and result file
+ * as Claude Code; each arm is `codex exec` on the ChatGPT seat (lib/codexAgent.mjs):
+ *   anyray   A = Codex direct (its built-in provider), B = the seat route through the gateway
+ *   control  both direct: the noise floor
+ *   gateway  both through the gateway, B with the treatment (--experiment-b with a
+ *            `bench-rule params` rule, ANYRAY_BENCH_EXTRA_HEADERS, or --kinds-b)
+ * Cost is Codex's own per-response usage priced from config.yaml; what the gateway did
+ * comes from its traces, read by each gateway arm's session id.
+ */
+export async function runCodexComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps = {} } = {}) {
+  const d = { ...CODEX_LIVE, ...deps };
+  const log = (msg) => d.log(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
+  const arms = armsFor(args.compare);
+  const viaGateway = gatewaySlots(arms);
+  const { run, pricing } = cfg;
+  if (viaGateway.length && !run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
+  const clientKey = viaGateway.length ? (deps.clientKey ?? resolveBenchKey().key) : null;
+  if (viaGateway.length && !clientKey) throw new Error('the gateway arm needs ANYRAY_BENCH_CLIENT_KEY (or ANYRAY_CLIENT_KEY): a key on the bench gateway');
+  args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
+  args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB) {
+    console.warn('--compare gateway without a treatment (--experiment-b, --kinds-b or ANYRAY_BENCH_EXTRA_HEADERS): A and B are the same arm (a gateway noise floor)');
+  }
+  const dir = join(cfg.root, 'scenarios', args.scenario);
+  const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenario = effectiveScenario(scenarioFile, args);
+  const out = join(cfg.root, 'results', 'agent');
+  mkdirSync(out, { recursive: true });
+  const file = join(out, resultFileName(args));
+  const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
+  const save = recordSaver(file, record, d.write);
+  const probe = d.prepareRepo(scenario, dir);
+  try { record.scenario = { name: args.scenario, ...scenarioFile, repoInfo: d.describeRepo(probe, scenario) }; }
+  finally { rmSync(probe, { recursive: true, force: true }); }
+  const tenant = viaGateway.length ? benchTenantSetup(resolveBenchKey(process.env, () => {})) : null;
+  const armSetup = (slot) => ({ client: 'codex', arm: arms[slot], model: args.codexModel ?? null, effort: args.codexEffort ?? null, kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null, timeoutMin: scenario.timeoutMin ?? 6 });
+  Object.assign(record, {
+    client: 'codex', compare: args.compare, label: args.label, gateway: run.gatewayUrl, provider: 'chatgpt-seat', arms, kinds: args.kinds, tenant,
+    request: { ...requestRecord(args), client: 'codex', codexModel: args.codexModel ?? null, codexEffort: args.codexEffort ?? null },
+    setup: { a: armSetup('a'), b: armSetup('b') },
+  });
+  if (viaGateway.length) record.anyray = { connectPolicy: await d.connectPolicy(run.gatewayUrl), optimizerConfig: await d.readOptimizerConfig(run.gatewayUrl) };
+  if (args.experimentB) {
+    const rules = experimentRules(record.anyray?.optimizerConfig, args.experimentB);
+    if (rules === null) log(`WARNING: cannot read the gateway's optimizer config, so cannot confirm a rule matches experiment=${args.experimentB}`);
+    else if (!rules.length) log(`WARNING: no gateway rule matches experiment=${args.experimentB}: A and B are the same arm. Add one with \`bench-rule params ${args.experimentB} --params …\``);
+    else log(`arm B (experiment=${args.experimentB}) matches: ${rules.map((r) => `${r.label}${r.params ? ` params ${JSON.stringify(r.params)}` : ''}`).join('; ')}`);
+  }
+  const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
+  log(`${args.scenario} [${args.compare}] codex rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1} · model ${args.codexModel ?? "Codex's default"}`);
+
+  const runRound = async (round) => {
+    const tags = roundTags(args, round);
+    const replicasBefore = viaGateway.length ? await d.gatewayReplicaStarts(run.gatewayUrl) : null;
+    const ruleBefore = args.experimentB ? experimentRules(await d.readOptimizerConfig(run.gatewayUrl), args.experimentB) : undefined;
+    const startedAt = new Date().toISOString();
+    const runArm = async (slot) => {
+      const work = d.prepareRepo(scenario, dir);
+      const home = arms[slot] === 'anyray' ? makeArmHome(d.armHomeParent()) : null;
+      try {
+        const armHome = home ? d.configureCodexArmHome({ home, gatewayUrl: run.gatewayUrl, clientKey, bin: ANYRAY_BIN }) : null;
+        if (armHome && !armHome.configured) throw new Error(`anyray-connect did not set up the Codex seat route: ${armHome.reasons.join('; ')}`);
+        return await d.runCodexAgent({
+          arm: arms[slot], scenario, work, model: args.codexModel, effort: args.codexEffort, gatewayUrl: run.gatewayUrl, clientKey,
+          runTag: tags[slot], sharedHeaders: args.sharedHeaders,
+          extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders : [], armHome, pricing,
+          keepThreads: !!args.keepCodexThreads, deleteThread: d.deleteThread,
+          check: scenario.check ? (w) => runCheck(scenario.check, w) : null,
+          citations: scenario.citations ? (text, w) => checkCitations(text, w) : null,
+        });
+      } finally {
+        rmSync(work, { recursive: true, force: true });
+        if (home) removeArmHome(home);
+      }
+    };
+    const [sa, sb] = await Promise.allSettled([runArm('a'), runArm('b')]);
+    const endedAt = new Date().toISOString();
+    if (sa.status === 'rejected' || sb.status === 'rejected') {
+      const error = [['A', sa], ['B', sb]].filter(([, s]) => s.status === 'rejected').map(([n, s]) => `${n}: ${s.reason?.message ?? 'codex arm failed'}`).join('; ');
+      log(`  round ${round} failed: ${error}`);
+      const failed = { round, error };
+      insertRound(record.rounds, failed);
+      await save();
+      return failed;
+    }
+    const sessions = { a: sa.value, b: sb.value };
+    // What the gateway did, per gateway arm, from its own trace rows (Codex never sees its response headers).
+    const tallies = {};
+    for (const slot of viaGateway) {
+      const t = await d.sessionTraces(run.gatewayUrl, tags[slot].sessionId);
+      sessions[slot].traces = t.traces ?? null;
+      if (t.unavailable) {
+        sessions[slot].tracesUnavailable = t.unavailable;
+        log(`  round ${round} ${slot.toUpperCase()} warning: gateway traces unavailable (${t.unavailable})`);
+      }
+      const kinds = slotKinds(args, slot)[0];
+      if (kinds && t.traces) tallies[slot] = tallyKinds(traceResults(t.traces), kinds);
+    }
+    const r = {
+      round, runTag: tags.b, ...(args.compare === 'gateway' ? { runTags: tags } : {}), startedAt, endedAt, sessions,
+      ...roundRatio(sessions.a, sessions.b),
+      quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
+      ...(tallies.b ? { optimization: tallies.b } : {}),
+      ...(tallies.a && args.compare === 'gateway' ? { optimizationA: tallies.a } : {}),
+    };
+    if (viaGateway.length) {
+      const after = await d.gatewayReplicaStarts(run.gatewayUrl);
+      const restarted = restartedDuring(replicasBefore, after);
+      if (restarted) {
+        r.gatewayRestarted = true;
+        log(`  round ${round} WARNING: a gateway replica (re)started during the round; it is left out of the Rule 0 stats`);
+      }
+    }
+    if (args.experimentB) {
+      const ruleAfter = experimentRules(await d.readOptimizerConfig(run.gatewayUrl), args.experimentB);
+      r.experimentRule = { before: ruleBefore, after: ruleAfter, stable: !!ruleBefore?.length && sameRules(ruleBefore, ruleAfter) };
+      if (!r.experimentRule.stable) log(`  round ${round} WARNING: the experiment=${args.experimentB} rule was missing or changed during the round: drop it`);
+    }
+    insertRound(record.rounds, r);
+    const line = (slot) => {
+      const t = sessions[slot].totals;
+      const share = t.input ? (100 * t.cacheRead / t.input).toFixed(1) : '0.0';
+      const tally = slot === 'b' ? r.optimization : r.optimizationA;
+      return `  round ${round} ${slot.toUpperCase()} ${arms[slot]}: $${t.costUsd?.toFixed(3) ?? 'n/a'} · ${t.turns} requests (+${t.subagentRequests} in ${t.subagents} subagents) · ${t.uncachedInput} uncached / ${t.cacheRead} read / ${t.cacheWrite} written · ${share}% cache-read share · ${t.retrievalCalls} retrieval calls · median ${t.latencyMs?.median ?? 'n/a'} ms/request · ${r.quality[slot] ? 'solved' : 'NOT solved'}${sessions[slot].error ? ` (${sessions[slot].error})` : ''}` +
+        (tally ? `\n  round ${round} ${slot.toUpperCase()} ${formatKindTally(tally)}` : '');
+    };
+    log(`${line('a')}\n${line('b')}\n  round ${round} ratio B/A ${r.ratio?.toFixed(3) ?? `n/a (${r.error})`}`);
+    record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
+    record.verdict = benchVerdict(record.rounds);
+    await save();
+    return r;
+  };
+  let nextRound = first + args.rounds;
+  let retriesLeft = args.retryInvalid ?? 0;
+  const attempt = async (round) => {
+    const r = await schedule(() => runRound(round));
+    const why = exclusionReasons(r);
+    if (!why.length || retriesLeft <= 0) return r;
+    retriesLeft--;
+    const again = nextRound++;
+    (record.retries ??= []).push({ round, reasons: why, retriedAs: again });
+    log(`  round ${round} is not usable (${why.join(', ')}); running round ${again} in its place (retry ${args.retryInvalid - retriesLeft}/${args.retryInvalid})`);
+    return attempt(again);
+  };
+  const settled = await Promise.allSettled(Array.from({ length: args.rounds }, (_, i) => attempt(first + i)));
+  const failed = settled.find((x) => x.status === 'rejected');
+  if (failed) { await save(); throw failed.reason; }
+  record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
+  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
+  record.verdict = benchVerdict(record.rounds);
+  await save();
+  return { record, file, viaGateway: [] };
+}
+
 /**
  * One comparison's rounds, into its own result file. Returns the record. Up to
  * --parallel rounds run at once through `schedule` (a pool lane; runAll shares one
@@ -1095,6 +1290,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
   if (SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
+  if (args.client === 'codex') return runCodexComparison(args, cfg, { prefix, schedule, deps });
   const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig, resolveClaudeBin, claudeVersion } = { ...LIVE, ...deps };
   const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);

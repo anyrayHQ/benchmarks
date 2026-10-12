@@ -203,6 +203,46 @@ pair starts again with fresh sessions (fresh draws), up to N times; the draws th
 are recorded in the round's `redraws`. Name every kind the gateway may hold out in
 `--kinds`, since only requested kinds are watched.
 
+### Codex (`--client codex`)
+
+`--client codex` runs the same scenarios with Codex CLI in both arms (`codex exec`, on
+this machine's ChatGPT seat), for the gateway's Codex seat lane. Arm by arm:
+
+| Compare | A | B |
+|---|---|---|
+| `anyray` | Codex direct (its built-in provider, its own WebSocket to chatgpt.com) | Codex on the seat route anyray-connect writes, through the gateway |
+| `control` | Codex direct | Codex direct |
+| `gateway` | through the gateway | through the gateway, with the treatment |
+
+Each gateway arm is set up by running `anyray-connect --tools codex --subscription`
+into a private home against the bench gateway; the arm then uses that route, MCP server
+and tool approvals. Codex itself keeps the real `~/.codex` (the seat login is never
+copied), with `--ignore-user-config`, the route as `-c` overrides, the client key in an
+env var (never argv), and hooks off in both arms. Each session's threads are deleted
+afterwards (`--keep-codex-threads` keeps them).
+
+Cost is Codex's own per-response usage from the thread's rollout file, subagents
+included, priced from `pricing` above (cache writes at 1.25x). The seat bills in usage
+limits; the figure is list-price equivalent. What the gateway did comes from its traces
+(`ANYRAY_ADMIN_KEY`). `--kinds` names the kinds that tally reads and is not sent: the
+gateway refuses `x-anyray-optimization-kinds` on anything but an inference POST, so it
+would fail Codex's WebSocket upgrade (a GET), and the seat lane runs only
+`relevance_filter` and `content_census` anyway. Codex has no turn cap: `--max-turns` is
+refused, `--timeout-min` bounds each session.
+
+The Codex seat source trim (`codexSeatSourceTrim`) is a deployment-wide setting, so
+the pair that isolates it keeps the setting on and turns the trim off on B by rule:
+
+```bash
+npm run bench-rule -- params codex-trim-off --params '{"relevance_filter":{"minChars":1000000000}}'
+npm run agent -- --client codex --scenario gin-long-session --compare gateway \
+  --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8 --retry-invalid 4
+npm run bench-rule -- remove-params codex-trim-off
+```
+
+`--compare anyray` with the setting on asks the end-to-end question (the lane against
+Codex with no gateway at all).
+
 ### Scenarios
 
 | Scenario | Repo | Task | Graded by |
