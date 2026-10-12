@@ -295,6 +295,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
+    else if (argv[i] === '--persist-session') a.persistSession = true; // both arms keep their transcript, as Claude Code does outside the bench (hooks that read it see one)
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
@@ -314,7 +315,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.retryInvalid || a.noSubagents || a.mcpCatalog || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns and --inter-turn-delay-sec`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -467,6 +468,7 @@ export const slotOptions = (args, arms, slot) => ({
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
+  ...(args.persistSession ? { persistSession: true } : {}), // --persist-session: both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
 });
 
@@ -487,6 +489,7 @@ export const requestRecord = (args) => ({
   ...(Object.keys(args.hookPostureB ?? {}).length ? { hookPostureB: args.hookPostureB } : {}), // the switches arm B alone pins
   ...(args.redrawHoldout ? { redrawHoldout: args.redrawHoldout } : {}),
   ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}),
+  ...(args.persistSession ? { persistSession: true } : {}),
   extraHeaders: (args.extraHeaders ?? []).map((h) => h.slice(0, h.indexOf(':')).trim()),
   extraHeadersOn: (args.extraHeaders ?? []).length ? ['a', 'b'].filter((slot) => carriesExtraHeaders(armsFor(args.compare), slot)) : [],
   ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),
@@ -1018,7 +1021,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   finally { rmSync(probe, { recursive: true, force: true }); }
   const bedrock = args.bedrock ?? await (deps.resolveBedrock ?? resolveBedrock)(run);
   args.bedrock = bedrock;
-  Object.assign(record, { compare: 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: 'direct', b: 'anyray' }, kinds: args.kinds, request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true, ...(agent.framework ? { framework: agent.framework } : {}) }, setup: { a: { transport: agent.transport.a, model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } } });
+  Object.assign(record, { compare: 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: 'direct', b: 'anyray' }, kinds: args.kinds, request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true, ...(agent.framework ? { framework: agent.framework } : {}), ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}) }, setup: { a: { transport: agent.transport.a, model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } } });
   const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
   log(`${name} [anyray] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1}`);
   const runRound = async (round) => {
@@ -1034,10 +1037,11 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       // Name each arm that failed, so a round lost to one lane's transport says which lane.
       const error = [['direct', sa], ['anyray', sb]].filter(([, s]) => s.status === 'rejected').map(([arm, s]) => `${arm}: ${s.reason?.message ?? 'SDK arm failed'}`).join('; ');
-      insertRound(record.rounds, { round, error });
+      const r = { round, error };
+      insertRound(record.rounds, r);
       log(`  round ${round} failed: ${error}`);
       await save();
-      return;
+      return r;
     }
     const sessions = { a: sa.value, b: sb.value };
     const r = { round, runTag: tags.b, startedAt, endedAt: new Date().toISOString(), sessions, ...roundRatio(sessions.a, sessions.b), quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) } };
@@ -1052,10 +1056,26 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     record.rule0Verdict = solvedPairVerdict(record.rounds);
     record.verdict = benchVerdict(record.rounds);
     await save();
+    return r;
   };
-  const settled = await Promise.allSettled(Array.from({ length: args.rounds }, (_, i) => schedule(() => runRound(first + i))));
+  // --retry-invalid N, as in runComparison: a round the verdict would drop (an arm that
+  // failed, ran out of answer tokens or answered nothing is 'not solved') runs again
+  // under the next free number, at most N extra rounds in all.
+  let nextRound = first + args.rounds;
+  let retriesLeft = args.retryInvalid ?? 0;
+  const attempt = async (round) => {
+    const r = await schedule(() => runRound(round));
+    const why = exclusionReasons(r);
+    if (!why.length || retriesLeft <= 0) return r;
+    retriesLeft--;
+    const again = nextRound++;
+    (record.retries ??= []).push({ round, reasons: why, retriedAs: again });
+    log(`  round ${round} is not usable (${why.join(', ')}); running round ${again} in its place (retry ${args.retryInvalid - retriesLeft}/${args.retryInvalid})`);
+    return attempt(again);
+  };
+  const settled = await Promise.allSettled(Array.from({ length: args.rounds }, (_, i) => attempt(first + i)));
   const failed = settled.find((x) => x.status === 'rejected');
-  if (failed) throw failed.reason;
+  if (failed) { await save(); throw failed.reason; }
   record.stats = rule0(scoredRounds(record.rounds));
   record.rule0Verdict = solvedPairVerdict(record.rounds);
   record.verdict = benchVerdict(record.rounds);

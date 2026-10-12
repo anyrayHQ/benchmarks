@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { countCacheBreaks } from '../lib/cacheBreaks.mjs';
 import { armConfig, checkCitations, describeSetup } from '../lib/agentRun.mjs';
-import { parseArgs, armSetups, armReadTrim, slotOptions } from '../run_agent.mjs';
+import { parseArgs, armSetups, armReadTrim, slotOptions, requestRecord } from '../run_agent.mjs';
 
 // ---- cache-break counter ---------------------------------------------------
 
@@ -338,4 +338,17 @@ test('slotOptions: --read-trim follows the anyray arm, --arm-env follows the slo
   assert.equal('env' in s.a, false);
   assert.deepEqual(s.b.env, { K: 'v' });
   assert.match(s.b.readTrim, /^on for this session only/);
+});
+
+test('--persist-session: both arms keep their transcript, and the request records it', () => {
+  const args = parseArgs(['--scenario', 's', '--kinds', 'observation_mask', '--persist-session']);
+  assert.equal(args.persistSession, true);
+  const arms = { a: 'direct', b: 'anyray' };
+  assert.equal(slotOptions(args, arms, 'a').persistSession, true);
+  assert.equal(slotOptions(args, arms, 'b').persistSession, true);
+  assert.equal(requestRecord(args).persistSession, true);
+  const plain = parseArgs(['--scenario', 's', '--kinds', 'observation_mask']);
+  assert.equal('persistSession' in slotOptions(plain, arms, 'b'), false);
+  assert.equal('persistSession' in requestRecord(plain), false);
+  assert.throws(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--persist-session']), /sdk-docs supports/);
 });

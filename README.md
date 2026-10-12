@@ -249,7 +249,8 @@ when the previous answer is done. `patch:` is one file or a list, applied in ord
 single commit, so the planted bug can't be found with `git diff` or `git log`. The gin
 scenarios also apply `fixed-ports-lock.patch`: several gin tests bind fixed ports, and
 both arms run `go test` on one machine at once, so the patch adds a `TestMain` that makes
-concurrent runs of that package's tests take turns. No test or library code changes.
+concurrent runs of that package's tests take turns, and gives each test binary its own
+temp dir, so `TestUnixSocket` never meets another run's socket. No test or library code changes.
 `followupDelaySec` idles before each follow-up, the way a person pausing would: one
 number for every follow-up, or a list with one per follow-up (the last repeats).
 `gatewaySettleSec` waits that long after the session before reading the gateway's ping
@@ -371,7 +372,8 @@ requests to test behavior beyond the five-minute cache lifetime. `--max-turns` m
 stay between 8 and 30; the scenario continues early answers until at least eight
 model requests have run. A final reply with no text (Sonnet 5 can end a turn on thinking
 alone) gets one more answer-only request with the same tools; an answer still empty is
-graded `error_no_answer`. The round line prints each arm's cache-read share. The result
+graded `error_no_answer`. `--retry-invalid N` runs a round again when either arm failed
+or did not solve it, as on the Claude Code scenarios. The round line prints each arm's cache-read share. The result
 file stores every request's token usage, estimated cost, and latency, plus the usual
 paired verdict and citation check. Run `node tools/bench-verdict.mjs` on that file to
 recalculate the verdict. A live run is required to establish route parity and measured
@@ -551,6 +553,10 @@ settings afterwards.
   `bench-rule params`). Recorded in `request.experimentB`.
 - `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
   (see the gateway comparison above). Stopped attempts are not in the round's cost.
+- `--persist-session`: both arms keep their Claude Code transcript, as Claude Code does outside
+  the bench. By default the harness runs `--no-session-persistence` unless a pinned hook switch
+  reads the transcript, so connect hooks that read it (the digest cost gate's usage, read trim,
+  the serial-lookup note) see none. Transcripts in the real HOME are removed after the session.
 - `--retry-invalid N`: when a round would be dropped from the verdict (an arm not solved, a
   failed round, a file outside the checkout, a gateway restart), run another round in its
   place, up to N extra rounds in all. The dropped round stays in the result file and the
