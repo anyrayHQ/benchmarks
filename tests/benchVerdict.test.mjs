@@ -44,7 +44,7 @@ test('exclusions report failed, unsolved, outside checkout and overlapping reaso
   const v = benchVerdict(rounds);
   assert.equal(v.n, 1);
   assert.equal(v.excludedCount, 5);
-  assert.deepEqual(v.excludedByReason, { 'not solved': 3, 'failed round': 2, 'outside checkout': 1, 'gateway restart': 1 });
+  assert.deepEqual(v.excludedByReason, { 'not solved': 3, 'failed round': 2, 'outside checkout': 1, 'gateway restart': 1, 'hook leak': 0 });
   assert.deepEqual(v.excluded.map((x) => x.reasons), [['not solved'], ['failed round', 'not solved'], ['outside checkout'], ['gateway restart', 'not solved'], ['failed round']]);
   assert.equal(v.confidenceInterval95, null);
 });

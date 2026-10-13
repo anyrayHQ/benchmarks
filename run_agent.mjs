@@ -105,6 +105,13 @@
 //     (--codex-config-b: arm B alone runs with that Codex config, here the auto-compact threshold
 //      connect writes from the gateway's codexAutoCompact policy; a round counts B as acting
 //      only when it compacted more often than A, so a run that never reaches it is INSUFFICIENT)
+//   node run_agent.mjs --client codex --scenario gin-long-session --compare gateway \
+//     --kinds relevance_filter --codex-hooks-b [--connect-bin-b /abs/pr/anyray-connect] --rounds 8
+//     (--codex-hooks-b: arm B alone runs connect's Codex PreToolUse source trim, the hook
+//      anyray-connect installed in B's own home, declared and trusted as session config; A
+//      keeps hooks off. A round counts B as acting only when B's connect wrapped a command,
+//      and leaves the stats if a hook wrapped anything on A or B's wrap came from another
+//      connect. --connect-bin-b: B's home configured by that build, A's by ANYRAY_CONNECT_BIN)
 // Each arm's round line also shows its subagent load: `N subagents · M sub-req (M/N per
 //   agent) · K main-req` (totals.subagentRequests, requestsPerSubagent, mainRequests); the
 //   end-of-run summary pools it per arm (`subagentLoad`) and lists the Claude Code versions
@@ -117,9 +124,10 @@ import { basename, isAbsolute, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent } from './lib/agentRun.mjs';
-import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults } from './lib/codexAgent.mjs';
-import { ANYRAY_BIN } from './lib/connectArm.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome } from './lib/agentRun.mjs';
+import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults, codexHookSpec, realCodexHookKeys, wrappedCommandEnv, shellRunEnvFor } from './lib/codexAgent.mjs';
+import { checkConnectBinary } from './lib/connectChecks.mjs';
+import { ANYRAY_BIN, CONNECT_BIN_PINNED } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
@@ -316,6 +324,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--codex-effort') a.codexEffort = argv[++i] ?? ''; // --client codex: model_reasoning_effort for both arms (default: the model's own)
     else if (argv[i] === '--codex-config-b') (a.codexConfigB ??= []).push(parseCodexConfig(argv[++i])); // --client codex: a Codex config key=value arm B alone runs with (repeatable)
     else if (argv[i] === '--keep-codex-threads') a.keepCodexThreads = true; // --client codex: leave the sessions' threads in ~/.codex (default: deleted after reading)
+    else if (argv[i] === '--codex-hooks-b') a.codexHooksB = true; // --client codex: arm B alone runs connect's Codex PreToolUse hook (the source trim)
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
@@ -323,7 +332,7 @@ export function parseArgs(argv, env = process.env) {
   if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
   a.client ??= 'claude-code';
   if (!['claude-code', 'codex'].includes(a.client)) throw new Error('--client claude-code|codex');
-  if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads || a.codexConfigB)) throw new Error('--codex-model, --codex-effort, --codex-config-b and --keep-codex-threads need --client codex');
+  if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads || a.codexConfigB || a.codexHooksB)) throw new Error('--codex-model, --codex-effort, --codex-config-b, --codex-hooks-b and --keep-codex-threads need --client codex');
   // --read-trim(-b) is readTrim=on: one posture, so both spellings reach every check below.
   a.hookPosture = postureOf(pins.all, 'every Anyray arm');
   postureOf([...pins.all, ...pins.b], 'arm B'); // --hook-posture reaches B too
@@ -419,7 +428,7 @@ const CODEX_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
   if (SDK_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs its own SDK agent, not Codex`);
   if (a.provider !== 'anthropic') throw new Error('--client codex runs on the ChatGPT seat: --provider does not apply');
-  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--connect-bin-b', a.connectBinB !== undefined], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
+  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
   const used = claudeOnly.filter(([, on]) => on).map(([flag]) => flag);
   if (used.length) throw new Error(`--client codex does not take ${used.join(', ')}: ${used.includes('--max-turns') ? 'Codex has no turn cap (use --timeout-min); ' : ''}those are Claude Code switches`);
   if (a.codexModel !== undefined && !CODEX_MODEL.test(a.codexModel)) throw new Error(`--codex-model takes a model id, got ${JSON.stringify(a.codexModel)}`);
@@ -428,6 +437,13 @@ function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
     // Both arms on one route, so the config is the only difference; B carries it.
     if (!['gateway', 'control'].includes(a.compare)) throw new Error('--codex-config-b needs --compare gateway or control: both arms on one route, B alone differing');
     if (a.treatment !== 'b') throw new Error('--codex-config-b is the treatment on B: use treatment b');
+    const hookKey = a.codexConfigB.find(([key]) => key === 'hooks' || key.startsWith('hooks.') || key === 'features.hooks');
+    if (hookKey) throw new Error(`--codex-config-b cannot set ${hookKey[0]}: the harness owns Codex's hooks on both arms (--codex-hooks-b)`);
+  }
+  if (a.codexHooksB) {
+    // Two gateway arms, each with its own connect home; only B's hook runs.
+    if (a.compare !== 'gateway') throw new Error("--codex-hooks-b needs --compare gateway: both arms through the gateway, B alone running connect's hook");
+    if (a.treatment !== 'b') throw new Error('--codex-hooks-b is the treatment on B: use treatment b');
   }
 }
 
@@ -466,6 +482,7 @@ export const controlArgs = (args) => ({
   readTrimB: false,
   connectBinB: undefined,
   connectBinBDigest: undefined,
+  codexHooksB: false, // a direct arm has no connect hook to run
   seedHome: undefined, // no Anyray arm to seed
   redrawHoldout: 0,
   readTrim: false,
@@ -542,6 +559,7 @@ export const requestRecord = (args) => ({
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
   ...(args.codexConfigB ? { codexConfigB: Object.fromEntries(args.codexConfigB) } : {}), // arm B's own Codex config
+  ...(args.codexHooksB ? { codexHooksB: true } : {}), // arm B alone runs connect's Codex PreToolUse hook
   ...(args.connectBinB ? { connectBinB: args.connectBinBDigest ?? null } : {}), // arm B's connect build (sha256 prefix, never the path)
   ...(args.claude?.pinned ? { claudeBin: { source: args.claude.source, version: args.claude.version ?? null } } : {}), // both arms' pinned Claude Code build (never the path)
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
@@ -578,7 +596,7 @@ export function roundRatio(a, b) {
 }
 
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
-export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gatewayRestarted);
+export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gatewayRestarted && !x.hookLeak);
 
 /** `--treatment a|b`: the arm the Rule 0 verdict is for. B by construction (`--experiment-b`,
  * `--kinds-b` change B alone); `a` when the default is under test and B carries the switch-off. */
@@ -1148,7 +1166,20 @@ const CODEX_LIVE = {
   runCodexAgent, configureCodexArmHome, prepareRepo, describeRepo, write: writeFileSync, log: console.log,
   sessionTraces, gatewayReplicaStarts, readOptimizerConfig: optimizerConfig, connectPolicy,
   deleteThread: deleteCodexThread(), armHomeParent: () => sessionDirParent(),
+  realHookKeys: () => realCodexHookKeys(), wrappedCommandEnv: () => wrappedCommandEnv(), binDigest,
+  seedNoAppProfile: (home) => seedArmHome(home, armSeeds([], true)), checkArmBinary: checkConnectBinary,
+  connectBinPinned: CONNECT_BIN_PINNED,
 };
+
+/** --connect-bin-b: B's build, recorded by its digest; the build A already runs is no treatment. */
+function digestConnectBinB(args, digest = binDigest) {
+  if (!existsSync(args.connectBinB)) throw new Error(`--connect-bin-b: no anyray-connect at ${args.connectBinB}`);
+  args.connectBinBDigest = digest(args.connectBinB);
+  if (args.connectBinBDigest.sha256 === digest(ANYRAY_BIN).sha256) throw new Error('--connect-bin-b is the same build arm A runs (ANYRAY_CONNECT_BIN): A and B would be the same arm');
+}
+
+/** A hook tally in tallyKinds' shape: the treatment acted when B's own connect wrapped a command. */
+const hookTally = (wrapped) => ({ requests: 0, unconfirmed: 0, byKind: {}, otherApplied: { codex_hooks_b: wrapped > 0 ? 1 : 0 }, preserved: {} });
 
 /**
  * Paired Codex CLI sessions (--client codex). The same pairing, verdict and result file
@@ -1156,7 +1187,8 @@ const CODEX_LIVE = {
  *   anyray   A = Codex direct (its built-in provider), B = the seat route through the gateway
  *   control  both direct: the noise floor
  *   gateway  both through the gateway, B with the treatment (--experiment-b with a
- *            `bench-rule params` rule, ANYRAY_BENCH_EXTRA_HEADERS, or --kinds-b)
+ *            `bench-rule params` rule, ANYRAY_BENCH_EXTRA_HEADERS, --kinds-b, --codex-config-b,
+ *            --codex-hooks-b or --connect-bin-b)
  * Cost is Codex's own per-response usage priced from config.yaml; what the gateway did
  * comes from its traces, read by each gateway arm's session id.
  */
@@ -1171,9 +1203,14 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   if (viaGateway.length && !clientKey) throw new Error('the gateway arm needs ANYRAY_BENCH_CLIENT_KEY (or ANYRAY_CLIENT_KEY): a key on the bench gateway');
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.codexConfigB) {
-    console.warn('--compare gateway without a treatment (--experiment-b, --kinds-b, --codex-config-b or ANYRAY_BENCH_EXTRA_HEADERS): A and B are the same arm (a gateway noise floor)');
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.codexConfigB && !args.codexHooksB && !args.connectBinB) {
+    console.warn('--compare gateway without a treatment (--experiment-b, --kinds-b, --codex-config-b, --codex-hooks-b, --connect-bin-b or ANYRAY_BENCH_EXTRA_HEADERS): A and B are the same arm (a gateway noise floor)');
   }
+  if (args.connectBinB) digestConnectBinB(args, d.binDigest);
+  // --codex-hooks-b: read once per run. What the real ~/.codex/hooks.json holds (each handler
+  // is switched off on B), and where the wrapped command's toolchains keep their caches.
+  const userHookKeys = args.codexHooksB ? d.realHookKeys() : [];
+  const hookEnv = args.codexHooksB ? d.wrappedCommandEnv() : {};
   const dir = join(cfg.root, 'scenarios', args.scenario);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
   const scenario = effectiveScenario(scenarioFile, args);
@@ -1187,7 +1224,20 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   finally { rmSync(probe, { recursive: true, force: true }); }
   const tenant = viaGateway.length ? benchTenantSetup(resolveBenchKey(process.env, () => {})) : null;
   const configOf = (slot) => (slot === 'b' ? args.codexConfigB ?? [] : []);
-  const armSetup = (slot) => ({ client: 'codex', arm: arms[slot], model: args.codexModel ?? null, effort: args.codexEffort ?? null, kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null, timeoutMin: scenario.timeoutMin ?? 6, ...(configOf(slot).length ? { codexConfig: Object.fromEntries(configOf(slot)) } : {}) });
+  const binOf = (slot) => (slot === 'b' && args.connectBinB ? args.connectBinB : ANYRAY_BIN);
+  // A named build (ANYRAY_CONNECT_BIN, --connect-bin-b) is the one each arm must run.
+  const pinsBuild = Boolean(args.connectBinB || d.connectBinPinned);
+  const armSetup = (slot) => ({
+    client: 'codex', arm: arms[slot], model: args.codexModel ?? null, effort: args.codexEffort ?? null, kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null, timeoutMin: scenario.timeoutMin ?? 6,
+    ...(configOf(slot).length ? { codexConfig: Object.fromEntries(configOf(slot)) } : {}),
+    // Which anyray-connect build configured the arm (sha256 prefix, never the path).
+    ...(args.connectBinB && arms[slot] === 'anyray' ? { connectBin: slot === 'b' ? args.connectBinBDigest : d.binDigest(ANYRAY_BIN) } : {}),
+    ...(slot === 'b' && args.codexHooksB ? { codexHooks: {
+      hook: "connect's Codex PreToolUse hook (matcher Bash) from this arm's home, run through the bench shim; declared as session config and trusted by its own hooks.state entry (no --dangerously-bypass-hook-trust)",
+      userHooksSwitchedOff: userHookKeys.length,
+      wrappedCommandEnv: Object.keys(shellRunEnvFor('', hookEnv)), // names only
+    } } : {}),
+  });
   Object.assign(record, {
     client: 'codex', compare: args.compare, label: args.label, gateway: run.gatewayUrl, provider: 'chatgpt-seat', arms, kinds: args.kinds, tenant,
     request: { ...requestRecord(args), client: 'codex', codexModel: args.codexModel ?? null, codexEffort: args.codexEffort ?? null },
@@ -1212,16 +1262,30 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       const work = d.prepareRepo(scenario, dir);
       const home = arms[slot] === 'anyray' ? makeArmHome(d.armHomeParent()) : null;
       try {
-        const armHome = home ? d.configureCodexArmHome({ home, gatewayUrl: run.gatewayUrl, clientKey, bin: ANYRAY_BIN }) : null;
+        const bin = binOf(slot);
+        // A pinned build configures from a no-app profile on both arms, so an installed Connect
+        // app cannot take the configure over and run its own build (agentRun armSeeds).
+        if (home && pinsBuild) d.seedNoAppProfile(home);
+        const armHome = home ? d.configureCodexArmHome({ home, gatewayUrl: run.gatewayUrl, clientKey, bin }) : null;
         if (armHome && !armHome.configured) throw new Error(`anyray-connect did not set up the Codex seat route: ${armHome.reasons.join('; ')}`);
-        return await d.runCodexAgent({
+        if (armHome && pinsBuild) {
+          const hooks = armHome.codexHook ? { PreToolUse: [{ hooks: [{ command: armHome.codexHook.command }] }] } : {};
+          const bad = d.checkArmBinary({ settings: { hooks }, mcpServers: { anyray: { command: armHome.mcpCommand } }, bin, home, required: true }).filter((x) => !x.ok);
+          if (bad.length) throw new Error(`arm ${slot.toUpperCase()} does not run the requested anyray-connect build: ${bad.map((x) => `${x.name}: ${x.detail}`).join('; ')}`);
+        }
+        const hook = slot === 'b' && args.codexHooksB ? codexHookSpec({ armHome, wrappedEnv: hookEnv, disableKeys: userHookKeys }) : null;
+        const session = await d.runCodexAgent({
           arm: arms[slot], scenario, work, model: args.codexModel, effort: args.codexEffort, gatewayUrl: run.gatewayUrl, clientKey,
           runTag: tags[slot], sharedHeaders: args.sharedHeaders,
           extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders : [], armHome, pricing, configOverrides: configOf(slot),
+          ...(hook ? { hook } : {}),
           keepThreads: !!args.keepCodexThreads, deleteThread: d.deleteThread,
           check: scenario.check ? (w) => runCheck(scenario.check, w) : null,
           citations: scenario.citations ? (text, w) => checkCitations(text, w) : null,
         });
+        // The build the hook ran (its launcher resolved), read before the home goes.
+        if (hook) session.setup = { ...session.setup, codexHook: { ...session.setup?.codexHook, connectBin: d.binDigest(hook.connectExe) } };
+        return session;
       } finally {
         rmSync(work, { recursive: true, force: true });
         if (home) removeArmHome(home);
@@ -1257,6 +1321,21 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       tallies.b ??= { requests: 0, unconfirmed: 0, byKind: {}, otherApplied: {}, preserved: {} };
       tallies.b.otherApplied = { ...tallies.b.otherApplied, codex_config_b: compactions.b > compactions.a ? 1 : 0 };
     }
+    // --codex-hooks-b, a client-side treatment: the gateway edits both arms alike (same kinds),
+    // so B acted only if its own connect wrapped a command; the trace tallies are kept apart.
+    // A wrap on A, or one on B by any connect but the one B's hook names, is a hook that should not have run.
+    let gatewayOptimization = null;
+    let hookLeak = null;
+    if (args.codexHooksB) {
+      const t = { a: sessions.a.totals ?? {}, b: sessions.b.totals ?? {} };
+      gatewayOptimization = { a: tallies.a ?? null, b: tallies.b ?? null };
+      tallies.a = hookTally(t.a.hookWraps ?? 0);
+      tallies.b = hookTally((t.b.hookWraps ?? 0) - (t.b.hookWrapsOther ?? 0));
+      if (t.a.hookWraps || t.b.hookWrapsOther) {
+        hookLeak = { a: t.a.hookWraps ?? 0, bOther: t.b.hookWrapsOther ?? 0 };
+        log(`  round ${round} WARNING: a hook wrapped commands where none should run (A ${hookLeak.a}, B by another connect ${hookLeak.bOther}); it is left out of the Rule 0 stats`);
+      }
+    }
     const r = {
       round, runTag: tags.b, ...(args.compare === 'gateway' ? { runTags: tags } : {}), startedAt, endedAt, sessions,
       ...roundRatio(sessions.a, sessions.b),
@@ -1264,6 +1343,8 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       compactions,
       ...(tallies.b ? { optimization: tallies.b } : {}),
       ...(tallies.a && args.compare === 'gateway' ? { optimizationA: tallies.a } : {}),
+      ...(gatewayOptimization ? { gatewayOptimization } : {}),
+      ...(hookLeak ? { hookLeak } : {}),
     };
     if (viaGateway.length) {
       const after = await d.gatewayReplicaStarts(run.gatewayUrl);
@@ -1282,13 +1363,14 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
     const line = (slot) => {
       const t = sessions[slot].totals;
       const share = t.input ? (100 * t.cacheRead / t.input).toFixed(1) : '0.0';
-      const tally = slot === 'b' ? r.optimization : r.optimizationA;
-      return `  round ${round} ${slot.toUpperCase()} ${arms[slot]}: $${t.costUsd?.toFixed(3) ?? 'n/a'} · ${t.turns} requests (+${t.subagentRequests} in ${t.subagents} subagents) · ${t.uncachedInput} uncached / ${t.cacheRead} read / ${t.cacheWrite} written · ${share}% cache-read share · ${t.retrievalCalls} retrieval calls · median ${t.latencyMs?.median ?? 'n/a'} ms/request · ${t.compactions ?? 0} compaction(s), peak ${t.peakInput ?? 'n/a'} input · ${r.quality[slot] ? 'solved' : 'NOT solved'}${sessions[slot].error ? ` (${sessions[slot].error})` : ''}` +
+      const tally = r.gatewayOptimization ? r.gatewayOptimization[slot] : slot === 'b' ? r.optimization : r.optimizationA;
+      const hook = args.codexHooksB ? ` · hook ${t.hookWraps ?? 0} wrapped${t.hookWrapsOther ? ` (${t.hookWrapsOther} by another connect)` : ''}, ${t.hookDigests ?? 0} digest footer(s)` : '';
+      return `  round ${round} ${slot.toUpperCase()} ${arms[slot]}: $${t.costUsd?.toFixed(3) ?? 'n/a'} · ${t.turns} requests (+${t.subagentRequests} in ${t.subagents} subagents) · ${t.uncachedInput} uncached / ${t.cacheRead} read / ${t.cacheWrite} written · ${share}% cache-read share · ${t.retrievalCalls} retrieval calls · median ${t.latencyMs?.median ?? 'n/a'} ms/request · ${t.compactions ?? 0} compaction(s), peak ${t.peakInput ?? 'n/a'} input${hook} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${sessions[slot].error ? ` (${sessions[slot].error})` : ''}` +
         (tally ? `\n  round ${round} ${slot.toUpperCase()} ${formatKindTally(tally)}` : '');
     };
     log(`${line('a')}\n${line('b')}\n  round ${round} ratio B/A ${r.ratio?.toFixed(3) ?? `n/a (${r.error})`}`);
     record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
-    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment });
     record.verdict = benchVerdict(record.rounds);
     await save();
     return r;
@@ -1309,7 +1391,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   const failed = settled.find((x) => x.status === 'rejected');
   if (failed) { await save(); throw failed.reason; }
   record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
-  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
+  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment });
   record.verdict = benchVerdict(record.rounds);
   await save();
   return { record, file, viaGateway: [] };
@@ -1335,11 +1417,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const viaGateway = gatewaySlots(arms); // slots whose spend, traces and feedback the gateway holds
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
-  if (args.connectBinB) {
-    if (!existsSync(args.connectBinB)) throw new Error(`--connect-bin-b: no anyray-connect at ${args.connectBinB}`);
-    args.connectBinBDigest = binDigest(args.connectBinB);
-    if (args.connectBinBDigest.sha256 === binDigest(ANYRAY_BIN).sha256) throw new Error('--connect-bin-b is the same build arm A runs (ANYRAY_CONNECT_BIN): A and B would be the same arm');
-  }
+  if (args.connectBinB) digestConnectBinB(args);
   if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }

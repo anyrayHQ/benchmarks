@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   BENCH_PROVIDER_ID, CODEX_SEAT_BACKEND, KEY_ENV, anyrayHeaders, codexArgv, codexTotals, parseExecEvents,
   readArmHomeConfig, readRollout, runCodexAgent, sessionThreads, traceResults, configureCodexArmHome,
+  codexHookTrustHash, readArmHomeHook, hooksJsonKeys, codexHookSpec, readShimLog,
 } from '../lib/codexAgent.mjs';
+import { withShellRunEnv } from '../lib/codexHookShim.mjs';
+import { exclusionReasons } from '../lib/benchVerdict.mjs';
 import { tallyKinds } from '../lib/optimizationKinds.mjs';
 import { editsIn } from '../lib/stats.mjs';
 import { parseArgs, runComparison } from '../run_agent.mjs';
@@ -327,7 +331,7 @@ test('a gateway-compare Codex round pairs both gateway arms, tallies each from i
   const seen = [];
   const rule = [{ label: 'anyray-bench: params for experiment=codex-trim-off', params: { relevance_filter: { minChars: 1e9 } } }];
   const deps = {
-    clientKey: KEY,
+    clientKey: KEY, connectBinPinned: false,
     log: () => {},
     write: () => {},
     prepareRepo: () => { const d = mkdtempSync(join(tmpdir(), 'codex-cmp-')); work.push(d); return d; },
@@ -365,7 +369,7 @@ test('a Codex round whose anyray arm connect could not set up fails the round, n
   const work = [];
   let ran = 0;
   const deps = {
-    clientKey: KEY, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
+    clientKey: KEY, connectBinPinned: false, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
     prepareRepo: () => { const d = mkdtempSync(join(tmpdir(), 'codex-cmp-')); work.push(d); return d; },
     connectPolicy: async () => ({}), readOptimizerConfig: async () => ({}), gatewayReplicaStarts: async () => null,
     configureCodexArmHome: () => ({ configured: false, reasons: ['anyray-connect exited 1'] }),
@@ -422,7 +426,7 @@ test('a --codex-config-b round runs the override on B only and scores whether B 
   const homes = [];
   const seen = [];
   const deps = {
-    clientKey: KEY, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
+    clientKey: KEY, connectBinPinned: false, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
     prepareRepo: () => { const d = mkdtempSync(join(tmpdir(), 'codex-cmp-')); work.push(d); return d; },
     connectPolicy: async () => ({}), readOptimizerConfig: async () => ({}), gatewayReplicaStarts: async () => ({ r1: 'x' }),
     configureCodexArmHome: ({ home }) => { homes.push(home); return { ...armHome, home }; },
@@ -463,4 +467,311 @@ test("Codex's Reconnecting notices are not failures: the session went on (a sock
     JSON.stringify({ type: 'turn.failed', error: { message: 'usage limit' } }),
   ].join('\n');
   assert.deepEqual(parseExecEvents(failedAfterNotice), { threadId: null, answer: '', failure: 'usage limit', reconnects: 1 });
+});
+
+// ── --codex-hooks-b: connect's Codex PreToolUse source trim on arm B alone ───────────
+
+// What anyray-connect writes into the arm home's ~/.codex/hooks.json (connect src/tools/codex.ts
+// installCodexHook): one PreToolUse group, matcher Bash, the stable launcher path.
+const ARM = '/bench/sessions/anyray-bench-codex-home-x1';
+const CONNECT_HOOKS_JSON = JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: `${ARM}/.anyray/bin/anyray-connect __anyray-codex-hook` }] }] } });
+
+test("Codex's trust hash for a session hook is the one Codex itself computes (0.162.1, hooks/list)", () => {
+  // Goldens read from `codex app-server` hooks/list (currentHash) under a throwaway CODEX_HOME.
+  assert.equal(codexHookTrustHash({ matcher: 'Bash', command: "'/opt/node/bin/node' '/bench/lib/codexHookShim.mjs' '/bench/home/.anyray-bench/codex-hook.json'", timeoutSec: 600 }),
+    'sha256:4dd75bbbc7424f8d875068c6ce3fb0792585854651008ab65f7ba7ac18276261');
+  assert.equal(codexHookTrustHash({ matcher: 'Bash', command: '/h/.anyray/bin/anyray-connect __anyray-codex-hook', timeoutSec: 30 }),
+    'sha256:ee824046557153c2edd1036936053c0e7a10f873239df8b98fd98a1bc79d5eac');
+});
+
+test("connect's Codex PreToolUse hook reads back from the arm home's hooks.json; nothing else counts as it", () => {
+  assert.deepEqual(readArmHomeHook(CONNECT_HOOKS_JSON), { command: `${ARM}/.anyray/bin/anyray-connect __anyray-codex-hook`, timeoutSec: null });
+  const timed = JSON.parse(CONNECT_HOOKS_JSON);
+  timed.hooks.PreToolUse[0].hooks[0].timeout = 30;
+  assert.equal(readArmHomeHook(JSON.stringify(timed)).timeoutSec, 30);
+  const post = JSON.stringify({ hooks: { PostToolUse: JSON.parse(CONNECT_HOOKS_JSON).hooks.PreToolUse } });
+  assert.equal(readArmHomeHook(post), null);
+  const otherMatcher = CONNECT_HOOKS_JSON.replace('"Bash"', '"apply_patch"');
+  assert.equal(readArmHomeHook(otherMatcher), null);
+  const foreign = CONNECT_HOOKS_JSON.replace('__anyray-codex-hook', '__anyray-hook');
+  assert.equal(readArmHomeHook(foreign), null);
+  assert.equal(readArmHomeHook('not json'), null);
+  assert.equal(readArmHomeHook(null), null);
+});
+
+test('every handler in a hooks.json gets its Codex state key, so the real one can be switched off', () => {
+  const real = JSON.stringify({ hooks: {
+    PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'a' }, { type: 'command', command: 'b' }] }],
+    SessionStart: [{ hooks: [{ type: 'command', command: 'c' }] }],
+  } });
+  assert.deepEqual(hooksJsonKeys(real, '/Users/x/.codex/hooks.json'), [
+    '/Users/x/.codex/hooks.json:pre_tool_use:0:0',
+    '/Users/x/.codex/hooks.json:pre_tool_use:0:1',
+    '/Users/x/.codex/hooks.json:session_start:0:0',
+  ]);
+  assert.deepEqual(hooksJsonKeys('{', '/x/hooks.json'), []);
+  assert.deepEqual(hooksJsonKeys(null, '/x/hooks.json'), []);
+});
+
+const HOOK = { command: "'/opt/node' '/bench/lib/codexHookShim.mjs' '/h/.anyray-bench/codex-hook.json'", timeoutSec: 600, disableKeys: ['/Users/x/.codex/hooks.json:pre_tool_use:0:0'] };
+
+test('arm B declares exactly one trusted PreToolUse hook as session config; A keeps hooks off', () => {
+  const b = codexArgv({ arm: 'anyray', prompt: 'p', gatewayUrl: 'https://g.invalid', headers: {}, armHome, hook: HOOK });
+  assert.ok(!b.includes('--disable'), 'hooks on for B');
+  assert.deepEqual(b.slice(b.indexOf('--enable'), b.indexOf('--enable') + 2), ['--enable', 'hooks']);
+  // Trust comes from the session's own hooks.state entry, never the bypass flag that trusts every hook.
+  assert.ok(!b.some((x) => /bypass-hook-trust/.test(x)));
+  const c = overrides(b);
+  assert.equal(c['hooks.PreToolUse'], `[{ matcher = "Bash", hooks = [{ type = "command", command = ${JSON.stringify(HOOK.command)}, timeout = 600 }] }]`);
+  const hash = codexHookTrustHash({ matcher: 'Bash', command: HOOK.command, timeoutSec: 600 });
+  // One table, every key quoted: Codex splits a -c key on every dot, so a path key cannot ride in it.
+  assert.equal(c['hooks.state'], `{ "/<session-flags>/config.toml:pre_tool_use:0:0" = { trusted_hash = "${hash}" }, "/Users/x/.codex/hooks.json:pre_tool_use:0:0" = { enabled = false } }`);
+  assert.deepEqual(Object.keys(c).filter((k) => k.startsWith('hooks')), ['hooks.PreToolUse', 'hooks.state']);
+  assert.equal(b.at(-1), 'p');
+  // Arm A: the same route, hooks disabled, no hook config at all.
+  const a = codexArgv({ arm: 'anyray', prompt: 'p', gatewayUrl: 'https://g.invalid', headers: {}, armHome });
+  assert.deepEqual(a.slice(a.indexOf('--disable'), a.indexOf('--disable') + 2), ['--disable', 'hooks']);
+  assert.ok(!a.includes('--enable'));
+  assert.ok(!Object.keys(overrides(a)).some((k) => k.startsWith('hooks')));
+  // No connect arm home, no hook: the direct arm never carries one.
+  assert.throws(() => codexArgv({ arm: 'direct', prompt: 'p', hook: HOOK }), /hook/);
+});
+
+test('the shim puts the arm HOME in front of connect\'s shell-run and nothing else; anything it cannot place it drops', () => {
+  const exe = `${ARM}/.anyray/bin/anyray-connect`;
+  const env = { HOME: ARM, ANYRAY_REFRESH_DISABLE: 'true', GOPATH: "/Users/o'neil/go" };
+  const out = (command) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { command, workdir: '/w' } } });
+  const prefix = `HOME='${ARM}' ANYRAY_REFRESH_DISABLE='true' GOPATH='/Users/o'\\''neil/go'`;
+  const wrapped = JSON.parse(withShellRunEnv(out(`${exe} __anyray-shell-run --b64 Z28gdGVzdA==`), { exe, env }));
+  assert.equal(wrapped.hookSpecificOutput.updatedInput.command, `${prefix} ${exe} __anyray-shell-run --b64 Z28gdGVzdA==`);
+  assert.equal(wrapped.hookSpecificOutput.updatedInput.workdir, '/w');
+  assert.equal(wrapped.hookSpecificOutput.permissionDecision, 'allow');
+  const cd = JSON.parse(withShellRunEnv(out(`cd /w/sub && ${exe} __anyray-shell-run --b64 eA== --codex`), { exe, env }));
+  assert.equal(cd.hookSpecificOutput.updatedInput.command, `cd /w/sub && ${prefix} ${exe} __anyray-shell-run --b64 eA== --codex`);
+  // A context-only answer (the batch-read reminder) passes through byte for byte.
+  const note = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: 'x' } });
+  assert.equal(withShellRunEnv(note, { exe, env }), note);
+  // A shell-run by any other binary, or twice, is not the shape connect writes: stand aside
+  // (the command runs unwrapped) rather than let it trim through the real ~/.anyray.
+  assert.equal(withShellRunEnv(out('/Users/x/.anyray/bin/anyray-connect __anyray-shell-run --b64 eA=='), { exe, env }), '');
+  assert.equal(withShellRunEnv(out(`${exe} __anyray-shell-run --b64 eA== && ${exe} __anyray-shell-run --b64 eA==`), { exe, env }), '');
+  assert.equal(withShellRunEnv('{ not json', { exe, env }), '');
+  assert.equal(withShellRunEnv('', { exe, env }), '');
+});
+
+test("the shim runs the arm's connect hook under the arm HOME and logs what it did", () => {
+  const home = mkdtempSync(join(tmpdir(), 'codex-shim-home-'));
+  try {
+    const fake = join(home, 'fake-connect');
+    const seen = join(home, 'seen');
+    // A stand-in for connect's hook: records the env it ran under, answers with a shell-run.
+    writeFileSync(fake, `#!/bin/sh\ncat > /dev/null\necho "$HOME|$ANYRAY_REFRESH_DISABLE" > '${seen}'\necho '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"${fake} __anyray-shell-run --b64 eA=="}}}'\n`, { mode: 0o755 });
+    const spec = codexHookSpec({ armHome: { home, codexHook: { command: `${fake} __anyray-codex-hook`, timeoutSec: null } }, wrappedEnv: { GOPATH: '/real/go' }, disableKeys: ['k'] });
+    assert.equal(spec.timeoutSec, 600);
+    assert.deepEqual(spec.disableKeys, ['k']);
+    assert.equal(spec.connectExe, fake);
+    const r = spawnSync('/bin/sh', ['-c', spec.command], { input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'go test ./...' } }), encoding: 'utf8', env: { ...process.env, HOME: '/real-home-must-not-be-used' } });
+    assert.equal(r.status, 0);
+    assert.equal(JSON.parse(r.stdout).hookSpecificOutput.updatedInput.command, `HOME='${home}' ANYRAY_REFRESH_DISABLE='true' GOPATH='/real/go' ${fake} __anyray-shell-run --b64 eA==`);
+    assert.equal(readFileSync(seen, 'utf8').trim(), `${home}|true`);
+    assert.deepEqual(readShimLog(home), { calls: 1, rewrites: 1, passthrough: 0, standAside: 0, errors: 0 });
+    // No connect hook in the arm home: the arm cannot carry the treatment.
+    assert.throws(() => codexHookSpec({ armHome: { home, codexHook: null } }), /no Codex PreToolUse hook/);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+const ITEM = (s, command, output = '') => ({ timestamp: at(s), type: 'event_msg', payload: { type: 'item_completed', item: { type: 'CommandExecution', id: `c${s}`, command, aggregated_output: output, exit_code: 0 } } });
+const FOOTER = '\n\n…[anyray-hook digest — 120 lines → 9. Anyray, this organization\'s LLM gateway, shortened this output to save tokens. Only if you need the omitted part, full output: Read /h/.anyray/hook-tee/1.log]…';
+const OLD_FOOTER = '\n\n…[anyray-hook digest — 120 lines → 9]…';
+
+test("a rollout counts each command connect's hook wrapped (by binary) and each digest footer the model was shown", () => {
+  const hooked = rollout({ id: 'main-h' }, [
+    usageRecord(2, [1000, 0, 900, 10]),
+    ITEM(3, ['/bin/zsh', '-lc', `HOME='${ARM}' ${ARM}/.anyray/bin/anyray-connect __anyray-shell-run --b64 eA==`]),
+    ITEM(4, ['/bin/zsh', '-lc', `cd /w && '${ARM}/.anyray/bin/anyray-connect' __anyray-shell-run --b64 eQ==`]),
+    ITEM(5, ['/bin/zsh', '-lc', '/Users/x/.anyray/bin/anyray-connect __anyray-shell-run --b64 eg==']),
+    ITEM(6, ['/bin/zsh', '-lc', 'rg -n func gin.go']),
+    { timestamp: at(7), type: 'response_item', payload: { type: 'custom_tool_call_output', output: [{ type: 'input_text', text: `ok${FOOTER}` }, { type: 'input_text', text: `ok${OLD_FOOTER}` }] } },
+    // An exec script that JSON-encodes what it prints shows the footer after an escaped newline.
+    { timestamp: at(8), type: 'response_item', payload: { type: 'custom_tool_call_output', output: '{"out":"ok\\n…[anyray-hook digest — 3 lines → 1]…"}' } },
+    // Quoted inside a line (a grep hit, prose, the skill's own description) is not a footer,
+    // nor is one in the model's own message.
+    { timestamp: at(8), type: 'response_item', payload: { type: 'function_call_output', output: 'notes.md:3: …[anyray-hook digest — x]…\nskill: a `…[anyray-hook digest — n]…` footer' } },
+    { timestamp: at(9), type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: FOOTER }] } },
+  ]);
+  const t = readRollout(hooked);
+  assert.deepEqual(t.hookWrapExes, { [`${ARM}/.anyray/bin/anyray-connect`]: 2, '/Users/x/.anyray/bin/anyray-connect': 1 });
+  assert.equal(t.hookDigests, 3);
+  // The arm's connect is whatever its hook command names: a launcher in the arm home, or a
+  // pinned build elsewhere (--connect-bin-b). Any other binary is someone else's hook.
+  const totals = codexTotals([t, readRollout(CHILD)], pricing, { connectExe: `${ARM}/.anyray/bin/anyray-connect` });
+  assert.equal(totals.hookWraps, 3);
+  assert.equal(totals.hookWrapsOther, 1, "a wrap by another connect binary is someone else's hook");
+  const pinned = codexTotals([t], pricing, { connectExe: '/Users/x/.anyray/bin/anyray-connect' });
+  assert.equal(pinned.hookWrapsOther, 2);
+  // An arm with no hook of its own: every wrap is someone else's.
+  assert.equal(codexTotals([t], pricing).hookWrapsOther, 3);
+  assert.equal(totals.hookDigests, 3);
+  const plain = codexTotals([readRollout(MAIN)], pricing, { connectExe: `${ARM}/.anyray/bin/anyray-connect` });
+  assert.deepEqual([plain.hookWraps, plain.hookWrapsOther, plain.hookDigests], [0, 0, 0]);
+});
+
+test('--codex-hooks-b and --connect-bin-b are Codex gateway-pair switches for arm B; misuse is refused', () => {
+  const base = ['--scenario', 'cobra-flag-groups', '--client', 'codex', '--kinds', 'relevance_filter'];
+  const a = parseArgs([...base, '--compare', 'gateway', '--codex-hooks-b']);
+  assert.equal(a.codexHooksB, true);
+  assert.throws(() => parseArgs([...base, '--codex-hooks-b']), /--codex-hooks-b needs --compare gateway/);
+  assert.throws(() => parseArgs(['--scenario', 'cobra-flag-groups', '--client', 'codex', '--compare', 'control', '--codex-hooks-b']), /--codex-hooks-b needs --compare gateway/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--treatment', 'a', '--codex-hooks-b']), /treatment b/);
+  assert.throws(() => parseArgs(['--scenario', 'cobra-flag-groups', '--compare', 'gateway', '--kinds', 'relevance_filter', '--codex-hooks-b']), /need --client codex/);
+  // Hook settings are the harness's to set: a config override cannot reach them on either arm.
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--codex-config-b', 'hooks.x=true']), /hooks/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--codex-config-b', 'features.hooks=true']), /hooks/);
+  const pinned = parseArgs([...base, '--compare', 'gateway', '--codex-hooks-b', '--connect-bin-b', '/abs/pr/anyray-connect']);
+  assert.equal(pinned.connectBinB, '/abs/pr/anyray-connect');
+  assert.throws(() => parseArgs([...base, '--connect-bin-b', '/abs/pr/anyray-connect']), /--compare gateway/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--connect-bin-b', 'rel/anyray-connect']), /absolute/);
+});
+
+/** A runComparison harness for the --codex-hooks-b round tests: B's session reports `wraps`. */
+async function hookRound({ extra = [], wraps = { a: 0, b: 3, bOther: 0 }, deps: more = {} } = {}) {
+  const args = parseArgs(['--scenario', 'cobra-dispatch', '--client', 'codex', '--compare', 'gateway', '--kinds', 'relevance_filter', '--codex-hooks-b', '--rounds', '1', '--label', `offline-hook-${process.pid}-${Date.now()}-${Math.random()}`, '--parallel', '1', ...extra]);
+  const work = [];
+  const homes = [];
+  const seen = [];
+  const deps = {
+    clientKey: KEY, connectBinPinned: false, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
+    prepareRepo: () => { const d = mkdtempSync(join(tmpdir(), 'codex-cmp-')); work.push(d); return d; },
+    connectPolicy: async () => ({}), readOptimizerConfig: async () => ({}), gatewayReplicaStarts: async () => ({ r1: 'x' }),
+    connectBinPinned: false, // hermetic: not whatever ANYRAY_CONNECT_BIN this shell has
+    realHookKeys: () => ['/Users/x/.codex/hooks.json:pre_tool_use:0:0'],
+    wrappedCommandEnv: () => ({ GOPATH: '/real/go' }),
+    configureCodexArmHome: ({ home, bin }) => { homes.push(home); return { ...armHome, home, bin, codexHook: { command: `${home}/.anyray/bin/anyray-connect __anyray-codex-hook`, timeoutSec: null } }; },
+    runCodexAgent: async (o) => {
+      const slot = o.hook ? 'b' : 'a';
+      seen.push({ slot, hook: o.hook, home: o.armHome.home, bin: o.armHome.bin });
+      const t = { costUsd: slot === 'b' ? 0.012 : 0.015, turns: 3, requests: 3, subagents: 0, subagentRequests: 0, input: 100, cacheRead: 50, cacheWrite: 0, uncachedInput: 50, output: 1, retrievalCalls: 0, latencyMs: null, outsideCheckout: 0,
+        hookWraps: slot === 'b' ? wraps.b + wraps.bOther : wraps.a, hookWrapsOther: slot === 'b' ? wraps.bOther : wraps.a, hookDigests: slot === 'b' ? 2 : 0 };
+      return { codex: true, totals: t, result: { text: 'ExecuteC calls Find, stripFlags and ParseFlags in command.go' }, setup: {} };
+    },
+    sessionTraces: async () => ({ traces: [{ optimizationStatus: 'skipped', optimizationKinds: [] }] }),
+    ...more,
+  };
+  try {
+    const { record } = await runComparison(args, { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid' }, pricing }, { deps });
+    return { record, seen, homes };
+  } finally { for (const d of [...work, ...homes]) rmSync(d, { recursive: true, force: true }); }
+}
+
+test('a --codex-hooks-b round hooks arm B alone and scores B as acting only when its connect wrapped a command', async () => {
+  const { record, seen } = await hookRound();
+  const a = seen.find((s) => s.slot === 'a');
+  const b = seen.find((s) => s.slot === 'b');
+  assert.equal(a.hook, undefined);
+  assert.equal(b.hook.timeoutSec, 600);
+  assert.deepEqual(b.hook.disableKeys, ['/Users/x/.codex/hooks.json:pre_tool_use:0:0']);
+  assert.match(b.hook.command, /codexHookShim\.mjs' '.*\/\.anyray-bench\/codex-hook\.json'$/);
+  assert.ok(b.hook.command.includes(b.home), "the shim's config lives in B's own home");
+  const r = record.rounds[0];
+  assert.equal(r.optimization.otherApplied.codex_hooks_b, 1);
+  assert.equal(r.hookLeak, undefined);
+  assert.equal(record.request.codexHooksB, true);
+  assert.deepEqual(record.setup.b.codexHooks.wrappedCommandEnv, ['HOME', 'ANYRAY_REFRESH_DISABLE', 'GOPATH']);
+  assert.equal(record.setup.a.codexHooks, undefined);
+  assert.equal(record.rule0Verdict.treatmentEdits, 1);
+  // B's hook never wrapped anything: the treatment did not act, so there is nothing to score.
+  const idle = await hookRound({ wraps: { a: 0, b: 0, bOther: 0 } });
+  assert.equal(idle.record.rounds[0].optimization.otherApplied.codex_hooks_b, 0);
+  assert.equal(idle.record.rule0Verdict.treatmentEdits, 0);
+  assert.match(idle.record.rule0Verdict.reasons.join(' '), /applied no optimization/);
+  // The gateway editing B is not the treatment acting (A gets the same kinds): only the hook counts.
+  const gatewayOnly = await hookRound({ wraps: { a: 0, b: 0, bOther: 0 }, deps: { sessionTraces: async () => ({ traces: [{ optimizationStatus: 'applied', optimizationKinds: ['relevance_filter'] }] }) } });
+  assert.equal(gatewayOnly.record.rule0Verdict.treatmentEdits, 0);
+  assert.equal(gatewayOnly.record.rounds[0].gatewayOptimization.b.byKind.relevance_filter.applied, 1);
+});
+
+test('a hook that fired where it must not (any wrap on A, a foreign binary on B) leaves the round out of the stats', async () => {
+  for (const wraps of [{ a: 1, b: 3, bOther: 0 }, { a: 0, b: 3, bOther: 1 }, { a: 0, b: 0, bOther: 2 }]) {
+    const { record } = await hookRound({ wraps });
+    const r = record.rounds[0];
+    assert.deepEqual(r.hookLeak, { a: wraps.a, bOther: wraps.bOther });
+    // Another connect's wraps are never B's treatment acting.
+    assert.equal(r.optimization.otherApplied.codex_hooks_b, wraps.b > 0 ? 1 : 0);
+    assert.equal(record.stats.n, 0);
+    assert.equal(record.verdict.excludedByReason['hook leak'], 1);
+    assert.match(exclusionReasons(r).join(), /hook leak/);
+  }
+});
+
+test('--connect-bin-b configures arm B from that build, A from ANYRAY_CONNECT_BIN, both from a no-app profile, and records digests only', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'codex-bin-b-'));
+  try {
+    const binB = join(dir, 'anyray-connect');
+    writeFileSync(binB, '#!/bin/sh\n# build B\n');
+    const seeded = [];
+    const { record, seen } = await hookRound({ extra: ['--connect-bin-b', binB], deps: {
+      binDigest: (bin) => ({ sha256: bin === binB ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa' }),
+      seedNoAppProfile: (home) => seeded.push(home),
+      checkArmBinary: () => [],
+    } });
+    assert.equal(seen.find((s) => s.slot === 'b').bin, binB);
+    assert.notEqual(seen.find((s) => s.slot === 'a').bin, binB);
+    assert.equal(seeded.length, 2, 'both arms start from the no-app profile');
+    assert.deepEqual(record.request.connectBinB, { sha256: 'bbbbbbbbbbbbbbbb' });
+    assert.deepEqual(record.setup.b.connectBin, { sha256: 'bbbbbbbbbbbbbbbb' });
+    assert.deepEqual(record.setup.a.connectBin, { sha256: 'aaaaaaaaaaaaaaaa' });
+    assert.ok(!JSON.stringify(record).includes(dir), 'never the path');
+    // The same build on both arms is no treatment.
+    await assert.rejects(hookRound({ extra: ['--connect-bin-b', binB], deps: { binDigest: () => ({ sha256: 'same' }) } }), /same build/);
+    // A pinned arm whose connect commands run another build fails the round, naming it.
+    const { record: off } = await hookRound({ extra: ['--connect-bin-b', binB], deps: {
+      binDigest: (bin) => ({ sha256: bin === binB ? 'b' : 'a' }), seedNoAppProfile: () => {},
+      checkArmBinary: ({ bin }) => (bin === binB ? [{ ok: false, required: true, name: 'hooks run the requested anyray-connect build', detail: 'runs another' }] : []),
+    } });
+    assert.match(off.rounds[0].error, /^B: .*requested anyray-connect build/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a hooked session passes the hook to every codex process and reports what it did from the arm home", async () => {
+  const home = mkdtempSync(join(tmpdir(), 'codex-hooked-home-'));
+  try {
+    mkdirSync(join(home, '.anyray', 'hook-tee'), { recursive: true });
+    for (const f of ['a.log', 'b.log']) writeFileSync(join(home, '.anyray', 'hook-tee', f), '');
+    mkdirSync(join(home, '.anyray-bench'), { recursive: true });
+    writeFileSync(join(home, '.anyray-bench', 'codex-hook-shim.log'), 'rewrite\npassthrough\nrewrite\n');
+    const exe = `${home}/.anyray/bin/anyray-connect`;
+    const wrapped = rollout({ id: 'main-w' }, [
+      usageRecord(2, [1000, 0, 900, 10]),
+      ITEM(3, ['/bin/zsh', '-lc', `HOME='${home}' ${exe} __anyray-shell-run --b64 eA== --codex`]),
+      ITEM(4, ['/bin/zsh', '-lc', '/Users/x/.anyray/bin/anyray-connect __anyray-shell-run --b64 eA==']),
+    ]);
+    const argvs = [];
+    const session = await runCodexAgent({
+      arm: 'anyray', scenario: { task: 'T', followups: ['F'], timeoutMin: 5 }, work: '/w', gatewayUrl: 'https://g.invalid', clientKey: KEY, runTag: { sessionId: 's' },
+      armHome: { ...armHome, home }, pricing, hook: { ...HOOK, connectExe: exe },
+      runProcess: async (_bin, argv) => { argvs.push(argv); return { code: 0, stdout: [JSON.stringify({ type: 'thread.started', thread_id: 'main-w' }), JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } })].join('\n'), timedOut: false }; },
+      readThreads: () => [readRollout(wrapped)],
+    });
+    assert.equal(argvs.length, 2);
+    assert.ok(argvs.every((a) => a.includes('--enable') && !a.includes('--disable') && overrides(a)['hooks.PreToolUse']), 'the task and the resume both carry the hook');
+    assert.deepEqual([session.totals.hookWraps, session.totals.hookWrapsOther], [2, 1]);
+    assert.deepEqual(session.setup.codexHook, { shim: { calls: 3, rewrites: 2, passthrough: 1, standAside: 0, errors: 0 }, teeFiles: 2 });
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test('ANYRAY_CONNECT_BIN pins the build both Codex arms are configured from, as --connect-bin-b pins B', async () => {
+  const seeded = [];
+  const checked = [];
+  const { record } = await hookRound({ deps: {
+    connectBinPinned: true, seedNoAppProfile: (home) => seeded.push(home),
+    checkArmBinary: ({ bin, home }) => { checked.push({ bin, home }); return []; },
+  } });
+  assert.equal(seeded.length, 2, 'an installed Connect app cannot take either configure over');
+  assert.equal(checked.length, 2);
+  assert.equal(new Set(checked.map((c) => c.bin)).size, 1, 'both arms must run the one pinned build');
+  assert.ok(!record.rounds[0].error);
+  // Unpinned (ANYRAY_CONNECT_BIN unset, no --connect-bin-b): connect configures as it would on this machine.
+  const loose = [];
+  await hookRound({ deps: { connectBinPinned: false, seedNoAppProfile: (home) => loose.push(home), checkArmBinary: () => { loose.push('check'); return []; } } });
+  assert.deepEqual(loose, []);
 });
