@@ -1,0 +1,39 @@
+title: "Codex marathon in gin-gonic/gin — nineteen user turns, well past 150k of context"
+# gin-long-session's six turns peak at 97-132k of context on Codex, short of where an
+# earlier auto-compact threshold acts (Codex compacts near ~210k by itself; the
+# treatment compacts at 150k). This keeps the same fix-the-build task and patches and
+# adds full-file reads and two more full test runs, so the main thread runs well past 150k
+# (twelve turns peaked at 166k: too short for a 150k threshold to matter) and the
+# no-treatment arm reaches Codex's own compaction too. The reads are
+# the shape real long sessions have: large files read whole, then asked about later.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+patch: [bugs.patch, fixed-ports-lock.patch]
+hidePatch: true
+task: >-
+  CI is red on this branch. Run `go test -v ./...` and read its full output (don't
+  pipe it through tail, head or grep: the CI log is what we have), and tell me which
+  tests fail and why. Don't fix anything yet.
+followups:
+  - "Fix the causes in the library code (not the tests)."
+  - "Run `go test -v ./...` again and read its full output to confirm everything passes."
+  - "Read context.go in full, then explain how Context.Next and Abort control the handler chain."
+  - "Read tree.go in full, then explain how the router matches a path with parameters and wildcards."
+  - "Read gin.go and routergroup.go in full, then explain how a route registered on a group ends up in the tree."
+  - "Read binding/form_mapping.go and binding/binding.go in full, then explain how ShouldBind picks a binding and maps form values onto a struct."
+  - "Read render/json.go, render/render.go and response_writer.go in full, then explain how c.JSON writes the status, headers and body."
+  - "Read recovery.go, logger.go and errors.go in full, then explain what happens to a panic inside a handler from the panic to the logged line."
+  - "Read binding/default_validator.go, binding/json.go and binding/query.go in full, then explain how a validation error reaches the caller."
+  - "Read render/html.go, render/text.go and render/redirect.go in full, then explain how c.HTML picks and executes a template."
+  - "Read utils.go, mode.go and path.go in full, then explain how cleanPath normalizes a request path."
+  - "Read auth.go and fs.go in full, then explain how BasicAuth and StaticFS work."
+  - "Read the first 600 lines of context_test.go, then name three behaviors of Context it pins that you did not mention earlier."
+  - "Read the first 500 lines of tree_test.go, then explain which route conflicts it expects the router to reject."
+  - "Run `go test -v ./...` again and read its full output."
+  - "Going back to your first answer: which of the failing tests touched code you have read since, and was the root cause where you first said?"
+  - "Run `go test -v ./...` one last time and read its full output."
+  - "Finally: list every file you changed and summarize each change in one line."
+check: "go test ./..."
+maxTurns: 80
+timeoutMin: 60
