@@ -469,6 +469,25 @@ first checks that D's agents called the batch read with at least one call not er
 at least half the D sessions. Each session records its tool calls by name and its
 `readBatch` calls and errors.
 
+#### Measured: arm E against arm B (2026-10-13)
+
+16 paired rounds on the dev gateway, Claude Sonnet 5.5, each arm on its own fresh key.
+Arm E ran a prototype Connect build: the `sdk` source plus the ANY-1124 path fix. Rounds
+1 to 8 used the fix branch (5e6daef1a) and rounds 9 to 16 used main (ee91f8337). The
+instructions were the same in both builds.
+
+| Rounds | E cheaper | Median E/B | Q3 | Max | Geometric mean (95% interval) |
+|---|---|---|---|---|---|
+| 1 to 8 | 6 of 8 | 0.941 | 0.989 | 1.103 | 0.961 (0.897 to 1.029) |
+| 9 to 16 | 8 of 8 | 0.844 | 0.877 | 0.939 | 0.830 (0.768 to 0.896) |
+| All 16 | 14 of 16 | 0.896 | 0.940 | 1.103 | 0.893 (0.841 to 0.949) |
+
+Every E session made 1 to 5 batch reads, and 40 of 41 were served (one
+`invalid_arguments`). E made 238 Reads to B's 423, and 390 requests to B's 424.
+Main-agent turns were 7 in every session, and every session completed. B found 8 of 9
+facts in every round. E found 8 of 9 in 15 rounds and 7 in one, round 10. Both arms always
+missed `_SESSION_AUDIT_FORMAT`.
+
 ### Connect's client-tool switches
 
 `--client-tool-policy name=true|false` (repeatable) sets one of anyray-connect's local
