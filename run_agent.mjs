@@ -1171,8 +1171,8 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   if (viaGateway.length && !clientKey) throw new Error('the gateway arm needs ANYRAY_BENCH_CLIENT_KEY (or ANYRAY_CLIENT_KEY): a key on the bench gateway');
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB) {
-    console.warn('--compare gateway without a treatment (--experiment-b, --kinds-b or ANYRAY_BENCH_EXTRA_HEADERS): A and B are the same arm (a gateway noise floor)');
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.codexConfigB) {
+    console.warn('--compare gateway without a treatment (--experiment-b, --kinds-b, --codex-config-b or ANYRAY_BENCH_EXTRA_HEADERS): A and B are the same arm (a gateway noise floor)');
   }
   const dir = join(cfg.root, 'scenarios', args.scenario);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
