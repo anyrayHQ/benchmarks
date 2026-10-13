@@ -153,7 +153,7 @@ test('exec --json events give the thread, the last agent message and a failed tu
     { type: 'item.completed', item: { type: 'agent_message', text: 'final answer' } },
     { type: 'turn.completed', usage: { input_tokens: 1 } },
   ].map((e) => JSON.stringify(e)).join('\n') + '\nnot json\n';
-  assert.deepEqual(parseExecEvents(ok), { threadId: 't-1', answer: 'final answer', failure: null });
+  assert.deepEqual(parseExecEvents(ok), { threadId: 't-1', answer: 'final answer', failure: null, reconnects: 0 });
   const failed = [JSON.stringify({ type: 'thread.started', thread_id: 't-2' }), JSON.stringify({ type: 'turn.failed', error: { message: 'usage limit' } })].join('\n');
   assert.equal(parseExecEvents(failed).failure, 'usage limit');
 });
@@ -444,4 +444,23 @@ test('a --codex-config-b round runs the override on B only and scores whether B 
     assert.deepEqual(record.request.codexConfigB, { model_auto_compact_token_limit: '150000' });
     assert.equal(record.rule0Verdict.treatmentEdits, 1);
   } finally { for (const d of [...work, ...homes]) rmSync(d, { recursive: true, force: true }); }
+});
+
+test("Codex's Reconnecting notices are not failures: the session went on (a socket retry, then HTTPS)", () => {
+  const recovered = [
+    { type: 'thread.started', thread_id: 't-3' },
+    { type: 'error', message: 'Reconnecting... 2/5 (unexpected status 502 Bad Gateway: Unknown error, url: wss://gateway.test.invalid/v1/responses)' },
+    { type: 'error', message: 'Reconnecting... 5/5 (unexpected status 503 Service Unavailable: An error occurred)' },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'done' } },
+    { type: 'turn.completed', usage: { input_tokens: 1 } },
+  ].map((e) => JSON.stringify(e)).join('\n');
+  assert.deepEqual(parseExecEvents(recovered), { threadId: 't-3', answer: 'done', failure: null, reconnects: 2 });
+  // Any other error event still fails the turn, and so does turn.failed after a notice.
+  const fatal = [JSON.stringify({ type: 'error', message: 'Selected model is at capacity. Please try a different model.' })].join('\n');
+  assert.equal(parseExecEvents(fatal).failure, 'Selected model is at capacity. Please try a different model.');
+  const failedAfterNotice = [
+    JSON.stringify({ type: 'error', message: 'Reconnecting... 1/5 (stream disconnected)' }),
+    JSON.stringify({ type: 'turn.failed', error: { message: 'usage limit' } }),
+  ].join('\n');
+  assert.deepEqual(parseExecEvents(failedAfterNotice), { threadId: null, answer: '', failure: 'usage limit', reconnects: 1 });
 });
