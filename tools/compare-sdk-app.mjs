@@ -87,6 +87,9 @@ export const pairsFor = (arms) => {
   // its guidance, E/D isolates the guidance.
   if (has('E') && has('B')) out.push(['E', 'B']);
   if (has('E') && has('D')) out.push(['E', 'D']);
+  // P is B plus connect's profile surface, S the same with the sdk instructions: S/P is
+  // the hint alone.
+  if (has('S') && has('P')) out.push(['S', 'P']);
   return out;
 };
 
@@ -120,7 +123,7 @@ export const compareFile = (record) => {
     rounds: rounds.length,
     d4: d4Precondition(rounds),
     readBatch: readBatchPrecondition(rounds),
-    readBatchByArm: Object.fromEntries(['D', 'E'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
+    readBatchByArm: Object.fromEntries(['D', 'E', 'P', 'S', 'S2'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     retrievalEvidence: record.retrievalEvidence ?? null,
   };

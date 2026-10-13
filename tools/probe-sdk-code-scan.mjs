@@ -32,7 +32,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { prepareRepo, sessionDirParent } from '../lib/agentRun.mjs';
-import { CONNECT_MCP_SERVER, checkPreflightRead, connectArmTools, connectMcpServerConfig, connectSourceOf, preflightReadBatchCall, probeMcpTools } from '../lib/connectMcp.mjs';
+import { CONNECT_MCP_SERVER, checkPreflightRead, connectArmTools, connectMcpServerConfig, connectSourceOf, instructionsExpectedFor, preflightReadBatchCall, probeMcpTools } from '../lib/connectMcp.mjs';
 import { ARMS } from '../lib/agentSdkApp.mjs';
 import { auditorSubagentDefinition, codeScanOptions } from '../lib/sdkAppCodeScan.mjs';
 import { startFakeMessagesApi } from '../lib/fakeMessagesApi.mjs';
@@ -50,7 +50,7 @@ const parseArgs = (argv) => {
     else if (argv[i] === '--model') a.model = argv[++i];
     else throw new Error(`unknown flag ${argv[i]}`);
   }
-  if (!ARMS[a.arm]?.localReadBatch) throw new Error('--arm takes a connect arm: D or E');
+  if (!ARMS[a.arm]?.localReadBatch) throw new Error('--arm takes a connect arm: D, E, P, S or S2');
   return a;
 };
 
@@ -133,7 +133,7 @@ async function main() {
     if (probe.instructions) delete probe.instructions.text;
     report.server = { command: server.command.split('/').pop(), args: server.args, envKeys: Object.keys(server.env), alwaysLoad: server.alwaysLoad, ...probe };
     if (probe.error) throw new Error(`connect's MCP server: ${probe.error}`);
-    const tools = connectArmTools(probe.tools, CONNECT_MCP_SERVER, { requireInstructions: Boolean(ARMS[args.arm].connectSource), instructions: probe.instructions });
+    const tools = connectArmTools(probe.tools, CONNECT_MCP_SERVER, { instructionsExpected: instructionsExpectedFor(args.arm), instructions: probe.instructions, exposeAll: ARMS[args.arm].connectTools === 'all' });
     checkPreflightRead(args.arm, probe.call);
     report.arm = tools;
 
@@ -192,7 +192,7 @@ async function main() {
   }
   console.log(JSON.stringify(report, null, 2));
   const reach = report.instructionsReach;
-  const ok = report.sdk?.readBatchOffered && report.sdk?.disallowedHidden && report.sdk?.stdioServerCwdIsCheckout && report.server?.call?.isError === false && reach?.auditorRequests > 0 && (!ARMS[args.arm].connectSource || reach.mainHasThem);
+  const ok = report.sdk?.readBatchOffered && report.sdk?.disallowedHidden && report.sdk?.stdioServerCwdIsCheckout && report.server?.call?.isError === false && reach?.auditorRequests > 0 && (!instructionsExpectedFor(args.arm) || reach.mainHasThem);
   if (!ok) process.exitCode = 1;
 }
 

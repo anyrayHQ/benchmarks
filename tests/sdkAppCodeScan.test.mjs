@@ -15,6 +15,7 @@ import {
   prepareConnectHome,
   enrollConnectProfile,
   connectSourceOf,
+  instructionsExpectedFor,
   preflightReadBatchCall,
   checkPreflightRead,
 } from '../lib/connectMcp.mjs';
@@ -549,8 +550,8 @@ test("probeMcpTools reports whether initialize carried instructions, by presence
 });
 
 test('connectArmTools for E requires the server to send instructions: a stock build that reads sdk as auto is refused', () => {
-  assert.throws(() => connectArmTools(PROBED, CONNECT_MCP_SERVER, { requireInstructions: true, instructions: { present: false, sha256: null } }), /instructions/);
-  assert.deepEqual(connectArmTools(PROBED, CONNECT_MCP_SERVER, { requireInstructions: true, instructions: { present: true, sha256: 'abc' } }).allowed, [READ_BATCH]);
+  assert.throws(() => connectArmTools(PROBED, CONNECT_MCP_SERVER, { instructionsExpected: true, instructions: { present: false, sha256: null } }), /instructions/);
+  assert.deepEqual(connectArmTools(PROBED, CONNECT_MCP_SERVER, { instructionsExpected: true, instructions: { present: true, sha256: 'abc' } }).allowed, [READ_BATCH]);
   // A stock build reads `sdk` as `auto` and adds its local search and read tools: still one allowed tool, the rest hidden.
   const stock = connectArmTools([...PROBED, { name: 'anyray_search' }, { name: 'anyray_read' }]);
   assert.deepEqual(stock.allowed, [READ_BATCH]);
@@ -613,4 +614,91 @@ test('checkPreflightRead refuses a build whose batch read fails those paths, nam
   assert.throws(() => checkPreflightRead('E', { isError: true, chars: 171, header: null, failure: 'unsafe_path' }), /arm E: .*absolute.*unsafe_path/);
   assert.throws(() => checkPreflightRead('D', { error: -32601 }), /arm D: .*batch read/);
   assert.throws(() => checkPreflightRead('D', undefined), /arm D: .*batch read/);
+});
+
+// --- arms P and S: connect's full `profile` surface, without and with the sdk instructions ---
+
+const PROFILE_TOOLS = [{ name: 'anyray_retrieve' }, { name: 'anyray_recall' }, { name: 'anyray_search' }, { name: 'anyray_read' }, { name: READ_BATCH_TOOL }];
+
+test('arms P and S differ only in the connect source: profile, and sdk (profile + instructions)', () => {
+  assert.deepEqual({ ...ARMS.P, connectSource: null }, { ...ARMS.S, connectSource: null });
+  assert.equal(connectSourceOf('P'), 'profile');
+  assert.equal(connectSourceOf('S'), 'sdk');
+  assert.equal(ARMS.P.connectTools, 'all');
+  const env = (arm) => armEnvFor({ arm, gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic', model: 'm', sessionId: 'sid' });
+  assert.deepEqual(env('P'), env('B'), 'P and S are arm B on the wire');
+  assert.deepEqual(env('S'), env('B'));
+});
+
+test("connectArmTools 'all' offers connect's whole surface except the gateway read path's duplicates", () => {
+  const t = connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { exposeAll: true, instructionsExpected: false, instructions: { present: false, sha256: null } });
+  const n = (x) => `mcp__${CONNECT_MCP_SERVER}__${x}`;
+  assert.deepEqual(t.allowed, [n('anyray_search'), n('anyray_read'), n('anyray_read_batch')]);
+  assert.deepEqual(t.disallowed, [n('anyray_retrieve'), n('anyray_recall')]);
+  assert.throws(() => connectArmTools([{ name: 'anyray_search' }], CONNECT_MCP_SERVER, { exposeAll: true }), /does not advertise anyray_read_batch/);
+});
+
+test('the instructions expectation is two-sided: S needs them, every other connect arm must not get them', () => {
+  const on = { present: true, sha256: 'abc' };
+  const off = { present: false, sha256: null };
+  assert.doesNotThrow(() => connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { instructionsExpected: true, instructions: on }));
+  assert.throws(() => connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { instructionsExpected: true, instructions: off }), /sent no initialize instructions/);
+  // A build that sent them to P would make P the treatment arm too.
+  assert.throws(() => connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { instructionsExpected: false, instructions: on }), /sent initialize instructions/);
+  assert.doesNotThrow(() => connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { instructionsExpected: false, instructions: off }));
+  assert.equal(instructionsExpectedFor('S'), true);
+  assert.equal(instructionsExpectedFor('E'), true);
+  assert.equal(instructionsExpectedFor('P'), false);
+  assert.equal(instructionsExpectedFor('D'), false);
+});
+
+test('codeScanOptions P: the gateway read path plus connect search, read and batch read for every agent', () => {
+  const tools = connectArmTools(PROFILE_TOOLS, CONNECT_MCP_SERVER, { exposeAll: true });
+  const server = connectMcpServerConfig({ home: HOME, bin: BIN, path: '/usr/bin', source: 'profile' });
+  const o = codeScanOptions({ ...base, arm: 'P', clientKey: 'ark_synthetic', connect: { name: CONNECT_MCP_SERVER, server, tools } });
+  assert.deepEqual(o.mcpServers[CONNECT_MCP_SERVER].args, ['__anyray-mcp-server', 'profile']);
+  for (const t of tools.allowed) {
+    assert.ok(o.allowedTools.includes(t), `${t} allowed`);
+    assert.ok(o.agents.auditor.tools.includes(t), `${t} given to the auditors`);
+  }
+  assert.deepEqual(o.disallowedTools, tools.disallowed);
+});
+
+test('run_sdk_app runs P and S on the code-scan lane; compare pairs S with P and checks both used the batch read', () => {
+  assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 's,p', '--keys-dir', '/k']).arms, ['P', 'S']);
+  assert.deepEqual(pairsFor(['P', 'S']), [['S', 'P']]);
+  const rounds = [{ round: 1, sessions: { P: { totals: { costUsd: 1, readBatch: { calls: 0, errors: 0 } } }, S: { totals: { costUsd: 0.9, readBatch: { calls: 2, errors: 0 } } } }, quality: { P: true, S: true }, recall: { P: 8, S: 8 } }];
+  const out = compareFile({ scenario: 'sdk-app-code-scan', model: 'm', arms: ['P', 'S'], rounds });
+  assert.deepEqual(Object.keys(out.readBatchByArm).sort(), ['P', 'S']);
+  assert.equal(out.readBatchByArm.S.pass, true);
+  assert.equal(out.readBatchByArm.P.pass, false, 'P made none: reported, it is the no-hint baseline');
+  assert.match(formatReport(out), /S\/P: valid pairs 1/);
+});
+
+// --- variance vs structure: the dispatch-mention counter and arm S2 ---
+
+test('foldAppSession counts main-agent dispatches that mention the batch read, never keeping their text', () => {
+  const spawn = (id, prompt) => ({ type: 'tool_use', id, name: 'Agent', input: { description: 'audit', prompt, subagent_type: 'auditor' } });
+  const s = foldAppSession([
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a1', 'Use anyray_read_batch for located ranges. synthetic-1')] } },
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a2', 'Read ranges in one Batch call. synthetic-2')] } },
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a3', 'Audit these functions. synthetic-3')] } },
+    // A subagent's own tool call is not a dispatch.
+    { type: 'assistant', parent_tool_use_id: 'a1', message: { id: 's1', model: 'claude-sonnet-5-5', usage, content: [spawn('x1', 'anyray_read_batch synthetic-4')] } },
+    { type: 'result', subtype: 'success', num_turns: 1, result: '' },
+  ], { pricing, model: 'claude-sonnet-5-5' });
+  assert.deepEqual(s.totals.dispatchMentions, { dispatches: 3, readBatchTool: 1, batchWord: 2 });
+  assert.ok(!JSON.stringify(s.totals).includes('synthetic-'), 'no dispatch text is kept');
+});
+
+test('arm S2 is S with the sdk-lean source: same wire, same exposure policy, instructions expected', () => {
+  assert.deepEqual({ ...ARMS.S2, connectSource: null }, { ...ARMS.S, connectSource: null });
+  assert.equal(connectSourceOf('S2'), 'sdk-lean');
+  assert.equal(instructionsExpectedFor('S2'), true);
+  assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 's2,s', '--keys-dir', '/k']).arms, ['S', 'S2']);
+  // Its server lists retrieve, recall and the batch read: the gateway's duplicates hidden, the batch read offered.
+  const t = connectArmTools([{ name: 'anyray_retrieve' }, { name: 'anyray_recall' }, { name: READ_BATCH_TOOL }], CONNECT_MCP_SERVER, { exposeAll: true, instructionsExpected: true, instructions: { present: true, sha256: 'abc' } });
+  assert.deepEqual(t.allowed, [READ_BATCH]);
+  const rounds = [{ round: 1, sessions: { S2: { totals: { costUsd: 1, readBatch: { calls: 1, errors: 0 } } } }, quality: { S2: true }, recall: { S2: 8 } }];
+  assert.equal(compareFile({ scenario: 'sdk-app-code-scan', model: 'm', arms: ['S2'], rounds }).readBatchByArm.S2.pass, true);
 });
