@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, realpa
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
-import { ARMS, armEnvFor, armMcpServers, foldAppSession } from '../lib/agentSdkApp.mjs';
+import { ARMS, armEnvFor, armMcpServers, foldAppSession, batchReadFailureCode } from '../lib/agentSdkApp.mjs';
 import { codeScanOptions, gradeKeyFacts, mainCodeScanPrompt, auditorSubagentDefinition, runCodeScanAgent, READ_TOOLS } from '../lib/sdkAppCodeScan.mjs';
 import {
   CONNECT_MCP_SERVER,
@@ -14,8 +14,10 @@ import {
   probeMcpTools,
   prepareConnectHome,
   enrollConnectProfile,
+  connectSourceOf,
 } from '../lib/connectMcp.mjs';
 import { NO_APP_PROFILE } from '../lib/agentRun.mjs';
+import { startFakeMessagesApi } from '../lib/fakeMessagesApi.mjs';
 import { parseArgs as parseAppArgs, SCENARIOS } from '../run_sdk_app.mjs';
 import { pairsFor, readBatchPrecondition, compareFile, formatReport } from '../tools/compare-sdk-app.mjs';
 
@@ -366,12 +368,21 @@ test('foldAppSession counts tool calls by agent and the batch read calls that er
     ] } },
     { type: 'user', parent_tool_use_id: 't1', message: { content: [
       { type: 'tool_result', tool_use_id: 'r1', is_error: false, content: 'x' },
-      { type: 'tool_result', tool_use_id: 'r2', is_error: true, content: 'Batch read failed' },
+      { type: 'tool_result', tool_use_id: 'r2', is_error: true, content: [{ type: 'text', text: 'Batch read failed: unsafe_path (only files inside the workspace); no files returned.' }] },
     ] } },
     { type: 'result', subtype: 'success', num_turns: 2, result: '' },
   ], { pricing, model: 'claude-sonnet-5-5' });
   assert.deepEqual(s.totals.toolCalls, { main: { Task: 1 }, subagents: { [READ_BATCH]: 2, Read: 1 } });
-  assert.deepEqual(s.totals.readBatch, { calls: 2, errors: 1 });
+  assert.deepEqual(s.totals.readBatch, { calls: 2, errors: 1, errorCodes: { unsafe_path: 1 } });
+});
+
+test('batchReadFailureCode reads the code only where connect writes it, at the start of the result', () => {
+  assert.equal(batchReadFailureCode('Batch read failed: file_too_large (entry 2; limit 16384 bytes per file); no files returned.'), 'file_too_large');
+  assert.equal(batchReadFailureCode([{ type: 'text', text: 'Batch read failed: unsafe_path; no files returned.' }]), 'unsafe_path');
+  // Text that quotes the phrase is not a failure code, and nothing else of it is kept.
+  assert.equal(batchReadFailureCode('the tool said "Batch read failed: unsafe_path"'), 'other');
+  assert.equal(batchReadFailureCode('<tool_use_error>Error: something else</tool_use_error>'), 'other');
+  assert.equal(batchReadFailureCode(undefined), 'other');
 });
 
 test('runCodeScanAgent runs D with its options in its checkout and grades findings from every agent', async () => {
@@ -499,4 +510,84 @@ test('foldAppSession falls back to the per-request sum when the result carries n
   const u = foldAppSession([{ type: 'result', subtype: 'success', num_turns: 1, result: '', modelUsage: { 'unknown-model': { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0 } } }], { pricing, model: 'claude-sonnet-5-5' });
   assert.equal(u.totals.costUsd, null);
   assert.equal(u.totals.costSource, 'modelUsage');
+});
+
+// --- arm E (D′): D with connect's `sdk` source, whose initialize carries instructions ---
+
+test('arm E is arm D with the sdk source: same wire, same tools, a different server registration', () => {
+  assert.deepEqual({ ...ARMS.E, connectSource: undefined }, { ...ARMS.D, connectSource: undefined });
+  assert.equal(ARMS.E.connectSource, 'sdk');
+  assert.equal(ARMS.D.connectSource, undefined, "arm D's definition is unchanged");
+  assert.equal(connectSourceOf('D'), 'claude');
+  assert.equal(connectSourceOf('E'), 'sdk');
+  const env = (arm) => armEnvFor({ arm, gatewayUrl: 'https://gw.example', clientKey: 'ark_synthetic', model: 'm', sessionId: 'sid' });
+  assert.deepEqual(env('E'), env('D'));
+  const e = connectMcpServerConfig({ home: HOME, bin: BIN, path: '/usr/bin', source: connectSourceOf('E') });
+  assert.deepEqual(e.args, ['__anyray-mcp-server', 'sdk']);
+  assert.deepEqual({ ...e, args: null }, { ...connectFor().server, args: null });
+  const mount = { ...connectFor(), server: e };
+  const oe = codeScanOptions({ ...base, arm: 'E', clientKey: 'ark_synthetic', connect: mount });
+  const od = codeScanOptions({ ...base, arm: 'D', clientKey: 'ark_synthetic', connect: connectFor() });
+  assert.deepEqual(oe.allowedTools, od.allowedTools);
+  assert.deepEqual(oe.disallowedTools, od.disallowedTools);
+  assert.deepEqual(oe.mcpServers[CONNECT_MCP_SERVER].args, ['__anyray-mcp-server', 'sdk']);
+});
+
+test("probeMcpTools reports whether initialize carried instructions, by presence and hash, never the text", async () => {
+  const plain = await probeMcpTools({ command: process.execPath, args: [join(ROOT, 'tools', 'mcp-catalog-server.mjs'), '1'], env: { PATH: process.env.PATH } });
+  assert.deepEqual(plain.instructions, { present: false, sha256: null });
+  const withText = await probeMcpTools({
+    command: process.execPath,
+    args: ['-e', `require('node:readline').createInterface({ input: process.stdin }).on('line', (l) => { const m = JSON.parse(l); if (m.id === 1) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'x' }, instructions: 'use the batch read' } }) + '\\n'); if (m.id === 2) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [] } }) + '\\n'); });`],
+    env: { PATH: process.env.PATH },
+  });
+  assert.equal(withText.instructions.present, true);
+  assert.match(withText.instructions.sha256, /^[0-9a-f]{16}$/);
+  assert.ok(!JSON.stringify(withText).includes('use the batch read'), 'the text is never recorded');
+});
+
+test('connectArmTools for E requires the server to send instructions: a stock build that reads sdk as auto is refused', () => {
+  assert.throws(() => connectArmTools(PROBED, CONNECT_MCP_SERVER, { requireInstructions: true, instructions: { present: false, sha256: null } }), /instructions/);
+  assert.deepEqual(connectArmTools(PROBED, CONNECT_MCP_SERVER, { requireInstructions: true, instructions: { present: true, sha256: 'abc' } }).allowed, [READ_BATCH]);
+  // A stock build reads `sdk` as `auto` and adds its local search and read tools: still one allowed tool, the rest hidden.
+  const stock = connectArmTools([...PROBED, { name: 'anyray_search' }, { name: 'anyray_read' }]);
+  assert.deepEqual(stock.allowed, [READ_BATCH]);
+  assert.equal(stock.disallowed.length, 4);
+});
+
+test('run_sdk_app runs E on the code-scan lane only; compare pairs E with B and checks E used the batch read', () => {
+  assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 'B,E', '--keys-dir', '/k']).arms, ['B', 'E']);
+  assert.throws(() => parseAppArgs(['--arms', 'A,E', '--keys-dir', '/k']), /runs arms A, B, C, not E/);
+  assert.deepEqual(pairsFor(['B', 'E']), [['E', 'B']]);
+  assert.deepEqual(pairsFor(['A', 'B', 'D', 'E']).filter(([t]) => t === 'E'), [['E', 'B'], ['E', 'D']]);
+  const rounds = [{ round: 1, sessions: { B: { totals: { costUsd: 1 } }, E: { totals: { costUsd: 0.9, readBatch: { calls: 3, errors: 0 } } } }, quality: { B: true, E: true }, recall: { B: 9, E: 9 } }];
+  assert.deepEqual(readBatchPrecondition(rounds, 'E'), { sessions: 1, used: 1, usedRounds: [1], required: 1, pass: true });
+  assert.equal(readBatchPrecondition(rounds).sessions, 0, 'D is still the default arm');
+  const text = formatReport(compareFile({ scenario: 'sdk-app-code-scan', model: 'm', arms: ['B', 'E'], rounds }));
+  assert.match(text, /read_batch precondition E .*1\/1, need 1 -> PASS/);
+  assert.match(text, /E\/B: valid pairs 1/);
+});
+
+test('fakeMessagesApi spawns one subagent from the first main request and records only booleans', async () => {
+  const api = await startFakeMessagesApi({ subagentType: 'auditor', subagentMarker: 'AUDITOR-MARK', markers: { guide: 'synthetic guidance' } });
+  try {
+    const post = (body) => fetch(`${api.url}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const first = await (await post({ model: 'm', system: 'synthetic guidance', tools: [{ name: 'Read' }, { name: 'Agent' }], messages: [{ role: 'user', content: 'go' }] })).json();
+    assert.equal(first.stop_reason, 'tool_use');
+    assert.deepEqual({ name: first.content[0].name, type: first.content[0].input.subagent_type }, { name: 'Agent', type: 'auditor' });
+    const sub = await (await post({ model: 'm', system: 'AUDITOR-MARK', tools: [{ name: 'Agent' }], messages: [] })).json();
+    assert.equal(sub.stop_reason, 'end_turn', 'the subagent is answered, never asked to spawn');
+    const again = await (await post({ model: 'm', tools: [{ name: 'Agent' }], messages: [] })).json();
+    assert.equal(again.stop_reason, 'end_turn', 'only one spawn per run');
+    const stream = await post({ model: 'm', stream: true, messages: [] });
+    assert.match(stream.headers.get('content-type'), /text\/event-stream/);
+    assert.match(await stream.text(), /event: message_stop/);
+    assert.deepEqual(api.requests.slice(0, 3), [
+      { subagent: false, markers: { guide: true } },
+      { subagent: true, markers: { guide: false } },
+      { subagent: false, markers: { guide: false } },
+    ]);
+  } finally {
+    await api.close();
+  }
 });

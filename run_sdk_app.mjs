@@ -40,7 +40,7 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision } from './lib/agentSdkApp.mjs';
 import { runCodeScanAgent } from './lib/sdkAppCodeScan.mjs';
 import { prepareRepo, repoCacheDir, binDigest } from './lib/agentRun.mjs';
-import { CONNECT_MCP_SERVER, CONNECT_MCP_SOURCE, connectMcpServerConfig, connectArmTools, probeMcpTools, prepareConnectHome } from './lib/connectMcp.mjs';
+import { CONNECT_MCP_SERVER, connectSourceOf, connectMcpServerConfig, connectArmTools, probeMcpTools, prepareConnectHome } from './lib/connectMcp.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
 import { VULNERABILITIES, httpVulnerabilities } from './tools/traffic-fixture/vulnerabilities.mjs';
@@ -56,7 +56,7 @@ const SELF_CHECK_MAX_READS = 4;
  *  D needs a lane whose agents read files; the scanner's read a database and a server. */
 export const SCENARIOS = {
   'sdk-app-scanner': { arms: ['A', 'B', 'C'], defaultArms: ['A', 'B', 'C'] },
-  'sdk-app-code-scan': { arms: ['A', 'B', 'C', 'D'], defaultArms: ['A', 'D'] },
+  'sdk-app-code-scan': { arms: ['A', 'B', 'C', 'D', 'E'], defaultArms: ['A', 'D'] },
 };
 
 export function parseArgs(argv, env = process.env) {
@@ -78,7 +78,7 @@ export function parseArgs(argv, env = process.env) {
   a.arms ??= lane.defaultArms;
   if (!a.arms.length || a.arms.some((x) => !Object.hasOwn(ARMS, x))) throw new Error(`--arms takes a comma list of ${Object.keys(ARMS).join(', ')}`);
   const unsupported = a.arms.filter((x) => !lane.arms.includes(x));
-  if (unsupported.length) throw new Error(`${a.scenario} runs arms ${lane.arms.join(', ')}, not ${unsupported.join(', ')}${unsupported.includes('D') ? ' (arm D mounts a file-read tool; only a lane whose agents read files can use it)' : ''}`);
+  if (unsupported.length) throw new Error(`${a.scenario} runs arms ${lane.arms.join(', ')}, not ${unsupported.join(', ')}${unsupported.some((x) => ARMS[x]?.localReadBatch) ? ' (arms D and E mount a file-read tool; only a lane whose agents read files can use them)' : ''}`);
   a.arms = [...new Set(a.arms)].sort();
   if (!Number.isInteger(a.rounds) || a.rounds < 1) throw new Error('--rounds must be a positive integer');
   if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error('--budget must be a positive number of dollars');
@@ -174,17 +174,20 @@ async function scannerLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing 
 }
 
 /**
- * Arm D's mount, once per run: enroll connect in a private HOME, then probe its stdio
- * server (tools/list) in a fresh checkout, the way the SDK will start it. Throws, before any
- * paid round, when connect cannot enroll or its server does not offer the batch read.
+ * A connect arm's mount (D, E), once per run: enroll connect in a private HOME with the
+ * arm's key, then probe its stdio server (initialize + tools/list) in a fresh checkout,
+ * started with the arm's source the way the SDK will start it. Throws, before any paid
+ * round, when connect cannot enroll, its server does not offer the batch read, or (E) it
+ * sends no initialize instructions for the arm's source.
  */
-async function connectMount({ dir, scenarioFile, gatewayUrl, clientKey }) {
+async function connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey }) {
   const home = prepareConnectHome({ gatewayUrl, clientKey });
   if (!home.configured) {
     rmSync(home.dir, { recursive: true, force: true });
-    throw new Error(`arm D: anyray-connect did not enroll: ${home.reason}`);
+    throw new Error(`arm ${arm}: anyray-connect did not enroll: ${home.reason}`);
   }
-  const server = connectMcpServerConfig({ home: home.home });
+  const source = connectSourceOf(arm);
+  const server = connectMcpServerConfig({ home: home.home, source });
   const probeWork = prepareRepo(scenarioFile, dir);
   let probe;
   try {
@@ -194,11 +197,11 @@ async function connectMount({ dir, scenarioFile, gatewayUrl, clientKey }) {
   }
   if (probe.error) {
     rmSync(home.dir, { recursive: true, force: true });
-    throw new Error(`arm D: anyray-connect's MCP server did not answer tools/list: ${probe.error}`);
+    throw new Error(`arm ${arm}: anyray-connect's MCP server did not answer tools/list: ${probe.error}`);
   }
   let tools;
   try {
-    tools = connectArmTools(probe.tools);
+    tools = connectArmTools(probe.tools, CONNECT_MCP_SERVER, { requireInstructions: Boolean(ARMS[arm].connectSource), instructions: probe.instructions });
   } catch (e) {
     rmSync(home.dir, { recursive: true, force: true });
     throw e;
@@ -206,10 +209,11 @@ async function connectMount({ dir, scenarioFile, gatewayUrl, clientKey }) {
   return {
     mount: { name: CONNECT_MCP_SERVER, server, tools },
     dir: home.dir,
-    // For the result: what D mounts, never a key or the HOME path.
+    // For the result: what the arm mounts, never a key, the HOME path or the instructions text.
     record: {
       server: CONNECT_MCP_SERVER,
-      source: CONNECT_MCP_SOURCE,
+      source,
+      instructions: probe.instructions,
       command: basename(server.command),
       args: server.args,
       envKeys: Object.keys(server.env),
@@ -223,16 +227,22 @@ async function connectMount({ dir, scenarioFile, gatewayUrl, clientKey }) {
   };
 }
 
-/** The code-scan lane: each arm audits its own fresh checkout; D mounts connect's server. */
+/** The code-scan lane: each arm audits its own fresh checkout; D and E mount connect's server. */
 async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing }) {
-  const d = args.arms.includes('D') ? await connectMount({ dir, scenarioFile, gatewayUrl, clientKey: keys.D }) : null;
+  const mounts = {};
+  try {
+    for (const arm of args.arms.filter((a) => ARMS[a].localReadBatch)) mounts[arm] = await connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey: keys[arm] });
+  } catch (e) {
+    for (const m of Object.values(mounts)) rmSync(m.dir, { recursive: true, force: true });
+    throw e;
+  }
   return {
     total: scenarioFile.keyFacts.length,
     record: {
       repo: { git: scenarioFile.repo.git, ref: scenarioFile.repo.ref, patch: scenarioFile.patch, hidePatch: Boolean(scenarioFile.hidePatch) },
       slices: scenarioFile.slices.map((s) => ({ name: s.name, audit: s.audit })),
       keyFacts: scenarioFile.keyFacts.length,
-      ...(d && { connectMcp: d.record }),
+      ...(Object.keys(mounts).length && { connectMcp: Object.fromEntries(Object.entries(mounts).map(([arm, m]) => [arm, m.record])) }),
     },
     // Every checkout of a round is made before any session starts, so the arms start together.
     prepare: () => prepareRepo(scenarioFile, dir, { cacheDir: repoCacheDir() }),
@@ -247,12 +257,12 @@ async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing
         clientKey: keys[arm],
         sessionId: `${args.scenario}-${arm}-r${round}-${stamp}`,
         pricing,
-        connect: arm === 'D' ? d.mount : null,
+        connect: mounts[arm]?.mount ?? null,
         timeoutMs: (scenarioFile.timeoutMin ?? 15) * 60000,
         deps: { query },
       }),
     close: async () => {
-      if (d) rmSync(d.dir, { recursive: true, force: true });
+      for (const m of Object.values(mounts)) rmSync(m.dir, { recursive: true, force: true });
     },
   };
 }
@@ -290,7 +300,9 @@ async function main() {
   const stamp = Date.now();
   const first = Math.max(0, ...record.rounds.map((r) => r.round ?? 0)) + 1;
   console.log(`${args.scenario} [${args.arms.join(',')}] rounds ${first}–${first + args.rounds - 1}, model ${args.model}, budget $${args.budget}`);
-  if (record.connectMcp) console.log(`  arm D mounts ${record.connectMcp.server}: ${record.connectMcp.command} ${record.connectMcp.args.join(' ')} · offers ${record.connectMcp.allowed.join(', ')} · hides ${record.connectMcp.disallowed.join(', ') || 'nothing'}`);
+  for (const [arm, m] of Object.entries(record.connectMcp ?? {})) {
+    console.log(`  arm ${arm} mounts ${m.server}: ${m.command} ${m.args.join(' ')} · instructions ${m.instructions?.present ? `yes (${m.instructions.sha256})` : 'no'} · offers ${m.allowed.join(', ')} · hides ${m.disallowed.join(', ') || 'nothing'}`);
+  }
   const roundCosts = [];
   try {
     for (let k = 0; k < args.rounds; k++) {
