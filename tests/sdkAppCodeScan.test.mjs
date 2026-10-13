@@ -674,3 +674,31 @@ test('run_sdk_app runs P and S on the code-scan lane; compare pairs S with P and
   assert.equal(out.readBatchByArm.P.pass, false, 'P made none: reported, it is the no-hint baseline');
   assert.match(formatReport(out), /S\/P: valid pairs 1/);
 });
+
+// --- variance vs structure: the dispatch-mention counter and arm S2 ---
+
+test('foldAppSession counts main-agent dispatches that mention the batch read, never keeping their text', () => {
+  const spawn = (id, prompt) => ({ type: 'tool_use', id, name: 'Agent', input: { description: 'audit', prompt, subagent_type: 'auditor' } });
+  const s = foldAppSession([
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a1', 'Use anyray_read_batch for located ranges. synthetic-1')] } },
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a2', 'Read ranges in one Batch call. synthetic-2')] } },
+    { type: 'assistant', parent_tool_use_id: null, message: { id: 'm1', model: 'claude-sonnet-5-5', usage, content: [spawn('a3', 'Audit these functions. synthetic-3')] } },
+    // A subagent's own tool call is not a dispatch.
+    { type: 'assistant', parent_tool_use_id: 'a1', message: { id: 's1', model: 'claude-sonnet-5-5', usage, content: [spawn('x1', 'anyray_read_batch synthetic-4')] } },
+    { type: 'result', subtype: 'success', num_turns: 1, result: '' },
+  ], { pricing, model: 'claude-sonnet-5-5' });
+  assert.deepEqual(s.totals.dispatchMentions, { dispatches: 3, readBatchTool: 1, batchWord: 2 });
+  assert.ok(!JSON.stringify(s.totals).includes('synthetic-'), 'no dispatch text is kept');
+});
+
+test('arm S2 is S with the sdk-lean source: same wire, same exposure policy, instructions expected', () => {
+  assert.deepEqual({ ...ARMS.S2, connectSource: null }, { ...ARMS.S, connectSource: null });
+  assert.equal(connectSourceOf('S2'), 'sdk-lean');
+  assert.equal(instructionsExpectedFor('S2'), true);
+  assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 's2,s', '--keys-dir', '/k']).arms, ['S', 'S2']);
+  // Its server lists retrieve, recall and the batch read: the gateway's duplicates hidden, the batch read offered.
+  const t = connectArmTools([{ name: 'anyray_retrieve' }, { name: 'anyray_recall' }, { name: READ_BATCH_TOOL }], CONNECT_MCP_SERVER, { exposeAll: true, instructionsExpected: true, instructions: { present: true, sha256: 'abc' } });
+  assert.deepEqual(t.allowed, [READ_BATCH]);
+  const rounds = [{ round: 1, sessions: { S2: { totals: { costUsd: 1, readBatch: { calls: 1, errors: 0 } } } }, quality: { S2: true }, recall: { S2: 8 } }];
+  assert.equal(compareFile({ scenario: 'sdk-app-code-scan', model: 'm', arms: ['S2'], rounds }).readBatchByArm.S2.pass, true);
+});

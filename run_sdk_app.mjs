@@ -56,7 +56,7 @@ const SELF_CHECK_MAX_READS = 4;
  *  D needs a lane whose agents read files; the scanner's read a database and a server. */
 export const SCENARIOS = {
   'sdk-app-scanner': { arms: ['A', 'B', 'C'], defaultArms: ['A', 'B', 'C'] },
-  'sdk-app-code-scan': { arms: ['A', 'B', 'C', 'D', 'E', 'P', 'S'], defaultArms: ['A', 'D'] },
+  'sdk-app-code-scan': { arms: ['A', 'B', 'C', 'D', 'E', 'P', 'S', 'S2'], defaultArms: ['A', 'D'] },
 };
 
 export function parseArgs(argv, env = process.env) {
@@ -78,7 +78,7 @@ export function parseArgs(argv, env = process.env) {
   a.arms ??= lane.defaultArms;
   if (!a.arms.length || a.arms.some((x) => !Object.hasOwn(ARMS, x))) throw new Error(`--arms takes a comma list of ${Object.keys(ARMS).join(', ')}`);
   const unsupported = a.arms.filter((x) => !lane.arms.includes(x));
-  if (unsupported.length) throw new Error(`${a.scenario} runs arms ${lane.arms.join(', ')}, not ${unsupported.join(', ')}${unsupported.some((x) => ARMS[x]?.localReadBatch) ? " (arms D, E, P and S mount connect's file-read tools; only a lane whose agents read files can use them)" : ''}`);
+  if (unsupported.length) throw new Error(`${a.scenario} runs arms ${lane.arms.join(', ')}, not ${unsupported.join(', ')}${unsupported.some((x) => ARMS[x]?.localReadBatch) ? " (arms D, E, P, S and S2 mount connect's file-read tools; only a lane whose agents read files can use them)" : ''}`);
   a.arms = [...new Set(a.arms)].sort();
   if (!Number.isInteger(a.rounds) || a.rounds < 1) throw new Error('--rounds must be a positive integer');
   if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error('--budget must be a positive number of dollars');

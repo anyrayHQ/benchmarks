@@ -50,7 +50,7 @@ const parseArgs = (argv) => {
     else if (argv[i] === '--model') a.model = argv[++i];
     else throw new Error(`unknown flag ${argv[i]}`);
   }
-  if (!ARMS[a.arm]?.localReadBatch) throw new Error('--arm takes a connect arm: D, E, P or S');
+  if (!ARMS[a.arm]?.localReadBatch) throw new Error('--arm takes a connect arm: D, E, P, S or S2');
   return a;
 };
 

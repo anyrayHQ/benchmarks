@@ -123,7 +123,7 @@ export const compareFile = (record) => {
     rounds: rounds.length,
     d4: d4Precondition(rounds),
     readBatch: readBatchPrecondition(rounds),
-    readBatchByArm: Object.fromEntries(['D', 'E', 'P', 'S'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
+    readBatchByArm: Object.fromEntries(['D', 'E', 'P', 'S', 'S2'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     retrievalEvidence: record.retrievalEvidence ?? null,
   };
