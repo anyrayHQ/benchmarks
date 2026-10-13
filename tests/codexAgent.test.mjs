@@ -378,3 +378,70 @@ test('a Codex round whose anyray arm connect could not set up fails the round, n
     assert.equal(ran, 1, 'the direct arm still ran; only B failed');
   } finally { for (const d of work) rmSync(d, { recursive: true, force: true }); }
 });
+
+test('per-arm Codex config overrides ride as -c flags on that arm, before the prompt', () => {
+  const configOverrides = [['model_auto_compact_token_limit', '150000']];
+  for (const arm of ['direct', 'anyray']) {
+    const argv = codexArgv({ arm, prompt: 'Fix it', gatewayUrl: 'https://g.invalid', headers: {}, armHome, configOverrides });
+    assert.equal(overrides(argv).model_auto_compact_token_limit, '150000', arm);
+    assert.equal(argv.at(-1), 'Fix it');
+  }
+  assert.equal(overrides(codexArgv({ arm: 'direct', prompt: 'p' })).model_auto_compact_token_limit, undefined);
+});
+
+test('a rollout counts Codex compactions and the largest request it sent', () => {
+  const compacting = rollout({ id: 'main-c' }, [
+    usageRecord(4, [150000, 140000, 0, 300]),
+    { timestamp: at(5), type: 'compacted', payload: { message: '' } },
+    usageRecord(9, [30000, 0, 30000, 200]),
+    { timestamp: at(10), type: 'compacted', payload: { message: '' } },
+  ]);
+  const t = readRollout(compacting);
+  assert.equal(t.compactions, 2);
+  const totals = codexTotals([t, readRollout(CHILD)], pricing);
+  assert.equal(totals.compactions, 2);
+  assert.equal(totals.peakInput, 150000);
+  assert.equal(readRollout(MAIN).compactions, 0);
+});
+
+test('--codex-config-b sets arm B\'s Codex config alone and is refused where it cannot isolate one change', () => {
+  const base = ['--scenario', 'cobra-flag-groups', '--client', 'codex', '--kinds', 'relevance_filter'];
+  const a = parseArgs([...base, '--compare', 'gateway', '--codex-config-b', 'model_auto_compact_token_limit=150000']);
+  assert.deepEqual(a.codexConfigB, [['model_auto_compact_token_limit', '150000']]);
+  assert.deepEqual(parseArgs(['--scenario', 'cobra-flag-groups', '--client', 'codex', '--compare', 'control', '--codex-config-b', 'a.b_c=true']).codexConfigB, [['a.b_c', 'true']]);
+  assert.throws(() => parseArgs([...base, '--codex-config-b', 'model_auto_compact_token_limit=150000']), /--compare gateway or control/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--treatment', 'a', '--codex-config-b', 'k=1']), /treatment b/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--codex-config-b', 'k="x"; rm']), /key=value/);
+  assert.throws(() => parseArgs([...base, '--compare', 'gateway', '--codex-config-b', 'Bad Key=1']), /key=value/);
+  assert.throws(() => parseArgs(['--scenario', 'cobra-flag-groups', '--compare', 'gateway', '--kinds', 'relevance_filter', '--codex-config-b', 'k=1']), /need --client codex/);
+});
+
+test('a --codex-config-b round runs the override on B only and scores whether B compacted more than A', async () => {
+  const args = parseArgs(['--scenario', 'cobra-dispatch', '--client', 'codex', '--compare', 'gateway', '--kinds', 'relevance_filter', '--codex-config-b', 'model_auto_compact_token_limit=150000', '--rounds', '1', '--label', `offline-cfg-${process.pid}-${Date.now()}`, '--parallel', '1']);
+  const work = [];
+  const homes = [];
+  const seen = [];
+  const deps = {
+    clientKey: KEY, log: () => {}, write: () => {}, describeRepo: () => ({}), armHomeParent: () => tmpdir(),
+    prepareRepo: () => { const d = mkdtempSync(join(tmpdir(), 'codex-cmp-')); work.push(d); return d; },
+    connectPolicy: async () => ({}), readOptimizerConfig: async () => ({}), gatewayReplicaStarts: async () => ({ r1: 'x' }),
+    configureCodexArmHome: ({ home }) => { homes.push(home); return { ...armHome, home }; },
+    runCodexAgent: async (o) => {
+      const b = o.configOverrides.length > 0;
+      seen.push(o.configOverrides);
+      return { codex: true, totals: { costUsd: b ? 0.012 : 0.015, turns: 3, requests: 3, subagents: 0, subagentRequests: 0, input: 100, cacheRead: 50, cacheWrite: 0, uncachedInput: 50, output: 1, retrievalCalls: 0, latencyMs: null, outsideCheckout: 0, compactions: b ? 2 : 1, peakInput: b ? 150000 : 210000 }, result: { text: 'ExecuteC calls Find, stripFlags and ParseFlags in command.go' }, setup: {} };
+    },
+    sessionTraces: async () => ({ traces: [{ optimizationStatus: 'skipped', optimizationKinds: [] }] }),
+  };
+  try {
+    const { record } = await runComparison(args, { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid' }, pricing }, { deps });
+    assert.deepEqual(seen.sort((x, y) => x.length - y.length), [[], [['model_auto_compact_token_limit', '150000']]]);
+    const r = record.rounds[0];
+    assert.deepEqual(r.compactions, { a: 1, b: 2 });
+    assert.equal(r.optimization.otherApplied.codex_config_b, 1);
+    assert.equal(record.setup.b.codexConfig.model_auto_compact_token_limit, '150000');
+    assert.equal(record.setup.a.codexConfig, undefined);
+    assert.deepEqual(record.request.codexConfigB, { model_auto_compact_token_limit: '150000' });
+    assert.equal(record.rule0Verdict.treatmentEdits, 1);
+  } finally { for (const d of [...work, ...homes]) rmSync(d, { recursive: true, force: true }); }
+});

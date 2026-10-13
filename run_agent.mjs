@@ -100,6 +100,11 @@
 //     (--client codex: both arms run `codex exec` on this machine's ChatGPT seat instead of
 //      Claude Code; see runCodexComparison and lib/codexAgent.mjs. --codex-model / --codex-effort
 //      pin the model and reasoning effort for both arms; --keep-codex-threads keeps the threads)
+//   node run_agent.mjs --client codex --scenario gin-long-session --compare gateway \
+//     --kinds relevance_filter --codex-config-b model_auto_compact_token_limit=150000 --rounds 8
+//     (--codex-config-b: arm B alone runs with that Codex config, here the auto-compact threshold
+//      connect writes from the gateway's codexAutoCompact policy; a round counts B as acting
+//      only when it compacted more often than A, so a run that never reaches it is INSUFFICIENT)
 // Each arm's round line also shows its subagent load: `N subagents · M sub-req (M/N per
 //   agent) · K main-req` (totals.subagentRequests, requestsPerSubagent, mainRequests); the
 //   end-of-run summary pools it per arm (`subagentLoad`) and lists the Claude Code versions
@@ -309,6 +314,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--client') a.client = argv[++i]; // claude-code (default) | codex: the agent both arms run
     else if (argv[i] === '--codex-model') a.codexModel = argv[++i] ?? ''; // --client codex: the model both arms run (default: Codex's own)
     else if (argv[i] === '--codex-effort') a.codexEffort = argv[++i] ?? ''; // --client codex: model_reasoning_effort for both arms (default: the model's own)
+    else if (argv[i] === '--codex-config-b') (a.codexConfigB ??= []).push(parseCodexConfig(argv[++i])); // --client codex: a Codex config key=value arm B alone runs with (repeatable)
     else if (argv[i] === '--keep-codex-threads') a.keepCodexThreads = true; // --client codex: leave the sessions' threads in ~/.codex (default: deleted after reading)
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
@@ -317,7 +323,7 @@ export function parseArgs(argv, env = process.env) {
   if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
   a.client ??= 'claude-code';
   if (!['claude-code', 'codex'].includes(a.client)) throw new Error('--client claude-code|codex');
-  if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads)) throw new Error('--codex-model, --codex-effort and --keep-codex-threads need --client codex');
+  if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads || a.codexConfigB)) throw new Error('--codex-model, --codex-effort, --codex-config-b and --keep-codex-threads need --client codex');
   // --read-trim(-b) is readTrim=on: one posture, so both spellings reach every check below.
   a.hookPosture = postureOf(pins.all, 'every Anyray arm');
   postureOf([...pins.all, ...pins.b], 'arm B'); // --hook-posture reaches B too
@@ -418,6 +424,22 @@ function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
   if (used.length) throw new Error(`--client codex does not take ${used.join(', ')}: ${used.includes('--max-turns') ? 'Codex has no turn cap (use --timeout-min); ' : ''}those are Claude Code switches`);
   if (a.codexModel !== undefined && !CODEX_MODEL.test(a.codexModel)) throw new Error(`--codex-model takes a model id, got ${JSON.stringify(a.codexModel)}`);
   if (a.codexEffort !== undefined && !CODEX_EFFORTS.includes(a.codexEffort)) throw new Error(`--codex-effort must be ${CODEX_EFFORTS.join('|')}`);
+  if (a.codexConfigB) {
+    // Both arms on one route, so the config is the only difference; B carries it.
+    if (!['gateway', 'control'].includes(a.compare)) throw new Error('--codex-config-b needs --compare gateway or control: both arms on one route, B alone differing');
+    if (a.treatment !== 'b') throw new Error('--codex-config-b is the treatment on B: use treatment b');
+  }
+}
+
+const CODEX_CONFIG_KEY = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$/;
+const CODEX_CONFIG_VALUE = /^(\d{1,9}|true|false)$/;
+/** `--codex-config-b key=value`: a dotted Codex config key and an integer or boolean. */
+function parseCodexConfig(raw) {
+  const at = String(raw ?? '').indexOf('=');
+  const key = at > 0 ? raw.slice(0, at) : '';
+  const value = at > 0 ? raw.slice(at + 1) : '';
+  if (!CODEX_CONFIG_KEY.test(key) || !CODEX_CONFIG_VALUE.test(value)) throw new Error(`--codex-config-b takes key=value (a dotted Codex config key, an integer or boolean), got ${JSON.stringify(raw ?? '')}`);
+  return [key, value];
 }
 
 /** The scenario as both arms run it: --max-turns replaces its turn cap. */
@@ -519,6 +541,7 @@ export const requestRecord = (args) => ({
   experiment: args.experiment ?? null,
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
+  ...(args.codexConfigB ? { codexConfigB: Object.fromEntries(args.codexConfigB) } : {}), // arm B's own Codex config
   ...(args.connectBinB ? { connectBinB: args.connectBinBDigest ?? null } : {}), // arm B's connect build (sha256 prefix, never the path)
   ...(args.claude?.pinned ? { claudeBin: { source: args.claude.source, version: args.claude.version ?? null } } : {}), // both arms' pinned Claude Code build (never the path)
   ...(args.readTrimB ? { readTrimB: true } : {}), // arm B alone trims nested Reads
@@ -1163,7 +1186,8 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   try { record.scenario = { name: args.scenario, ...scenarioFile, repoInfo: d.describeRepo(probe, scenario) }; }
   finally { rmSync(probe, { recursive: true, force: true }); }
   const tenant = viaGateway.length ? benchTenantSetup(resolveBenchKey(process.env, () => {})) : null;
-  const armSetup = (slot) => ({ client: 'codex', arm: arms[slot], model: args.codexModel ?? null, effort: args.codexEffort ?? null, kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null, timeoutMin: scenario.timeoutMin ?? 6 });
+  const configOf = (slot) => (slot === 'b' ? args.codexConfigB ?? [] : []);
+  const armSetup = (slot) => ({ client: 'codex', arm: arms[slot], model: args.codexModel ?? null, effort: args.codexEffort ?? null, kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null, timeoutMin: scenario.timeoutMin ?? 6, ...(configOf(slot).length ? { codexConfig: Object.fromEntries(configOf(slot)) } : {}) });
   Object.assign(record, {
     client: 'codex', compare: args.compare, label: args.label, gateway: run.gatewayUrl, provider: 'chatgpt-seat', arms, kinds: args.kinds, tenant,
     request: { ...requestRecord(args), client: 'codex', codexModel: args.codexModel ?? null, codexEffort: args.codexEffort ?? null },
@@ -1193,7 +1217,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
         return await d.runCodexAgent({
           arm: arms[slot], scenario, work, model: args.codexModel, effort: args.codexEffort, gatewayUrl: run.gatewayUrl, clientKey,
           runTag: tags[slot], sharedHeaders: args.sharedHeaders,
-          extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders : [], armHome, pricing,
+          extraHeaders: carriesExtraHeaders(arms, slot) ? args.extraHeaders : [], armHome, pricing, configOverrides: configOf(slot),
           keepThreads: !!args.keepCodexThreads, deleteThread: d.deleteThread,
           check: scenario.check ? (w) => runCheck(scenario.check, w) : null,
           citations: scenario.citations ? (text, w) => checkCitations(text, w) : null,
@@ -1226,10 +1250,18 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       const kinds = slotKinds(args, slot)[0];
       if (kinds && t.traces) tallies[slot] = tallyKinds(traceResults(t.traces), kinds);
     }
+    // A client-config treatment edits nothing on the gateway: what B did is compact more
+    // often than A. Scored as B's tally so a run where it never fired reads INSUFFICIENT.
+    const compactions = { a: sessions.a.totals?.compactions ?? 0, b: sessions.b.totals?.compactions ?? 0 };
+    if (args.codexConfigB) {
+      tallies.b ??= { requests: 0, unconfirmed: 0, byKind: {}, otherApplied: {}, preserved: {} };
+      tallies.b.otherApplied = { ...tallies.b.otherApplied, codex_config_b: compactions.b > compactions.a ? 1 : 0 };
+    }
     const r = {
       round, runTag: tags.b, ...(args.compare === 'gateway' ? { runTags: tags } : {}), startedAt, endedAt, sessions,
       ...roundRatio(sessions.a, sessions.b),
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
+      compactions,
       ...(tallies.b ? { optimization: tallies.b } : {}),
       ...(tallies.a && args.compare === 'gateway' ? { optimizationA: tallies.a } : {}),
     };
@@ -1251,7 +1283,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       const t = sessions[slot].totals;
       const share = t.input ? (100 * t.cacheRead / t.input).toFixed(1) : '0.0';
       const tally = slot === 'b' ? r.optimization : r.optimizationA;
-      return `  round ${round} ${slot.toUpperCase()} ${arms[slot]}: $${t.costUsd?.toFixed(3) ?? 'n/a'} · ${t.turns} requests (+${t.subagentRequests} in ${t.subagents} subagents) · ${t.uncachedInput} uncached / ${t.cacheRead} read / ${t.cacheWrite} written · ${share}% cache-read share · ${t.retrievalCalls} retrieval calls · median ${t.latencyMs?.median ?? 'n/a'} ms/request · ${r.quality[slot] ? 'solved' : 'NOT solved'}${sessions[slot].error ? ` (${sessions[slot].error})` : ''}` +
+      return `  round ${round} ${slot.toUpperCase()} ${arms[slot]}: $${t.costUsd?.toFixed(3) ?? 'n/a'} · ${t.turns} requests (+${t.subagentRequests} in ${t.subagents} subagents) · ${t.uncachedInput} uncached / ${t.cacheRead} read / ${t.cacheWrite} written · ${share}% cache-read share · ${t.retrievalCalls} retrieval calls · median ${t.latencyMs?.median ?? 'n/a'} ms/request · ${t.compactions ?? 0} compaction(s), peak ${t.peakInput ?? 'n/a'} input · ${r.quality[slot] ? 'solved' : 'NOT solved'}${sessions[slot].error ? ` (${sessions[slot].error})` : ''}` +
         (tally ? `\n  round ${round} ${slot.toUpperCase()} ${formatKindTally(tally)}` : '');
     };
     log(`${line('a')}\n${line('b')}\n  round ${round} ratio B/A ${r.ratio?.toFixed(3) ?? `n/a (${r.error})`}`);
