@@ -218,8 +218,11 @@ Each gateway arm is set up by running `anyray-connect --tools codex --subscripti
 into a private home against the bench gateway; the arm then uses that route, MCP server
 and tool approvals. Codex itself keeps the real `~/.codex` (the seat login is never
 copied), with `--ignore-user-config`, the route as `-c` overrides, the client key in an
-env var (never argv), and hooks off in both arms. Each session's threads are deleted
-afterwards (`--keep-codex-threads` keeps them).
+env var (never argv), and hooks off in both arms (except B under `--codex-hooks-b`,
+below). Each session's threads are deleted afterwards (`--keep-codex-threads` keeps them).
+With `ANYRAY_CONNECT_BIN` or `--connect-bin-b` set, each arm's home starts from a no-app
+profile and the round fails unless its MCP server (and hook) run the named build: an
+installed Connect app otherwise takes the configure over and runs its own.
 
 Cost is Codex's own per-response usage from the thread's rollout file, subagents
 included, priced from `pricing` above (cache writes at 1.25x). The seat bills in usage
@@ -242,6 +245,28 @@ npm run bench-rule -- remove-params codex-trim-off
 
 `--compare anyray` with the setting on asks the end-to-end question (the lane against
 Codex with no gateway at all).
+
+connect's Codex PreToolUse source trim is client-side, so its pair is two gateway arms
+with the hook on B alone:
+
+```bash
+npm run agent -- --client codex --scenario gin-long-session --compare gateway \
+  --kinds relevance_filter --codex-hooks-b --rounds 8 --retry-invalid 4
+```
+
+B runs exactly one hook: the one anyray-connect installed in B's home, declared as
+session config and trusted by its own `hooks.state` entry (never
+`--dangerously-bypass-hook-trust`); every handler in the real `~/.codex/hooks.json` is
+switched off by key as well. It runs through `lib/codexHookShim.mjs`, which runs connect's
+hook under B's home and puts that home in front of the `__anyray-shell-run` it answers
+with, so the trim reads B's profile and tees into B's `~/.anyray/hook-tee`, never the real
+one. The wrapped command keeps the real Go caches and git config (`wrappedCommandEnv`).
+A round counts B as acting only when B's own connect wrapped a command (the trace tallies
+are kept apart in `gatewayOptimization`, since the gateway edits both arms alike), and it
+leaves the stats (`hookLeak`) if any command was wrapped on A or by another connect on B.
+Each B session records the wraps, digest footers, the shim's outcomes and the tee count.
+Add `--connect-bin-b /abs/<dir>/anyray-connect` to configure B from another build (its
+sha256 prefix is recorded, never the path).
 
 ### Scenarios
 
