@@ -7,6 +7,12 @@
 // (classified sdk-agent requests by evidence class, fresh handles minted). Compare with
 // tools/compare-sdk-app.mjs.
 //
+// K and R pin the strategy set per request (x-anyray-optimization-kinds; R = K plus
+// repeat_factor, ANY-1154). For the kinds some selected arm runs and another does not, each
+// session also records what that kind did, from the gateway's trace METADATA (decisions,
+// folds, tokens, declines, a session-gate holdout); that read needs --admin-token-file, a
+// 0600 file holding an admin credential with traces:read, and never touches bodies.
+//
 // Keys come from 0600 files named <arm>.key in --keys-dir; a key is never on argv and never
 // printed. --budget (default $120) is a hard cap: a round never starts if the costliest
 // round so far would push the total past it, and the run aborts when the first three rounds
@@ -14,6 +20,8 @@
 //
 //   node run_sdk_app.mjs --gateway <url> --keys-dir <dir with A.key B.key C.key> \
 //     --model claude-sonnet-5-5 --rounds 20 --budget 120 --label <label>
+//   node run_sdk_app.mjs --scenario sdk-app-scanner-long --arms K,R --keys-dir <dir with K.key R.key> \
+//     --admin-token-file <0600 file> --model claude-opus-4-6 --rounds 8 --budget 140 --label <label>
 
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,7 +30,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision, shortProfile } from './lib/agentSdkApp.mjs';
+import { ARMS, DEFAULT_ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision, shortProfile, watchedKinds } from './lib/agentSdkApp.mjs';
+import { readSessionKindEvidence } from './lib/kindEvidence.mjs';
 import { longProfile } from './lib/scannerLong.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
@@ -75,7 +84,7 @@ export const SCENARIO_PROFILES = {
 };
 
 export function parseArgs(argv, env = process.env) {
-  const a = { scenario: 'sdk-app-scanner', arms: Object.keys(ARMS), rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null };
+  const a = { scenario: 'sdk-app-scanner', arms: [...DEFAULT_ARMS], rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null, adminTokenFile: null };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     if (v === '--scenario') a.scenario = argv[++i];
@@ -86,6 +95,7 @@ export function parseArgs(argv, env = process.env) {
     else if (v === '--budget') a.budget = Number(argv[++i]);
     else if (v === '--gateway') a.gateway = argv[++i];
     else if (v === '--keys-dir') a.keysDir = argv[++i];
+    else if (v === '--admin-token-file') a.adminTokenFile = argv[++i];
     else throw new Error(`unknown flag ${v}`);
   }
   if (!Object.hasOwn(SCENARIO_PROFILES, a.scenario)) throw new Error(`--scenario takes one of ${Object.keys(SCENARIO_PROFILES).join(', ')}`);
@@ -97,18 +107,21 @@ export function parseArgs(argv, env = process.env) {
   return a;
 }
 
-/** One key per arm from `<dir>/<arm>.key`. Refuses a file group or others can read, an
- *  empty one, and two arms sharing a key (the per-session evidence is read per key). */
+/** A credential from a file only its owner can read. Refuses a file group or others can
+ *  read, and an empty one. The value is never printed. */
+export function readSecretFile(file) {
+  const mode = statSync(file).mode & 0o777;
+  if (mode & 0o077) throw new Error(`${file} is mode ${mode.toString(8)}; chmod 600 it`);
+  const secret = readFileSync(file, 'utf8').trim();
+  if (!secret) throw new Error(`${file} is empty`);
+  return secret;
+}
+
+/** One key per arm from `<dir>/<arm>.key` (each a readSecretFile), refusing two arms
+ *  sharing a key (the per-session evidence is read per key). */
 export function readArmKeys(dir, arms) {
   const keys = {};
-  for (const arm of arms) {
-    const file = join(dir, `${arm}.key`);
-    const mode = statSync(file).mode & 0o777;
-    if (mode & 0o077) throw new Error(`${file} is mode ${mode.toString(8)}; chmod 600 it`);
-    const key = readFileSync(file, 'utf8').trim();
-    if (!key) throw new Error(`${file} is empty`);
-    keys[arm] = key;
-  }
+  for (const arm of arms) keys[arm] = readSecretFile(join(dir, `${arm}.key`));
   if (new Set(Object.values(keys)).size !== arms.length) throw new Error('each arm needs its own key');
   return keys;
 }
@@ -133,13 +146,25 @@ const settledReads = async (gatewayUrl, keys, arms) => {
   return cur;
 };
 
-/** A session's dollars for the budget: the priced usage, else the SDK's own figure. */
-const sessionCost = (s) => (Number.isFinite(s?.totals?.costUsd) ? s.totals.costUsd : Number.isFinite(s?.totals?.sdkCostUsd) ? s.totals.sdkCostUsd : 0);
+/** A session's dollars for the budget: the larger of the priced usage and the SDK's own
+ *  figure (which matches the gateway's bill; the priced usage can miss subagent output),
+ *  so the hard cap never undercounts. */
+export const sessionCost = (s) => {
+  const xs = [s?.totals?.costUsd, s?.totals?.sdkCostUsd].filter(Number.isFinite);
+  return xs.length ? Math.max(...xs) : 0;
+};
 
 const evidenceLine = (ev) => {
   if (!ev) return 'evidence unread';
   const classes = Object.entries(ev.evidence).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
   return `evidence ${ev.requests} req (${classes}), fresh handles ${ev.freshEmitted ?? 'unknown'}`;
+};
+
+/** One watched kind's session evidence as a line: counts and reasons only. */
+export const kindLine = (e) => {
+  const n = (x) => (x == null ? 'unknown' : String(x));
+  const reasons = (o) => Object.entries(o ?? {}).map(([k, x]) => `${k} ${x}`).join(', ') || 'none';
+  return `decided on ${e.requestsWithKind}/${e.requests} requests · fresh folds ${n(e.freshFolds)} (${n(e.blocksFactored)} blocks, ${n(e.freshTokens)} tokens) · replays ${n(e.replays)} (${n(e.replayTokens)} tokens) · declines ${reasons(e.declines)} · suppressed ${reasons(e.suppressed)}${e.holdout ? ' · HOLDOUT' : ''}`;
 };
 
 async function main() {
@@ -149,6 +174,9 @@ async function main() {
   const gatewayUrl = cfg.run.gatewayUrl;
   if (!gatewayUrl) throw new Error('every arm runs through the gateway: pass --gateway or set ANYRAY_GATEWAY_URL');
   const keys = readArmKeys(args.keysDir, args.arms);
+  const watched = watchedKinds(args.arms);
+  const adminToken = args.adminTokenFile ? readSecretFile(args.adminTokenFile) : null;
+  if (watched.length && !adminToken) console.log(`  note: no --admin-token-file, so what ${watched.join(', ')} did per session is not read`);
 
   const dir = join(ROOT, 'scenarios', args.scenario);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
@@ -171,6 +199,7 @@ async function main() {
     fixture: prepared.fixture,
     maxTurns: scenarioFile.maxTurns ?? null,
     budgetUsd: args.budget,
+    watchedKinds: watched,
   });
   const save = () => writeFileSync(file, JSON.stringify(record, null, 2));
   save();
@@ -191,6 +220,7 @@ async function main() {
       }
       const startedAt = new Date().toISOString();
       const before = await readAll(gatewayUrl, keys, args.arms);
+      const sessionIds = Object.fromEntries(args.arms.map((arm) => [arm, `${args.scenario}-${arm}-r${round}-${stamp}`]));
       const runArm = (arm) =>
         runSdkAppAgent({
           arm,
@@ -198,7 +228,7 @@ async function main() {
           model: args.model,
           gatewayUrl,
           clientKey: keys[arm],
-          sessionId: `${args.scenario}-${arm}-r${round}-${stamp}`,
+          sessionId: sessionIds[arm],
           profile: prepared.profile,
           pricing: cfg.pricing,
           timeoutMs: (scenarioFile.timeoutMin ?? 10) * 60000,
@@ -206,6 +236,10 @@ async function main() {
         });
       const settled = await Promise.allSettled(args.arms.map(runArm));
       const after = await settledReads(gatewayUrl, keys, args.arms);
+      // What each watched kind did per session, from trace metadata (after the settle, so
+      // the last rows have landed). Read for every arm, so the control shows it never ran.
+      const kindEvidence = {};
+      if (watched.length) for (const arm of args.arms) kindEvidence[arm] = await readSessionKindEvidence(gatewayUrl, adminToken, sessionIds[arm], watched);
       const sessions = {};
       const quality = {};
       const recall = {};
@@ -214,13 +248,13 @@ async function main() {
         const retrieval = evidenceDelta(before[arm], after[arm]);
         const reads = { before: before[arm]?.state ?? 'unavailable', after: after[arm]?.state ?? 'unavailable' };
         if (s.status === 'rejected') {
-          sessions[arm] = { arm, error: String(s.reason?.name ?? 'error').slice(0, 80), retrieval, selfCheck: reads };
+          sessions[arm] = { arm, error: String(s.reason?.name ?? 'error').slice(0, 80), retrieval, selfCheck: reads, ...(watched.length && { kindEvidence: kindEvidence[arm] }) };
           quality[arm] = false;
           recall[arm] = 0;
           continue;
         }
         const v = s.value;
-        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, recallTotal: v.recallTotal, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, endedBy: v.endedBy, toolsSeen: v.toolsSeen, wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId, retrieval, selfCheck: reads };
+        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, recallTotal: v.recallTotal, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, endedBy: v.endedBy, toolsSeen: v.toolsSeen, modelFallbacks: v.modelFallbacks ?? [], wallMs: v.wallMs, ...(v.error && { error: v.error }), sessionId: v.sessionId, retrieval, selfCheck: reads, ...(v.optimization && { optimization: v.optimization }), ...(watched.length && { kindEvidence: kindEvidence[arm] }) };
         quality[arm] = v.completed;
         recall[arm] = v.recall;
       }
@@ -232,8 +266,12 @@ async function main() {
         const s = sessions[arm];
         if (!s.totals) { console.log(`  round ${round} ${arm}: error ${s.error} · ${evidenceLine(s.retrieval)}`); continue; }
         const t = s.totals;
-        const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}`;
+        const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}${ARMS[arm].kinds ? `, ${ARMS[arm].kinds.length} kinds` : ''}`;
         console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} (sdk $${t.sdkCostUsd?.toFixed(4) ?? 'n/a'}) · ${t.turns} turns (main ${t.mainTurns}, subagents ${JSON.stringify(t.subagentTurns)}) · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, ${t.parallelSpawnMessages} parallel launches, max ${t.maxParallelSpawn}) · recall ${s.recall}/${markers} · ${s.completed ? `completed (${s.endedBy})` : `NOT completed (${s.endedBy})`}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
+        for (const f of s.modelFallbacks ?? []) console.log(`    ${arm}: the CLI switched model (${f.subtype}) ${f.from} -> ${f.to} after request ${f.afterRequest}`);
+        if (s.optimization?.heldOut?.length) console.log(`    ${arm}: held out by the session gate: ${s.optimization.heldOut.join(', ')}`);
+        for (const [kind, e] of Object.entries(s.kindEvidence?.kinds ?? {})) console.log(`    ${arm} ${kind}: ${kindLine(e)}`);
+        if (s.kindEvidence?.unavailable) console.log(`    ${arm}: kind evidence unavailable (${s.kindEvidence.unavailable})`);
       }
       console.log(`  round ${round} $${roundCost.toFixed(3)}; spent so far $${roundCosts.reduce((a, b) => a + b, 0).toFixed(3)}`);
     }

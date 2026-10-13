@@ -406,6 +406,70 @@ refuses any request to another host or with an `x-anyray-*` header it did not se
 Each request's usage, cost, latency and content block types are stored in the result
 file.
 
+### SDK app scanner, long lane: one strategy per pair (arms K and R)
+
+`run_sdk_app.mjs --scenario sdk-app-scanner-long` runs the scanner app on the Agent
+SDK. Arms A, B and C stay as they were. K and R pin the strategy set per request with
+`x-anyray-optimization-kinds`, so a pair measures one strategy:
+
+| Arm | Headers |
+| --- | --- |
+| K | harness retrieval on, kinds `observation_mask,relevance_filter,code_graph,columnar_fold,command_digest` |
+| R | K plus `repeat_factor` |
+
+Nothing else differs between the two arms. An arm with a kinds list goes through the local
+pass-through, which reads each response's `x-anyray-optimization-result`. If you pass
+`--admin-token-file` (a 0600 file holding an admin credential with `traces:read`), each
+session also records what the added kind did. That comes from trace metadata only: the
+requests it decided on, its fresh folds, blocks and tokens, its replays, its declines,
+and whether the session gate held it out. Bodies are never read. Each session also records
+which model served each request and any model switch the CLI made.
+
+```bash
+node run_sdk_app.mjs --scenario sdk-app-scanner-long --arms K,R --keys-dir <dir with K.key R.key> \
+  --admin-token-file <0600 file> --gateway <url> --model claude-sonnet-5-5 --rounds 1 --budget 20 --label <label>
+node tools/compare-sdk-app.mjs results/agent/sdk-app-scanner-long--<label>.json
+```
+
+The compare report states the kind gate first: R folded in at least one session, and K
+never decided the kind. Then it gives R/K on two cost bases. The first is the harness's
+own price. The second is billed: the SDK's `total_cost_usd`, which matched the gateway's
+spend to the cent. A round where the session gate held a kind out of either arm is left
+out of the ratios and listed. `--budget` now counts the larger of the two figures.
+
+**repeat_factor on this lane (ANY-1154, 2026-10-13).** Smoke: one round on Sonnet 5.5,
+dev gateway.
+
+| | K | R |
+| --- | --- | --- |
+| repeat_factor decided on | 0 of 165 requests | 4 of 94 requests |
+| Fresh folds | 0 | 2 (2 blocks, 1,616 tokens) |
+| Replays | 0 | 2 (1,616 tokens) |
+| Declined | - | `no_candidate_span` on 90 requests |
+| Session-gate holdout | no | no |
+| Main turns | 63 | 42 |
+| Recall | 14/19 | 13/19 |
+| Billed | $4.84 | $2.90 |
+
+The gate passed. The effect is too small to measure here. R's input was 4,850,797 tokens.
+The fresh folds are 0.033% of that, or 0.067% with the replays. Even if every saved token
+were priced at Opus 4.6's dearest input rate ($6.25/M, a 5-minute cache write), that is
+at most $0.02 per session, about 0.3% of R's input cost at Opus 4.6 rates. The one paired
+round read 0.600 billed and 0.743 harness-priced. That gap comes from the session: K ran
+63 main turns and R ran 42, which repeat_factor cannot cause. The planned 8-round Opus 4.6
+verdict was not run. On this lane's r5 run (5 rounds, Sonnet 5.5), the paired ratios
+swing by tens of percent from one round to the next: B/C runs up to 2.0 with Q3 1.82, and
+A/C has median 1.51. Eight rounds cannot resolve a 0.3% effect, so about $140 would have
+bought a null result.
+
+**The CLI switches models on this lane.** With `claude-sonnet-5-5`, the Agent SDK's
+bundled CLI (0.3.296) emitted `system` `model_refusal_fallback` (`claude-sonnet-5-5` to
+`claude-sonnet-5`) after a refused turn, about 11 to 16 main requests in. It kept the rest
+of the session on `claude-sonnet-5`, subagents included. The gateway did not cause it:
+routing is one Bedrock target with no model override, and every request was a single
+200. It happened on both arms. Before any run on another model, check the result file's
+`modelFallbacks` and `totals.models`.
+
 ### Connect's client-tool switches
 
 `--client-tool-policy name=true|false` (repeatable) sets one of anyray-connect's local

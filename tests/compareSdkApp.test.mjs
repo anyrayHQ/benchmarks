@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pairRounds, comparePair, pairsFor, compareFile, d4Precondition, formatReport } from '../tools/compare-sdk-app.mjs';
+import { pairRounds, comparePair, pairsFor, compareFile, d4Precondition, formatReport, heldOutOf, kindEvidenceFor } from '../tools/compare-sdk-app.mjs';
 
 const roundOf = (round, costs, solved, recall) => ({
   round,
@@ -191,4 +191,138 @@ test('D4 reads a spend-row mint count for a round the self-check could not count
   // A malformed spend count is no evidence.
   assert.equal(d4Precondition(rounds, { spendMints: { 1: { B: 'lots' } } }).unknown, 2);
   assert.equal(compareFile({ arms: ['B'], rounds }, { spendMints: { 1: { B: 53 } } }).d4.minted, 1);
+});
+
+// ---- R/K: one kind added by header, its evidence, and session-gate holdouts (ANY-1154) ----
+
+const K_SPEC = { harnessRetrieval: 'on', optimize: null, readPath: true, kinds: ['observation_mask', 'code_graph'] };
+const R_SPEC = { ...K_SPEC, kinds: [...K_SPEC.kinds, 'repeat_factor'] };
+const rf = (o = {}) => ({ requests: 40, requestsWithKind: 0, freshFolds: 0, blocksFactored: 0, freshTokens: 0, replays: 0, pinsReplayed: 0, replayTokens: 0, tokensSaved: 0, suppressed: {}, declines: {}, holdout: false, detailUnread: 0, ...o });
+const kindSession = (cost, evidence, heldOut = []) => ({
+  totals: { costUsd: cost, mainTurns: 40, turns: 40 },
+  optimization: { requested: [], heldOut },
+  kindEvidence: evidence === null ? { unavailable: 'no admin token' } : { requests: 40, kinds: { repeat_factor: evidence } },
+});
+const rkRound = (round, r, k) => ({ round, sessions: { R: r, K: k }, quality: { R: true, K: true }, recall: { R: 12, K: 12 } });
+
+test('pairsFor adds R/K beside the existing pairs', () => {
+  assert.deepEqual(pairsFor(['K', 'R']), [['R', 'K']]);
+  assert.deepEqual(pairsFor(['A', 'B', 'C', 'K', 'R']), [['B', 'A'], ['B', 'C'], ['A', 'C'], ['R', 'K']]);
+});
+
+test('heldOutOf reads a holdout from the response feedback or from the trace metadata', () => {
+  assert.deepEqual(heldOutOf(kindSession(1, rf(), ['code_graph'])), ['code_graph']);
+  assert.deepEqual(heldOutOf(kindSession(1, rf({ holdout: true }))), ['repeat_factor']);
+  assert.deepEqual(heldOutOf(kindSession(1, rf({ holdout: true }), ['repeat_factor'])), ['repeat_factor']);
+  assert.deepEqual(heldOutOf({ totals: { costUsd: 1 } }), [], 'a session without kinds has nothing held out');
+});
+
+test('a round where the session gate held a kind out of either arm is excluded from the pair and listed', () => {
+  const rounds = [
+    rkRound(1, kindSession(0.9, rf({ freshFolds: 2 })), kindSession(1.0, rf())),
+    rkRound(2, kindSession(1.0, rf({ holdout: true })), kindSession(1.0, rf())), // R ran without repeat_factor
+    rkRound(3, kindSession(0.8, rf({ freshFolds: 1 })), kindSession(1.0, rf(), ['observation_mask'])), // K lost a kind
+    rkRound(4, kindSession(1.1, rf({ freshFolds: 1 })), kindSession(1.0, rf())),
+  ];
+  assert.deepEqual(pairRounds(rounds, 'R', 'K').map((r) => r.round), [1, 4]);
+  const p = comparePair(rounds, 'R', 'K');
+  assert.equal(p.n, 2);
+  assert.equal(p.wins, 1);
+  assert.deepEqual(p.heldOutRounds, [
+    { round: 2, treatment: ['repeat_factor'], control: [] },
+    { round: 3, treatment: [], control: ['observation_mask'] },
+  ]);
+  // The existing pairs never carry kinds, so nothing of theirs is excluded.
+  assert.deepEqual(comparePair([roundOf(1, { A: 1, B: 0.9 }, { A: true, B: true }, { A: 1, B: 1 })], 'B', 'A').heldOutRounds, []);
+});
+
+test('kindEvidenceFor: the kind R adds folded on R and never decided on K, per session', () => {
+  const record = {
+    arms: ['K', 'R'],
+    armSpecs: { K: K_SPEC, R: R_SPEC },
+    rounds: [
+      rkRound(1, kindSession(0.9, rf({ requestsWithKind: 6, freshFolds: 4, blocksFactored: 9, freshTokens: 5200, replays: 3, pinsReplayed: 7, replayTokens: 2100, tokensSaved: 7300, declines: { payback_premium: 2 } })), kindSession(1, rf())),
+      rkRound(2, kindSession(1.0, rf({ declines: { no_candidate_span: 30 } })), kindSession(1, rf())),
+    ],
+  };
+  const ev = kindEvidenceFor(record, 'R', 'K');
+  assert.deepEqual(ev.kinds, ['repeat_factor']);
+  const [k] = ev.byKind;
+  assert.equal(k.kind, 'repeat_factor');
+  assert.equal(k.treatmentSessions, 2);
+  assert.equal(k.folded, 1);
+  assert.deepEqual(k.foldedRounds, [1]);
+  assert.equal(k.controlDecided, 0);
+  assert.equal(k.unknown, 0);
+  assert.equal(k.pass, true);
+  assert.deepEqual(k.sessions[0], { round: 1, holdout: false, requestsWithKind: 6, freshFolds: 4, blocksFactored: 9, freshTokens: 5200, replays: 3, replayTokens: 2100, tokensSaved: 7300, declines: { payback_premium: 2 }, suppressed: {}, controlDecided: 0 });
+  assert.deepEqual(k.sessions[1].declines, { no_candidate_span: 30 });
+});
+
+test('kindEvidenceFor fails when K decided the kind, or R never folded; unread evidence is unknown', () => {
+  const spec = { arms: ['K', 'R'], armSpecs: { K: K_SPEC, R: R_SPEC } };
+  const leaked = kindEvidenceFor({ ...spec, rounds: [rkRound(1, kindSession(1, rf({ freshFolds: 1, blocksFactored: 1 })), kindSession(1, rf({ requestsWithKind: 2 })))] }, 'R', 'K').byKind[0];
+  assert.equal(leaked.controlDecided, 1);
+  assert.equal(leaked.pass, false);
+  const never = kindEvidenceFor({ ...spec, rounds: [rkRound(1, kindSession(1, rf()), kindSession(1, rf()))] }, 'R', 'K').byKind[0];
+  assert.equal(never.folded, 0);
+  assert.equal(never.pass, false);
+  const unread = kindEvidenceFor({ ...spec, rounds: [rkRound(1, kindSession(1, null), kindSession(1, null))] }, 'R', 'K').byKind[0];
+  assert.equal(unread.unknown, 2, 'both sessions unread, counted per session');
+  assert.equal(unread.pass, null, 'nothing read is not a verdict either way');
+  // A held-out R session is no evidence about folding: it neither passes nor fails the gate.
+  const held = kindEvidenceFor({ ...spec, rounds: [rkRound(1, kindSession(1, rf({ holdout: true })), kindSession(1, rf())), rkRound(2, kindSession(1, rf({ freshFolds: 1, blocksFactored: 2 })), kindSession(1, rf()))] }, 'R', 'K').byKind[0];
+  assert.equal(held.treatmentSessions, 1);
+  assert.deepEqual(held.heldOutRounds, [1]);
+  assert.equal(held.pass, true);
+  // Pairs without a kinds difference carry no kind evidence.
+  assert.deepEqual(kindEvidenceFor({ arms: ['A', 'B'], armSpecs: { A: { harnessRetrieval: 'off' }, B: { harnessRetrieval: 'on' } }, rounds: [] }, 'B', 'A').kinds, []);
+});
+
+test('the report states the kind gate before the R/K ratios and lists holdouts and per-session folds', () => {
+  const record = {
+    scenario: 'sdk-app-scanner-long',
+    model: 'claude-opus-4-6',
+    arms: ['K', 'R'],
+    armSpecs: { K: K_SPEC, R: R_SPEC },
+    rounds: [
+      rkRound(1, kindSession(0.9, rf({ requestsWithKind: 5, freshFolds: 3, blocksFactored: 4, freshTokens: 2500, tokensSaved: 2500 })), kindSession(1.0, rf())),
+      rkRound(2, kindSession(1.0, rf({ holdout: true })), kindSession(1.0, rf())),
+    ],
+  };
+  const text = formatReport(compareFile(record));
+  const gateAt = text.indexOf('repeat_factor evidence');
+  const pairAt = text.indexOf('R/K:');
+  assert.ok(gateAt >= 0 && pairAt > gateAt, 'the kind gate precedes the ratios');
+  assert.match(text, /repeat_factor evidence \(R folds, K never decides\): folded in 1\/1 R session\(s\), K decided in 0\/2 -> PASS/);
+  assert.match(text, /R\/K: valid pairs 1, wins 1\/1/);
+  assert.match(text, /held out \(excluded\): round 2 R repeat_factor/);
+  assert.match(text, /round 1 R repeat_factor: fresh folds 3 \(4 blocks, 2500 tokens\)/);
+  assert.doesNotMatch(text, /D4 precondition .*FAIL/, 'no B session: D4 does not apply');
+});
+
+test('comparePair also reads the pair on the billed basis (the SDK total, which the gateway bills) when both arms report it', () => {
+  const r = (round, t, c) => ({ round, sessions: { R: { totals: { costUsd: t[0], sdkCostUsd: t[1] } }, K: { totals: { costUsd: c[0], sdkCostUsd: c[1] } } }, quality: { R: true, K: true }, recall: { R: 1, K: 1 } });
+  const p = comparePair([r(1, [2.7, 2.9], [3.6, 4.8]), r(2, [3.0, 3.3], [3.0, 3.0]), r(3, [1.0, 1.1], [1.0, 1.0])], 'R', 'K');
+  assert.equal(p.billed.n, 3);
+  assert.equal(p.billed.wins, 1);
+  assert.equal(p.billed.losses, 2);
+  assert.equal(p.billed.ratios[0].ratio, 2.9 / 4.8);
+  assert.equal(p.billed.max, 1.1);
+  // A round missing the SDK figure on either side drops out of the billed read only.
+  const partial = comparePair([r(1, [2.7, null], [3.6, 4.8]), r(2, [3.0, 3.3], [3.0, 3.0])], 'R', 'K');
+  assert.equal(partial.n, 2);
+  assert.equal(partial.billed.n, 1);
+  const text = formatReport({ scenario: 's', arms: ['K', 'R'], rounds: 3, model: 'm', d4: { sessions: 0 }, pairs: [p] });
+  assert.match(text, /R\/K billed \(SDK total_cost_usd\): valid pairs 3, wins 1\/3, median 1\.100, Q3 1\.100, max 1\.100/);
+  assert.match(text, /round 1: 0\.750 \(recall Δ \+0, billed 0\.604\)/);
+});
+
+test('the report names each valid pair whose sessions the CLI moved to another model', () => {
+  const fb = [{ subtype: 'model_refusal_fallback', from: 'claude-sonnet-5-5', to: 'claude-sonnet-5', afterRequest: 15 }];
+  const r = (round, rf, kf) => ({ round, sessions: { R: { totals: { costUsd: 1 }, modelFallbacks: rf }, K: { totals: { costUsd: 1 }, modelFallbacks: kf } }, quality: { R: true, K: true }, recall: { R: 1, K: 1 } });
+  const p = comparePair([r(1, fb, fb), r(2, [], [])], 'R', 'K');
+  assert.deepEqual(p.modelFallbackRounds, [{ round: 1, treatment: ['claude-sonnet-5-5->claude-sonnet-5@15'], control: ['claude-sonnet-5-5->claude-sonnet-5@15'] }]);
+  const text = formatReport({ scenario: 's', arms: ['K', 'R'], rounds: 2, model: 'm', d4: { sessions: 0 }, pairs: [p] });
+  assert.match(text, /model fallback: round 1 R claude-sonnet-5-5->claude-sonnet-5@15; K claude-sonnet-5-5->claude-sonnet-5@15/);
 });
