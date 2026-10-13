@@ -40,7 +40,7 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision } from './lib/agentSdkApp.mjs';
 import { runCodeScanAgent } from './lib/sdkAppCodeScan.mjs';
 import { prepareRepo, repoCacheDir, binDigest } from './lib/agentRun.mjs';
-import { CONNECT_MCP_SERVER, connectSourceOf, connectMcpServerConfig, connectArmTools, probeMcpTools, prepareConnectHome } from './lib/connectMcp.mjs';
+import { CONNECT_MCP_SERVER, connectSourceOf, connectMcpServerConfig, connectArmTools, probeMcpTools, prepareConnectHome, preflightReadBatchCall, checkPreflightRead } from './lib/connectMcp.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
 import { VULNERABILITIES, httpVulnerabilities } from './tools/traffic-fixture/vulnerabilities.mjs';
@@ -177,8 +177,9 @@ async function scannerLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing 
  * A connect arm's mount (D, E), once per run: enroll connect in a private HOME with the
  * arm's key, then probe its stdio server (initialize + tools/list) in a fresh checkout,
  * started with the arm's source the way the SDK will start it. Throws, before any paid
- * round, when connect cannot enroll, its server does not offer the batch read, or (E) it
- * sends no initialize instructions for the arm's source.
+ * round, when connect cannot enroll, its server does not offer the batch read, the batch
+ * read does not serve absolute in-checkout paths (what the SDK's tools hand the model), or
+ * (E) it sends no initialize instructions for the arm's source.
  */
 async function connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey }) {
   const home = prepareConnectHome({ gatewayUrl, clientKey });
@@ -191,7 +192,7 @@ async function connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey }) {
   const probeWork = prepareRepo(scenarioFile, dir);
   let probe;
   try {
-    probe = await probeMcpTools({ command: server.command, args: server.args, env: server.env, cwd: probeWork });
+    probe = await probeMcpTools({ command: server.command, args: server.args, env: server.env, cwd: probeWork, call: preflightReadBatchCall(scenarioFile, probeWork) });
   } finally {
     rmSync(probeWork, { recursive: true, force: true });
   }
@@ -202,6 +203,7 @@ async function connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey }) {
   let tools;
   try {
     tools = connectArmTools(probe.tools, CONNECT_MCP_SERVER, { requireInstructions: Boolean(ARMS[arm].connectSource), instructions: probe.instructions });
+    checkPreflightRead(arm, probe.call);
   } catch (e) {
     rmSync(home.dir, { recursive: true, force: true });
     throw e;
@@ -214,6 +216,7 @@ async function connectMount({ arm, dir, scenarioFile, gatewayUrl, clientKey }) {
       server: CONNECT_MCP_SERVER,
       source,
       instructions: probe.instructions,
+      absolutePathRead: { served: true, header: probe.call.header },
       command: basename(server.command),
       args: server.args,
       envKeys: Object.keys(server.env),

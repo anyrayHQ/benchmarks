@@ -435,7 +435,10 @@ server needs only the enrolled profile. It then mounts only Connect's MCP
 server (`anyray-connect __anyray-mcp-server claude`, HOME set to that private HOME) in
 the app as `anyray-connect`. The app runs under its own environment and never reads that
 HOME. Before the first paid round, the runner checks with `tools/list` that the server
-offers the batch read, and stops if it does not. D hides the server's own
+offers the batch read. It then makes one batch read by absolute path in a fresh checkout,
+because the SDK's Read and Grep hand the model absolute paths. It stops if either check
+fails: a Connect build older than ANY-1124 refuses those paths (`unsafe_path`). D hides
+the server's own
 `anyray_retrieve` and `anyray_recall`, so it differs from B by one tool.
 
 Arm E needs a Connect build that serves the `sdk` source (`ANYRAY_CONNECT_BIN`). Its

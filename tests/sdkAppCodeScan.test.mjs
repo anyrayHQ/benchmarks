@@ -15,6 +15,8 @@ import {
   prepareConnectHome,
   enrollConnectProfile,
   connectSourceOf,
+  preflightReadBatchCall,
+  checkPreflightRead,
 } from '../lib/connectMcp.mjs';
 import { NO_APP_PROFILE } from '../lib/agentRun.mjs';
 import { startFakeMessagesApi } from '../lib/fakeMessagesApi.mjs';
@@ -590,4 +592,25 @@ test('fakeMessagesApi spawns one subagent from the first main request and record
   } finally {
     await api.close();
   }
+});
+
+// --- preflight: the batch read must serve the absolute paths the SDK's own tools produce ---
+
+test('the connect-arm preflight reads two located ranges by ABSOLUTE in-checkout path, as the SDK hands them to the model', () => {
+  const s = scenario();
+  const call = preflightReadBatchCall(s, '/work/checkout');
+  assert.equal(call.name, READ_BATCH_TOOL);
+  assert.equal(call.arguments.reads.length, 2);
+  for (const r of call.arguments.reads) {
+    assert.ok(r.path.startsWith('/work/checkout/'), `${r.path} is absolute under the checkout`);
+    assert.ok(Number.isInteger(r.offset) && Number.isInteger(r.limit));
+  }
+  assert.deepEqual(call.arguments.reads.map((r) => r.path.slice('/work/checkout/'.length)), [s.slices[0].audit[0].file, s.slices[1].audit[0].file]);
+});
+
+test('checkPreflightRead refuses a build whose batch read fails those paths, naming the failure code', () => {
+  assert.doesNotThrow(() => checkPreflightRead('E', { isError: false, chars: 900, header: 'READ_BATCH_V2 2' }));
+  assert.throws(() => checkPreflightRead('E', { isError: true, chars: 171, header: null, failure: 'unsafe_path' }), /arm E: .*absolute.*unsafe_path/);
+  assert.throws(() => checkPreflightRead('D', { error: -32601 }), /arm D: .*batch read/);
+  assert.throws(() => checkPreflightRead('D', undefined), /arm D: .*batch read/);
 });
