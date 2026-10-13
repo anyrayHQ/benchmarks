@@ -83,6 +83,10 @@ export const pairsFor = (arms) => {
   // retrieval-off SDK app.
   if (has('D') && has('B')) out.push(['D', 'B']);
   if (has('D') && has('A')) out.push(['D', 'A']);
+  // E is D with connect's sdk source (initialize instructions): E/B is the batch read with
+  // its guidance, E/D isolates the guidance.
+  if (has('E') && has('B')) out.push(['E', 'B']);
+  if (has('E') && has('D')) out.push(['E', 'D']);
   return out;
 };
 
@@ -92,11 +96,11 @@ export const pairsFor = (arms) => {
  * errored. At least half the D sessions must have, and a file with no D session never
  * passes. A D that never batch-read measured B plus the tool's prefix bytes, not the tool.
  */
-export const readBatchPrecondition = (rounds) => {
-  const withD = rounds.filter((r) => r.sessions?.D);
+export const readBatchPrecondition = (rounds, arm = 'D') => {
+  const withD = rounds.filter((r) => r.sessions?.[arm]);
   const usedRounds = withD
     .filter((r) => {
-      const rb = r.sessions.D.totals?.readBatch;
+      const rb = r.sessions[arm].totals?.readBatch;
       return Number.isFinite(rb?.calls) && rb.calls > 0 && rb.calls > (rb.errors ?? 0);
     })
     .map((r) => r.round);
@@ -116,6 +120,7 @@ export const compareFile = (record) => {
     rounds: rounds.length,
     d4: d4Precondition(rounds),
     readBatch: readBatchPrecondition(rounds),
+    readBatchByArm: Object.fromEntries(['D', 'E'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     retrievalEvidence: record.retrievalEvidence ?? null,
   };
@@ -135,10 +140,10 @@ export const formatReport = (out) => {
         (d.mintedRounds.length ? ` (rounds ${d.mintedRounds.join(', ')})` : '')
     );
   }
-  const rb = out.readBatch;
-  if (rb && rb.sessions > 0) {
+  for (const [arm, rb] of Object.entries(out.readBatchByArm ?? { D: out.readBatch })) {
+    if (!rb || rb.sessions === 0) continue;
     lines.push(
-      `read_batch precondition (D sessions that called anyray_read_batch with a call not errored): ${rb.used}/${rb.sessions}, need ${rb.required} -> ${rb.pass ? 'PASS' : 'FAIL: the batch read did not run, so no D ratio below is a verdict'}` +
+      `read_batch precondition ${arm} (${arm} sessions that called anyray_read_batch with a call not errored): ${rb.used}/${rb.sessions}, need ${rb.required} -> ${rb.pass ? 'PASS' : `FAIL: the batch read did not run, so no ${arm} ratio below is a verdict`}` +
         (rb.usedRounds.length ? ` (rounds ${rb.usedRounds.join(', ')})` : '')
     );
   }

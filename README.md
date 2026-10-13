@@ -427,6 +427,7 @@ Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 6
 | B | The same, harness retrieval on |
 | C | No read path, optimization bypassed (`x-anyray-optimize: off`) |
 | D | B plus Anyray Connect's local MCP server, offering `anyray_read_batch` |
+| E | D, with the server started as `__anyray-mcp-server sdk`, whose `initialize` result tells the model when to batch reads |
 
 For arm D the runner first enrolls Connect in a private HOME, once per run, the way an
 agent host does it (`D.key` must be an agent key). It configures no client there: the
@@ -437,15 +438,22 @@ HOME. Before the first paid round, the runner checks with `tools/list` that the 
 offers the batch read, and stops if it does not. D hides the server's own
 `anyray_retrieve` and `anyray_recall`, so it differs from B by one tool.
 
+Arm E needs a Connect build that serves the `sdk` source (`ANYRAY_CONNECT_BIN`). Its
+preflight also requires that `initialize` carries instructions, so a build without them
+stops the run instead of measuring D twice.
+
 Check the wiring first. This makes no model request and needs no key:
 
 ```bash
-node tools/probe-sdk-code-scan.mjs
+node tools/probe-sdk-code-scan.mjs            # --arm E for arm E
 ```
 
-It starts the server as D does in a fresh checkout, makes one batch read call, then starts
-the SDK with D's options against a closed local port and reads its init message. It shows
-which tools the model is offered and where the server runs. Then a paired run:
+It starts the server as the arm does in a fresh checkout, makes one batch read call, then
+starts the SDK with the arm's options against a closed local port and reads its init
+message. It shows which tools the model is offered and where the server runs. Last, it runs
+the app against a local fake of the Messages API that spawns one auditor, and reports
+whether the server's instructions reached the main agent's request and the auditor's.
+Then a paired run:
 
 ```bash
 node run_sdk_app.mjs --scenario sdk-app-code-scan --arms A,D --gateway <url> \
