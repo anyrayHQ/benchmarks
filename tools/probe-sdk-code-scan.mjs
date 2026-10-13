@@ -5,15 +5,17 @@
 //   1. a fresh checkout of the scenario (the cached clone at the pinned ref, patch applied);
 //   2. anyray-connect's stdio MCP server, started exactly as the arm's mcpServers entry
 //      starts it (lib/connectMcp.mjs, the arm's source) in that checkout: initialize (whether
-//      it carries instructions), tools/list, then one anyray_read_batch call over two
-//      located ranges of the slice files (its size and header only);
+//      it carries instructions), tools/list, then the runner's preflight batch read: two
+//      located ranges by absolute in-checkout path, as the SDK's tools produce them (its
+//      size and header, or its failure code);
 //   3. the Claude Agent SDK with the arm's options (lib/sdkAppCodeScan.mjs codeScanOptions),
 //      pointed at a closed local port so no request can leave the machine, run to its init
 //      message: which MCP servers it connected, which anyray tools the model is offered, and
 //      the cwd a stdio server is started in (the batch read's confinement root);
 //   4. the same app against a local scripted Messages API (lib/fakeMessagesApi.mjs) that
 //      answers the main agent's first request by spawning one auditor: whether the server's
-//      instructions text reached the main agent's request and the auditor's (booleans).
+//      instructions text reached the main agent's request and the auditor's (booleans). The
+//      SDK puts them in the main agent's only; arm E passes on that, the auditor is reported.
 //
 // Without --connect-home the server runs in an empty private HOME, so it resolves connect's
 // shipped switch defaults (no profile). With --connect-home <dir> it reads that HOME's
@@ -30,7 +32,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { prepareRepo, sessionDirParent } from '../lib/agentRun.mjs';
-import { CONNECT_MCP_SERVER, READ_BATCH_TOOL, connectArmTools, connectMcpServerConfig, connectSourceOf, probeMcpTools } from '../lib/connectMcp.mjs';
+import { CONNECT_MCP_SERVER, checkPreflightRead, connectArmTools, connectMcpServerConfig, connectSourceOf, preflightReadBatchCall, probeMcpTools } from '../lib/connectMcp.mjs';
 import { ARMS } from '../lib/agentSdkApp.mjs';
 import { auditorSubagentDefinition, codeScanOptions } from '../lib/sdkAppCodeScan.mjs';
 import { startFakeMessagesApi } from '../lib/fakeMessagesApi.mjs';
@@ -119,13 +121,12 @@ async function main() {
   try {
     // 2. The server alone, as D starts it, in the checkout.
     const server = connectMcpServerConfig({ home, source: connectSourceOf(args.arm) });
-    const [s1, s2] = scenario.slices;
     const probe = await probeMcpTools({
       command: server.command,
       args: server.args,
       env: server.env,
       cwd: work,
-      call: { name: READ_BATCH_TOOL, arguments: { reads: [{ path: s1.audit[0].file, offset: 1, limit: 40 }, { path: s2.audit[0].file, offset: 1, limit: 40 }] } },
+      call: preflightReadBatchCall(scenario, work),
       revealInstructions: true,
     });
     const instructionsText = probe.instructions?.text ?? null;
@@ -133,6 +134,7 @@ async function main() {
     report.server = { command: server.command.split('/').pop(), args: server.args, envKeys: Object.keys(server.env), alwaysLoad: server.alwaysLoad, ...probe };
     if (probe.error) throw new Error(`connect's MCP server: ${probe.error}`);
     const tools = connectArmTools(probe.tools, CONNECT_MCP_SERVER, { requireInstructions: Boolean(ARMS[args.arm].connectSource), instructions: probe.instructions });
+    checkPreflightRead(args.arm, probe.call);
     report.arm = tools;
 
     // 3. The SDK with arm D's options, plus a server that records its own cwd.
@@ -190,7 +192,7 @@ async function main() {
   }
   console.log(JSON.stringify(report, null, 2));
   const reach = report.instructionsReach;
-  const ok = report.sdk?.readBatchOffered && report.sdk?.disallowedHidden && report.sdk?.stdioServerCwdIsCheckout && report.server?.call?.isError === false && reach?.auditorRequests > 0 && (!ARMS[args.arm].connectSource || reach.auditorHasThem);
+  const ok = report.sdk?.readBatchOffered && report.sdk?.disallowedHidden && report.sdk?.stdioServerCwdIsCheckout && report.server?.call?.isError === false && reach?.auditorRequests > 0 && (!ARMS[args.arm].connectSource || reach.mainHasThem);
   if (!ok) process.exitCode = 1;
 }
 
