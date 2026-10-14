@@ -564,7 +564,11 @@ const shadowKindsOf = (args) => {
 };
 
 /** How a gateway pair's verdict reads it: the arm under test and, under --kinds-b, the kinds the arms differ by. */
-export const verdictOptions = (args) => ({ treatment: args.treatment ?? 'b', differingKinds: args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null });
+export const verdictOptions = (args) => ({
+  treatment: args.treatment ?? 'b',
+  differingKinds: args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null,
+  ...(args.clientToolPoliciesB ? { clientToolTreatment: true } : {}), // --client-tool-policy-b: the treatment acts through client-tool calls
+});
 
 /**
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
@@ -803,7 +807,7 @@ export const whyNot = (reasons) => {
 
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 export function summarize(session, pricing) {
-  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0, readBatchCalls: 0, readBatchOk: 0 };
+  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0, readBatchCalls: 0, readBatchOk: 0, searchContextCalls: 0, searchContextOk: 0 };
   let mainIn = 0;
   let subIn = 0;
   // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
@@ -837,6 +841,10 @@ export function summarize(session, pricing) {
       if (b.name === 'mcp__anyray__anyray_read_batch') {
         t.readBatchCalls++; // adoption: the tool's description is paid every turn, recovered only here
         if (b.result && !b.result.isError) t.readBatchOk++;
+      }
+      if (b.name === 'mcp__anyray__anyray_search_context') {
+        t.searchContextCalls++; // Symbol context: identifiers with their complete TS/JS declarations
+        if (b.result && !b.result.isError) t.searchContextOk++;
       }
     }
   }
@@ -918,9 +926,9 @@ const BAND_SAYS = {
  * crashes); then, with --with-control, the control's noise band; last, the pre-ANY-733
  * all-rounds line unchanged, so earlier outputs stay comparable.
  */
-export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b', differingKinds = null }) {
+export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b', differingKinds = null, clientToolTreatment = false }) {
   const kept = rounds.filter((x) => !x.gatewayRestarted);
-  const v = solvedPairVerdict(kept, { treatment, differingKinds });
+  const v = solvedPairVerdict(kept, { treatment, differingKinds, clientToolTreatment });
   const p = v.stats;
   const under = treatment === 'a' ? ' · treatment A (ratio A/B)' : '';
   const out = [
@@ -930,7 +938,7 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds, treatm
     out.push(`  on-shape pairs ${v.k}/${v.solved} (${differingNames(differingKinds)} would act in both arms)${v.offShapePairs.length ? `; off-shape, not scored: round(s) ${v.offShapePairs.join(', ')}` : ''}`);
   } else if (v.shapeNote) out.push(`  ${v.shapeNote}`);
   if (v.treatmentEdits != null) {
-    const what = differingKinds ? `${differingNames(differingKinds)} (the kinds A and B differ by) applied` : `treatment ${treatment.toUpperCase()} applied an optimization`;
+    const what = clientToolTreatment && !differingKinds ? `treatment ${treatment.toUpperCase()} made connect client-tool calls the control arm did not` : differingKinds ? `${differingNames(differingKinds)} (the kinds A and B differ by) applied` : `treatment ${treatment.toUpperCase()} applied an optimization`;
     out.push(`  ${what} in ${v.treatmentEdits}/${v.k} solved pair(s)${v.idlePairs?.length && v.treatmentEdits ? `; idle in round(s) ${v.idlePairs.join(', ')}` : ''}`);
   }
   if (v.insufficient) out.push(`  verdict insufficient: ${v.reasons[0]}`);
@@ -1672,7 +1680,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       ` · start ${t.start.read} read / ${t.start.written} written` +
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
       endNote(t) +
-      (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed · ${t.readBatchCalls ?? 0} batch reads` : '') +
+      (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed · ${t.readBatchCalls ?? 0} batch reads · ${t.searchContextCalls ?? 0} symbol searches` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       whyNot(sessions[slot].budgetNoticeReasons) +
       (sessions[slot].toolDefer && sessions[slot].toolDefer.applied + sessions[slot].toolDefer.notApplied > 0 ? ` · tool defer applied ${sessions[slot].toolDefer.applied}/${Object.values(sessions[slot].toolDefer).reduce((x, y) => x + y, 0)}${whyNot(sessions[slot].toolDeferReasons)}` : '') +

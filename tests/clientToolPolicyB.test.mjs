@@ -53,3 +53,11 @@ test('summarize counts batch reads per session, main and subagents, and the ones
   const none = summarize({ requests: [read], subagents: [], result: { costUsd: 1, modelUsage: {} } }, {});
   assert.equal(none.readBatchCalls, 0, 'a session with no batch read reads 0, not undefined');
 });
+
+test('summarize counts Symbol context searches per session, and the ones that failed', () => {
+  const call = (agent, isError) => ({ agent, model: 'm', usage: {}, blocks: [{ type: 'tool_use', id: `s${agent}${isError}`, name: 'mcp__anyray__anyray_search_context', input: {}, result: { isError, preview: '' } }] });
+  const t = summarize({ requests: [call('main', false), call('main', true)], subagents: [], result: { costUsd: 1, modelUsage: {} } }, {});
+  assert.equal(t.searchContextCalls, 2);
+  assert.equal(t.searchContextOk, 1);
+  assert.equal(t.readBatchCalls, 0);
+});
