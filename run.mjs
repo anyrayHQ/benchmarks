@@ -23,6 +23,7 @@ import { loadConfig, suiteNames, workloadsFor } from './lib/loadConfig.mjs';
 import { Client } from './lib/client.mjs';
 import { costOf, savedPct } from './lib/cost.mjs';
 import { judgeAnswers, qualityLabel } from './lib/judge.mjs';
+import { appendFinalAnswerRequest } from './lib/sdkAgent.mjs';
 
 function parseArgs(argv) {
   const a = { suites: null, only: null, limit: Infinity, all: false, fresh: false, judge: true };
@@ -55,15 +56,37 @@ export function directFirst(order, index) {
   return index % 2 === 0;
 }
 
-const side = (r, pricing, model) => ({
-  input: r.usage.input,
-  cacheRead: r.usage.cacheRead,
-  cacheWrite: r.usage.cacheWrite,
-  output: r.usage.output,
-  costUsd: costOf(pricing, model, r.usage),
-  latencyMs: r.latencyMs,
-  finishReason: r.finishReason,
-});
+// Sonnet 5 thinks adaptively when `thinking` is omitted and can end a turn on thinking
+// alone, which parses to an empty answer. Mirrors lib/sdkAgent.mjs's retry.
+export const EMPTY_ANSWER_RETRY = 'Your last reply had no text. Write your complete answer now as text.';
+const RETRY_MAX_TOKENS = 16000;
+
+const sum = (a, b) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
+
+/** One side's call, plus one re-send when it came back with no text. Returns every response. */
+async function executeAnswering(client, req, opts) {
+  const first = await client.execute(req, opts);
+  if (first.answer.trim()) return [first];
+  const messages = structuredClone(req.messages);
+  appendFinalAnswerRequest(messages, EMPTY_ANSWER_RETRY);
+  return [first, await client.execute({ ...req, messages, max_tokens: RETRY_MAX_TOKENS }, opts)];
+}
+
+// Totals over the side's calls: the retry is billed, so it counts.
+const side = (rs, pricing, model) => {
+  const costs = rs.map((r) => costOf(pricing, model, r.usage));
+  const total = (f) => rs.map(f).reduce(sum);
+  return {
+    input: total((r) => r.usage.input),
+    cacheRead: total((r) => r.usage.cacheRead),
+    cacheWrite: total((r) => r.usage.cacheWrite),
+    output: total((r) => r.usage.output),
+    costUsd: costs.includes(null) ? null : costs.reduce(sum),
+    latencyMs: total((r) => r.latencyMs),
+    finishReason: rs.at(-1).finishReason,
+    answerRetries: rs.length - 1,
+  };
+};
 
 export async function compareOne({ cfg, clients, wl, request, keyFacts, index, judge }) {
   const { run, pricing } = cfg;
@@ -71,18 +94,19 @@ export async function compareOne({ cfg, clients, wl, request, keyFacts, index, j
   const opts = { endpoint: wl.endpoint, model: run.model };
   const first = directFirst(run.order, index) ? ['direct', 'gateway'] : ['gateway', 'direct'];
   const res = {};
-  for (const s of first) res[s] = await clients[s].execute(req, opts);
+  for (const s of first) res[s] = await executeAnswering(clients[s], req, opts);
 
   const direct = side(res.direct, pricing, run.model);
   const gateway = side(res.gateway, pricing, run.model);
+  const answer = { direct: res.direct.at(-1).answer, gateway: res.gateway.at(-1).answer };
   let judged = null;
   if (judge) {
     judged = await judgeAnswers({
       judge: run.judge,
       question: keyFacts.question || wl.title,
       keyFacts: keyFacts.keyFacts || [],
-      directAnswer: res.direct.answer,
-      gatewayAnswer: res.gateway.answer,
+      directAnswer: answer.direct,
+      gatewayAnswer: answer.gateway,
     });
   }
   const row = {
@@ -102,7 +126,7 @@ export async function compareOne({ cfg, clients, wl, request, keyFacts, index, j
       by: judged.by,
     },
   };
-  return { row, answers: { id: wl.id, direct: res.direct.answer, gateway: res.gateway.answer } };
+  return { row, answers: { id: wl.id, ...answer } };
 }
 
 async function runSuite(cfg, clients, suite, args, counter) {
