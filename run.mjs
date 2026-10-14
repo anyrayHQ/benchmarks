@@ -57,19 +57,20 @@ export function directFirst(order, index) {
 }
 
 // Sonnet 5 thinks adaptively when `thinking` is omitted and can end a turn on thinking
-// alone, which parses to an empty answer. Mirrors lib/sdkAgent.mjs's retry.
-export const EMPTY_ANSWER_RETRY = 'Your last reply had no text. Write your complete answer now as text.';
+// alone, which parses to an empty answer. When either side does, BOTH are re-asked
+// with the same turn and budget: re-asking one side only handed it 16k tokens against
+// the other's payload cap, and the judge then compared a long answer with a capped one.
+// Both re-asks start from the original messages, so the wording fits either side.
+export const EMPTY_ANSWER_RETRY = 'Write your complete answer now as text.';
 const RETRY_MAX_TOKENS = 16000;
 
 const sum = (a, b) => (a == null && b == null ? null : (a ?? 0) + (b ?? 0));
 
-/** One side's call, plus one re-send when it came back with no text. Returns every response. */
-async function executeAnswering(client, req, opts) {
-  const first = await client.execute(req, opts);
-  if (first.answer.trim()) return [first];
+/** The same re-ask for every side: the original messages plus one answer request. */
+function reAsk(req) {
   const messages = structuredClone(req.messages);
   appendFinalAnswerRequest(messages, EMPTY_ANSWER_RETRY);
-  return [first, await client.execute({ ...req, messages, max_tokens: RETRY_MAX_TOKENS }, opts)];
+  return { ...req, messages, max_tokens: RETRY_MAX_TOKENS };
 }
 
 // Totals over the side's calls: the retry is billed, so it counts.
@@ -94,7 +95,11 @@ export async function compareOne({ cfg, clients, wl, request, keyFacts, index, j
   const opts = { endpoint: wl.endpoint, model: run.model };
   const first = directFirst(run.order, index) ? ['direct', 'gateway'] : ['gateway', 'direct'];
   const res = {};
-  for (const s of first) res[s] = await executeAnswering(clients[s], req, opts);
+  for (const s of first) res[s] = [await clients[s].execute(req, opts)];
+  if (first.some((s) => !res[s][0].answer.trim())) {
+    const retry = reAsk(req);
+    for (const s of first) res[s].push(await clients[s].execute(retry, opts));
+  }
 
   const direct = side(res.direct, pricing, run.model);
   const gateway = side(res.gateway, pricing, run.model);
