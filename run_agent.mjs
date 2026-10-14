@@ -347,7 +347,9 @@ export function parseArgs(argv, env = process.env) {
   a.claudeBin = claudeBinRequest({ flag: claudeBinFlag, env });
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
-    if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
+    // gateway: both slots on the org lane, B on --kinds-b, to isolate one strategy.
+    if (a.provider !== 'bedrock' || !['anyray', 'gateway'].includes(a.compare)) throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray or gateway`);
+    if (a.compare === 'gateway' && !a.kindsB) throw new Error(`${a.scenario} --compare gateway needs --kinds-b: the two slots must differ`);
     if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession !== undefined || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
@@ -1099,22 +1101,25 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   finally { rmSync(probe, { recursive: true, force: true }); }
   const bedrock = args.bedrock ?? await (deps.resolveBedrock ?? resolveBedrock)(run);
   args.bedrock = bedrock;
-  Object.assign(record, { compare: 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: 'direct', b: 'anyray' }, kinds: args.kinds, request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true, ...(agent.framework ? { framework: agent.framework } : {}), ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}) }, setup: { a: { transport: agent.transport.a, model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } } });
+  const viaGateway = args.compare === 'gateway';
+  const armOf = (slot) => (slot === 'a' && !viaGateway ? 'direct' : 'anyray');
+  const kindsOf = (slot) => slotKinds(args, slot)[0];
+  Object.assign(record, { compare: viaGateway ? 'gateway' : 'anyray', label: args.label, gateway: run.gatewayUrl, provider: 'bedrock', bedrock, arms: { a: armOf('a'), b: armOf('b') }, kinds: args.kinds, ...(args.kindsB ? { kindsB: args.kindsB } : {}), request: { interTurnDelaySec: scenario.interTurnDelaySec ?? 0, minTurns: scenario.minTurns, maxTurns: scenario.maxTurns, noCacheMarkers: true, ...(agent.framework ? { framework: agent.framework } : {}), ...(args.retryInvalid ? { retryInvalid: args.retryInvalid } : {}) }, setup: { a: viaGateway ? { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } : { transport: agent.transport.a, model: bedrock.model, maxTurns: scenario.maxTurns }, b: { transport: agent.transport.b, model: run.model, maxTurns: scenario.maxTurns } } });
   const first = Math.max(record.rounds.length, ...record.rounds.map((x) => x.round ?? 0)) + 1;
-  log(`${name} [anyray] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1}`);
+  log(`${name} [${record.compare}] rounds ${first}–${first + args.rounds - 1}, parallel ${args.parallel ?? 1}`);
   const runRound = async (round) => {
     const tags = roundTags(args, round);
     const startedAt = new Date().toISOString();
     const runArm = async (slot) => {
       const work = checkout(scenario, dir, repoOptions);
       try {
-        return await runSdk({ arm: slot === 'a' ? 'direct' : 'anyray', scenario, work, model: run.model, gatewayUrl: run.gatewayUrl, clientKey, bedrock, pricing, kinds: args.kinds, sessionId: tags[slot].sessionId, scratchDir: workParent });
+        return await runSdk({ arm: armOf(slot), scenario, work, model: run.model, gatewayUrl: run.gatewayUrl, clientKey, bedrock, pricing, kinds: kindsOf(slot), sessionId: tags[slot].sessionId, scratchDir: workParent });
       } finally { rmSync(work, { recursive: true, force: true }); }
     };
     const [sa, sb] = await Promise.allSettled([runArm('a'), runArm('b')]);
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       // Name each arm that failed, so a round lost to one lane's transport says which lane.
-      const error = [['direct', sa], ['anyray', sb]].filter(([, s]) => s.status === 'rejected').map(([arm, s]) => `${arm}: ${s.reason?.message ?? 'SDK arm failed'}`).join('; ');
+      const error = [[viaGateway ? 'anyray (A)' : 'direct', sa], [viaGateway ? 'anyray (B)' : 'anyray', sb]].filter(([, s]) => s.status === 'rejected').map(([arm, s]) => `${arm}: ${s.reason?.message ?? 'SDK arm failed'}`).join('; ');
       const r = { round, error };
       insertRound(record.rounds, r);
       log(`  round ${round} failed: ${error}`);
@@ -1127,7 +1132,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     const line = (slot) => {
       const t = sessions[slot].totals;
       const share = t.input ? (100 * t.cacheRead / t.input).toFixed(1) : '0.0';
-      return `  round ${round} ${slot.toUpperCase()} ${slot === 'a' ? 'direct' : 'anyray'}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents ?? 0} subagents · ${t.parallelToolTurns ?? 0} parallel-tool turns · ${t.cacheBreaks ?? 0} cache breaks · start ${t.start?.read ?? 0} read / ${t.start?.written ?? 0} written · ${share}% cache-read share · ${r.quality[slot] ? 'solved' : 'NOT solved'}`;
+      return `  round ${round} ${slot.toUpperCase()} ${armOf(slot)}${viaGateway && slot === 'b' ? ' + kinds-b' : ''}: $${t.costUsd?.toFixed(3)} · ${t.turns} turns · ${t.subagents ?? 0} subagents · ${t.parallelToolTurns ?? 0} parallel-tool turns · ${t.cacheBreaks ?? 0} cache breaks · start ${t.start?.read ?? 0} read / ${t.start?.written ?? 0} written · ${share}% cache-read share · ${r.quality[slot] ? 'solved' : 'NOT solved'}`;
     };
     log(`${line('a')}\n${line('b')}\n  round ${round} ratio B/A ${r.ratio?.toFixed(3)}`);
     record.stats = rule0(scoredRounds(record.rounds));

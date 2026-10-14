@@ -126,6 +126,38 @@ test('sdk-docs routes through the paired runner and saves verdict-compatible rou
   } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('--compare gateway runs both SDK slots through the gateway, B on --kinds-b', async () => {
+  const label = `offline-gw-${process.pid}-${Date.now()}`;
+  const args = parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--compare', 'gateway', '--rounds', '1',
+    '--kinds', 'observation_mask', '--kinds-b', 'observation_mask,repeat_factor', '--label', label]);
+  const calls = [];
+  const workDirs = [];
+  const deps = {
+    clientKey: 'fake-key',
+    resolveBedrock: async () => ({ model: 'us.anthropic.claude-sonnet-5', profile: 'test', region: 'us-east-1' }),
+    prepareRepo: () => { const dir = fresh(); workDirs.push(dir); return dir; },
+    describeRepo: () => ({ files: 1 }),
+    runSdkAgent: async ({ arm, kinds, sessionId, scenario }) => {
+      calls.push({ arm, kinds, sessionId });
+      return { requests: [], totals: { costUsd: kinds.includes('repeat_factor') ? 0.00001 : 0.00002, input: 10, cacheRead: 0, cacheWrite: 0, output: 1, turns: 1, requests: 1, outsideCheckout: 0 }, result: { text: 'cited' }, citations: { total: scenario.citations.min, resolved: scenario.citations.min }, setup: {} };
+    },
+    log: () => {},
+  };
+  const cfg = { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid', model: 'claude-sonnet-5' }, pricing };
+  let file;
+  try {
+    const result = await runComparison(args, cfg, { deps });
+    file = result.file;
+    assert.match(file, /sdk-docs--gateway--/);
+    assert.deepEqual(calls.map((c) => c.arm).sort(), ['anyray', 'anyray']);
+    assert.deepEqual(calls.map((c) => c.kinds.join(',')).sort(), ['observation_mask', 'observation_mask,repeat_factor']);
+    assert.notEqual(calls[0].sessionId, calls[1].sessionId);
+    assert.equal(result.record.compare, 'gateway');
+    assert.deepEqual(result.record.arms, { a: 'anyray', b: 'anyray' });
+    assert.equal(result.record.rounds[0].ratio, 0.5);
+  } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('sdk-docs requires the billed paired mode and validates delay', () => {
   assert.throws(() => parseArgs(['--scenario', 'sdk-docs']), /--provider bedrock/);
   assert.throws(() => parseArgs(['--scenario', 'sdk-docs', '--provider', 'bedrock', '--inter-turn-delay-sec', '-1']), /nonnegative/);
