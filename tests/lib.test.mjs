@@ -7,7 +7,7 @@ import { Client, parseCompletion, parseMessages } from '../lib/client.mjs';
 import { chatToMessages } from '../lib/toAnthropic.mjs';
 import { costOf, priceFor, savedPct } from '../lib/cost.mjs';
 import { judgeAnswers, extractJsonObject, qualityLabel } from '../lib/judge.mjs';
-import { directFirst } from '../run.mjs';
+import { compareOne, directFirst, EMPTY_ANSWER_RETRY } from '../run.mjs';
 import { totals } from '../report.mjs';
 
 const OAUTH = { mode: 'passthrough', provider: 'anthropic', upstreamToken: 'oat', clientKey: 'ark_x' };
@@ -152,6 +152,65 @@ test('directFirst alternates by default and honours fixed orders', () => {
   assert.deepEqual([0, 1, 2].map((i) => directFirst('alternate', i)), [true, false, true]);
   assert.equal(directFirst('gateway-first', 0), false);
   assert.equal(directFirst('direct-first', 1), true);
+});
+
+// A side that ends on thinking alone (Sonnet 5's adaptive thinking) parses to an empty answer.
+const stubSide = (replies) => {
+  const sent = [];
+  return { sent, execute: async (req, opts) => { sent.push({ req: structuredClone(req), opts }); return replies.shift(); } };
+};
+const reply = (answer, usage) => ({ answer, usage, latencyMs: 10, finishReason: 'end_turn' });
+const compareCfg = {
+  run: { model: 'claude-haiku-4-5', order: 'direct-first' },
+  pricing: { cache_read: 0.1, cache_write: 1.25, models: { 'claude-haiku-4-5': { input: 1, output: 5 } } },
+};
+
+test('compareOne re-asks BOTH sides on the same budget when either ends on thinking alone', async () => {
+  // A retry only on the empty side gave that side 16k tokens against the other's
+  // payload cap, so the judge compared a long answer with a capped one.
+  const request = { model: 'm', max_tokens: 1024, messages: [{ role: 'user', content: 'Explain the log' }] };
+  const direct = stubSide([reply('', { input: 100, cacheRead: 0, cacheWrite: 0, output: 300 }), reply('Answer A', { input: 110, cacheRead: 50, cacheWrite: 0, output: 40 })]);
+  const gateway = stubSide([reply('Short B', { input: 90, cacheRead: 0, cacheWrite: 0, output: 30 }), reply('Answer B', { input: 95, cacheRead: 0, cacheWrite: 0, output: 50 })]);
+  const { row, answers } = await compareOne({ cfg: compareCfg, clients: { direct, gateway }, wl: { id: 'w', endpoint: '/v1/messages' }, request, keyFacts: {}, index: 0, judge: false });
+  assert.equal(direct.sent.length, 2, 'one retry, never a loop');
+  assert.equal(gateway.sent.length, 2, 'the side that answered is re-asked too');
+  for (const s of [direct, gateway]) {
+    assert.equal(s.sent[1].req.max_tokens, 16000);
+    assert.match(JSON.stringify(s.sent[1].req.messages.at(-1)), new RegExp(EMPTY_ANSWER_RETRY.slice(0, 30)));
+  }
+  assert.deepEqual(direct.sent[1].req.messages, gateway.sent[1].req.messages, 'identical re-ask on both sides');
+  assert.equal(request.messages.length, 1);
+  assert.equal(request.messages[0].content, 'Explain the log', 'the workload payload is not mutated');
+  assert.deepEqual(answers, { id: 'w', direct: 'Answer A', gateway: 'Answer B' });
+  assert.equal(row.direct.input, 210);
+  assert.equal(row.direct.cacheRead, 50);
+  assert.equal(row.direct.output, 340);
+  assert.equal(row.direct.costUsd, costOf(compareCfg.pricing, 'claude-haiku-4-5', { input: 100, output: 300 }) + costOf(compareCfg.pricing, 'claude-haiku-4-5', { input: 110, cacheRead: 50, output: 40 }));
+  assert.equal(row.direct.latencyMs, 20);
+  assert.deepEqual([row.direct.answerRetries, row.gateway.answerRetries], [1, 1]);
+  assert.equal(row.gateway.input, 185);
+});
+
+test('compareOne sends no re-ask when both sides answer the first time', async () => {
+  const request = { model: 'm', messages: [{ role: 'user', content: 'q' }] };
+  const direct = stubSide([reply('Answer A', { input: 1, output: 1 })]);
+  const gateway = stubSide([reply('Answer B', { input: 1, output: 1 })]);
+  const { row } = await compareOne({ cfg: compareCfg, clients: { direct, gateway }, wl: { id: 'w', endpoint: '/v1/messages' }, request, keyFacts: {}, index: 0, judge: false });
+  assert.deepEqual([direct.sent.length, gateway.sent.length], [1, 1]);
+  assert.deepEqual([row.direct.answerRetries, row.gateway.answerRetries], [0, 0]);
+});
+
+test('compareOne re-asks a chat-shaped payload ending on a tool turn by adding a user turn', async () => {
+  const request = { model: 'm', messages: [{ role: 'user', content: 'q' }, { role: 'assistant', content: null, tool_calls: [] }, { role: 'tool', tool_call_id: 't', content: 'r' }] };
+  const direct = stubSide([reply('Answer A', { input: 1, output: 1 }), reply('Answer A2', { input: 1, output: 1 })]);
+  const gateway = stubSide([reply('  ', { input: 1, output: 1 }), reply('Answer B', { input: 2, output: 2 })]);
+  const { row } = await compareOne({ cfg: compareCfg, clients: { direct, gateway }, wl: { id: 'w', endpoint: '/v1/chat/completions' }, request, keyFacts: {}, index: 1, judge: false });
+  for (const s of [direct, gateway]) {
+    assert.deepEqual(s.sent[1].req.messages.at(-1), { role: 'user', content: EMPTY_ANSWER_RETRY });
+    assert.equal(s.sent[1].req.messages.length, 4);
+  }
+  assert.deepEqual([row.direct.answerRetries, row.gateway.answerRetries], [1, 1]);
+  assert.equal(row.gateway.input, 3);
 });
 
 test('extractJsonObject pulls the first balanced object', () => {

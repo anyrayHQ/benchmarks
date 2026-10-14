@@ -396,6 +396,7 @@ npm run agent -- --scenario pyrepo-docs --rounds 4 --provider bedrock --kinds ob
 `ANYRAY_BEDROCK_PROFILE` (default: `AWS_PROFILE`, else `default`) and
 `ANYRAY_BEDROCK_REGION` (default `us-east-1`) choose arm A's AWS profile and region;
 `ANYRAY_BEDROCK_MODEL` pins its model id instead of the one read back from the gateway.
+`AWS_BEARER_TOKEN_BEDROCK` (a Bedrock API key), when set, is used by arm A instead of the profile.
 A gateway that answers with the client's own model id (it passes the request to Bedrock
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.
@@ -432,7 +433,8 @@ Set `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`),
 and configure the direct AWS profile and region as above. `ANYRAY_BEDROCK_MODEL` can
 pin the direct model; otherwise the existing gateway route probe resolves it. Use
 `--kinds <comma-list>` to request a measured gateway strategy set. The default sends
-no optimization selection header. `--inter-turn-delay-sec 310` pauses between model
+no optimization selection header. `--compare gateway --kinds-b <list>` runs
+both arms through the gateway, B on its own kinds, to isolate one strategy. `--inter-turn-delay-sec 310` pauses between model
 requests to test behavior beyond the five-minute cache lifetime. `--max-turns` must
 stay between 8 and 30; the scenario continues early answers until at least eight
 model requests have run. A final reply with no text (Sonnet 5 can end a turn on thinking
