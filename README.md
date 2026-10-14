@@ -561,6 +561,18 @@ switches for what its MCP server advertises, in the Anyray arm's connect profile
 `--client-tool-policy readBatchRanges=true` offers the ranged batch read. The switches
 used are recorded in the arm's setup.
 
+`--client-tool-policy-b name=true|false` (repeatable, `--compare gateway`) sets a switch on
+arm B alone, on top of the shared ones, so the pair isolates that one switch. To test a
+default, turn it off on B and read the verdict for A:
+
+```bash
+npm run agent -- --scenario pyrepo-docs --compare gateway --kinds cache_optimizer \
+  --client-tool-policy-b readBatch=false --treatment a --rounds 12
+```
+
+Each session records `readBatchCalls` and `readBatchOk`, and the round line shows
+`N batch reads` on every Anyray arm, so a verdict can be read against adoption.
+
 ### Keeping the pair like for like
 
 - `--warm-up` runs a throwaway one-turn session with each arm's exact setup before the
