@@ -396,6 +396,7 @@ npm run agent -- --scenario pyrepo-docs --rounds 4 --provider bedrock --kinds ob
 `ANYRAY_BEDROCK_PROFILE` (default: `AWS_PROFILE`, else `default`) and
 `ANYRAY_BEDROCK_REGION` (default `us-east-1`) choose arm A's AWS profile and region;
 `ANYRAY_BEDROCK_MODEL` pins its model id instead of the one read back from the gateway.
+`AWS_BEARER_TOKEN_BEDROCK` (a Bedrock API key), when set, is used by arm A instead of the profile.
 A gateway that answers with the client's own model id (it passes the request to Bedrock
 untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
 Use the gateway's region, or the arms are priced and served differently.

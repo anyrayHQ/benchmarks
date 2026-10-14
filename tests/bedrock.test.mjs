@@ -42,7 +42,39 @@ test('bedrockOptions: profile, region and model come from the environment, with 
     bedrockOptions({ ANYRAY_BEDROCK_PROFILE: 'bench', ANYRAY_BEDROCK_REGION: 'eu-central-1', ANYRAY_BEDROCK_MODEL: 'eu.anthropic.claude-sonnet-5', ANYRAY_BEDROCK_SMALL_MODEL: ' eu.anthropic.claude-haiku-5-5 ' }),
     { profile: 'bench', region: 'eu-central-1', model: 'eu.anthropic.claude-sonnet-5', smallModel: 'eu.anthropic.claude-haiku-5-5' }
   );
-  assert.deepEqual(bedrockDirectEnv({ profile: 'bench', region: 'us-east-1' }), { CLAUDE_CODE_USE_BEDROCK: '1', AWS_PROFILE: 'bench', AWS_REGION: 'us-east-1' });
+  assert.deepEqual(bedrockDirectEnv({ profile: 'bench', region: 'us-east-1' }, {}), { CLAUDE_CODE_USE_BEDROCK: '1', AWS_PROFILE: 'bench', AWS_REGION: 'us-east-1' });
+});
+
+const BEARER = 'synthetic-bearer-token';
+/** Run `fn` with AWS_BEARER_TOKEN_BEDROCK set to `value` (or unset), restoring the caller's. */
+function withBearer(value, fn) {
+  const prior = process.env.AWS_BEARER_TOKEN_BEDROCK;
+  if (value == null) delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  else process.env.AWS_BEARER_TOKEN_BEDROCK = value;
+  try { return fn(); } finally {
+    if (prior == null) delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    else process.env.AWS_BEARER_TOKEN_BEDROCK = prior;
+  }
+}
+
+test('bedrockDirectEnv: a Bedrock API key in the environment reaches the direct arm, and only when set', () => {
+  const opts = { profile: 'bench', region: 'us-east-1' };
+  assert.equal(bedrockDirectEnv(opts, { AWS_BEARER_TOKEN_BEDROCK: BEARER }).AWS_BEARER_TOKEN_BEDROCK, BEARER);
+  assert.equal('AWS_BEARER_TOKEN_BEDROCK' in bedrockDirectEnv(opts, {}), false);
+  assert.equal('AWS_BEARER_TOKEN_BEDROCK' in bedrockDirectEnv(opts, { AWS_BEARER_TOKEN_BEDROCK: '' }), false);
+  withBearer(BEARER, () => {
+    const a = armConfig({ arm: 'direct', gatewayUrl: GW, runTag: {}, cfgDir: mkdtempSync(join(tmpdir(), 'bedrock-cfg-')), provider: 'bedrock', bedrock: opts });
+    assert.equal(a.procEnv.AWS_BEARER_TOKEN_BEDROCK, BEARER, 'the default env is the process env');
+  });
+});
+
+test('describeSetup on bedrock names a Bedrock API key without ever recording it', () => {
+  const bedrock = { profile: 'bench', region: 'us-east-1', model: 'us.anthropic.claude-sonnet-5' };
+  const a = withBearer(BEARER, () => describeSetup({ arm: 'direct', model: 'claude-sonnet-5', gatewayUrl: GW, runTag: {}, maxTurns: 3, provider: 'bedrock', bedrock }));
+  assert.match(a.auth, /AWS_BEARER_TOKEN_BEDROCK/);
+  assert.ok(!JSON.stringify(a).includes(BEARER), 'the token never reaches the setup');
+  const b = withBearer(BEARER, () => describeSetup({ arm: 'anyray', model: 'claude-sonnet-5', gatewayUrl: GW, runTag: {}, maxTurns: 3, enrolled: false, provider: 'bedrock', bedrock, tenant: { keyVar: 'ANYRAY_CLIENT_KEY' } }));
+  assert.ok(!JSON.stringify(b).includes(BEARER));
 });
 
 test('probeGatewayRoute: sends the org lane (bearer key, no provider header) and reads the route back', async () => {
@@ -188,7 +220,7 @@ test('armConfig with connectBin: connect configures the arm from that build and 
 
 test('describeSetup on bedrock names the AWS route for direct and the org lane for anyray', () => {
   const bedrock = { profile: 'bench', region: 'us-east-1', model: 'us.anthropic.claude-sonnet-5' };
-  const a = describeSetup({ arm: 'direct', model: 'claude-sonnet-5', gatewayUrl: GW, runTag: {}, maxTurns: 3, provider: 'bedrock', bedrock });
+  const a = withBearer(null, () => describeSetup({ arm: 'direct', model: 'claude-sonnet-5', gatewayUrl: GW, runTag: {}, maxTurns: 3, provider: 'bedrock', bedrock }));
   assert.equal(a.model, 'us.anthropic.claude-sonnet-5');
   assert.match(a.endpoint, /^bedrock-runtime\.us-east-1/);
   assert.match(a.auth, /AWS profile "bench"/);
