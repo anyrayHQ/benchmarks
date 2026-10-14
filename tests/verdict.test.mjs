@@ -235,3 +235,20 @@ test('parseArgs: --treatment names the arm under test, b by default, and needs -
   assert.throws(() => parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'observation_mask', '--treatment', 'c']), /--treatment must be a or b/);
   assert.throws(() => parseArgs([...base, '--treatment', 'a']), /--treatment a needs --compare gateway/);
 });
+
+test('solvedPairVerdict: a client-tool treatment acts through batch reads the control arm did not make', () => {
+  // --client-tool-policy-b readBatch=false --treatment a: no optimizer edits on either arm,
+  // A batch-reads and B cannot. The edit tally alone would call A idle.
+  const reads = (r, a, b) => ({ ...r, sessions: { a: { totals: { ...r.sessions.a.totals, readBatchCalls: a } }, b: { totals: { ...r.sessions.b.totals, readBatchCalls: b } } } });
+  const rounds = [2, 1.8, 1.9, 2.1, 1.7, 2.2].map((x, i) => reads(tallied(i + 1, x, 0, 0), 19, 0));
+  assert.equal(solvedPairVerdict(rounds, { treatment: 'a' }).verdict, 'INSUFFICIENT', 'without the option, edits decide');
+  const v = solvedPairVerdict(rounds, { treatment: 'a', clientToolTreatment: true });
+  assert.equal(v.treatmentEdits, 6);
+  assert.equal(v.verdict, 'PASS');
+  // The treatment arm read no more than the control: it still did nothing to measure.
+  const idle = rounds.map((r) => reads(r, 0, 0));
+  const w = solvedPairVerdict(idle, { treatment: 'a', clientToolTreatment: true });
+  assert.equal(w.verdict, 'INSUFFICIENT');
+  assert.match(w.reasons[0], /treatment arm A applied no optimization and made no batch read the control arm did not/);
+  assert.match(formatVerdict({ scenario: 's', compare: 'gateway', rounds, treatment: 'a', clientToolTreatment: true }), /→ PASS/);
+});

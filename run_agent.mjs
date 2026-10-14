@@ -877,9 +877,9 @@ const BAND_SAYS = {
  * crashes); then, with --with-control, the control's noise band; last, the pre-ANY-733
  * all-rounds line unchanged, so earlier outputs stay comparable.
  */
-export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b' }) {
+export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b', clientToolTreatment = false }) {
   const kept = rounds.filter((x) => !x.gatewayRestarted);
-  const v = solvedPairVerdict(kept, { treatment });
+  const v = solvedPairVerdict(kept, { treatment, clientToolTreatment });
   const p = v.stats;
   const under = treatment === 'a' ? ' · treatment A (ratio A/B)' : '';
   const out = [
@@ -1050,7 +1050,7 @@ async function main() {
     record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
     writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
   }
-  console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, treatment: args.treatment })}\n${formatVerdictBlock(record.verdict)}`);
+  console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, treatment: args.treatment, clientToolTreatment: !!args.clientToolPoliciesB })}\n${formatVerdictBlock(record.verdict)}`);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
     const kinds = slotKinds(args, slot)[0];
@@ -1389,7 +1389,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
     };
     log(`${line('a')}\n${line('b')}\n  round ${round} ratio B/A ${r.ratio?.toFixed(3) ?? `n/a (${r.error})`}`);
     record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
-    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment });
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment, clientToolTreatment: !!args.clientToolPoliciesB });
     record.verdict = benchVerdict(record.rounds);
     await save();
     return r;
@@ -1410,7 +1410,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   const failed = settled.find((x) => x.status === 'rejected');
   if (failed) { await save(); throw failed.reason; }
   record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
-  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment });
+  record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted && !x.hookLeak), { treatment: args.treatment, clientToolTreatment: !!args.clientToolPoliciesB });
   record.verdict = benchVerdict(record.rounds);
   await save();
   return { record, file, viaGateway: [] };
@@ -1639,7 +1639,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
         (r.savingsCheck ? `\n${savingsCheckNote(round, r.savingsCheck)}` : '')
     );
     record.stats = rule0(scoredRounds(record.rounds), { treatment: args.treatment });
-    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment });
+    record.rule0Verdict = solvedPairVerdict(record.rounds.filter((x) => !x.gatewayRestarted), { treatment: args.treatment, clientToolTreatment: !!args.clientToolPoliciesB });
     record.verdict = benchVerdict(record.rounds);
     record.subagentLoad = subagentLoadSummary(record.rounds); // per arm: requestsPerSubagent, pooled, and per round
     record.claudeVersions = claudeVersions(record.rounds); // per arm: which Claude Code versions the rounds ran, `mixed` when not one
