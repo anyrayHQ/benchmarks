@@ -248,6 +248,7 @@ Name every kind the gateway may hold out in `--kinds`.
 | `gin-doc-audit` | gin-gonic/gin (pinned) | Audit 2,700 lines of docs against 24k lines of Go | Path:line citations resolve |
 | `gin-test-triage` | gin-gonic/gin (pinned) | Fix two hidden regressions from ~80 KB of verbose test output | `go test ./...` passes |
 | `gin-long-session` | gin-gonic/gin (pinned) | Six user turns in one session: triage, fix, re-test, two code walkthroughs, recap | `go test ./...` passes |
+| `gin-ci-paste` | gin-gonic/gin (pinned) | Five user turns; the same ~17 KB CI test log is pasted into four of them | `go test ./...` passes |
 | `cobra-pause` | spf13/cobra (pinned) | Two questions with a 6-minute pause between them | Key facts in the answer |
 | `cobra-3pause` | spf13/cobra (pinned) | Four questions with pauses of 6, 15 and 40 minutes | Key facts in the answer |
 | `cobra-walkaway` | spf13/cobra (pinned) | One question, then the user never returns; ping cost read after the gateway's idle window | Key facts in the answer |
@@ -271,6 +272,7 @@ has answered and has been idle for 30 seconds; wall time runs to the final answe
 | `followupDelaySec` | Idle time before each follow-up: one number, or one per follow-up (the last repeats) |
 | `patch:` | One file or a list, applied in order |
 | `hidePatch: true` | Re-imports the patched checkout as one commit, so `git diff` and `git log` cannot find the bug |
+| `pastes: { name: file }` | Puts that file's text (beside `scenario.yaml`) wherever `{{name}}` stands in the task or a follow-up, byte for byte the same each time |
 | `gatewaySettleSec` | Wait after the session before reading the Anyray arm's ping cost |
 
 A session gets the Claude seat's access token once and cannot refresh it. A scenario

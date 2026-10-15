@@ -1,0 +1,442 @@
+--- FAIL: TestContextQueryAndPostForm (0.00s)
+    context_test.go:957: 
+        	Error Trace:	/home/runner/work/gin/gin/context_test.go:957
+        	Error:      	Not equal: 
+        	            	expected: "main"
+        	            	actual  : "omit"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-main
+        	            	+omit
+        	Test:       	TestContextQueryAndPostForm
+    context_test.go:959: 
+        	Error Trace:	/home/runner/work/gin/gin/context_test.go:959
+        	Error:      	Not equal: 
+        	            	expected: "main"
+        	            	actual  : "omit"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-main
+        	            	+omit
+        	Test:       	TestContextQueryAndPostForm
+2026/10/15 12:00:12 The AppEngine flag is going to be deprecated. Please check issues #2723 and #2739 and use 'TrustedPlatform: gin.PlatformGoogleAppEngine' instead.
+[GIN] 2026/10/15 - 12:00:12 | 200 |      3µs |       192.0.2.1 | GET      "/name1/api"
+[GIN] 2026/10/15 - 12:00:12 | 200 |  2.083µs |       192.0.2.1 | GET      "/name2/api"
+[GIN] 2026/10/15 - 12:00:13 | 200 |  2.041µs |       127.0.0.1 | GET      "/"
+--- FAIL: TestListOfRoutes (0.00s)
+    gin_test.go:987: route not found: {GET /users/ ^(.*/vendor/)?github.com/gin-gonic/gin.handlerTest2$ <nil>}
+--- FAIL: TestEngineHandleContext (0.00s)
+    gin_test.go:667: 
+        	Error Trace:	/home/runner/work/gin/gin/gin_test.go:667
+        	            				/home/runner/work/gin/gin/gin_test.go:665
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestEngineHandleContext
+[GIN] 2026/10/15 - 12:00:13 | 200 | 37.625µs |       192.0.2.1 | GET      "/test?birthday=2000-01-01"
+[GIN] 2026/10/15 - 12:00:13 | 200 | 23.625µs |       192.0.2.1 | GET      "/test/copy/race"
+--- FAIL: TestRouterGroupBasicHandle (0.00s)
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:38
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:39
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:40
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:41
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:42
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:43
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:44
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+    routergroup_test.go:54: 
+        	Error Trace:	/home/runner/work/gin/gin/routergroup_test.go:54
+        	            				/home/runner/work/gin/gin/routergroup_test.go:45
+        	Error:      	Not equal: 
+        	            	expected: "/v1/login/"
+        	            	actual  : "/v1/login"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/v1/login/
+        	            	+/v1/login
+        	Test:       	TestRouterGroupBasicHandle
+--- FAIL: TestRouteRedirectTrailingSlash (0.00s)
+    routes_test.go:214: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:214
+        	Error:      	Not equal: 
+        	            	expected: "/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:215: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:215
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:222: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:222
+        	Error:      	Not equal: 
+        	            	expected: "/path4/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/path4/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:223: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:223
+        	Error:      	Not equal: 
+        	            	expected: 307
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:229: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:229
+        	Error:      	Not equal: 
+        	            	expected: 200
+        	            	actual  : 301
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:235: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:235
+        	Error:      	Not equal: 
+        	            	expected: 200
+        	            	actual  : 307
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:238: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:238
+        	Error:      	Not equal: 
+        	            	expected: "/api/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/api/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:239: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:239
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:242: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:242
+        	Error:      	Not equal: 
+        	            	expected: 200
+        	            	actual  : 301
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:253: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:253
+        	Error:      	Not equal: 
+        	            	expected: "/api/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/api/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:254: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:254
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:257: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:257
+        	Error:      	Not equal: 
+        	            	expected: "/api/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/api/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:258: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:258
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:269: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:269
+        	Error:      	Not equal: 
+        	            	expected: "/gin-goniccom/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/gin-goniccom/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:270: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:270
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:273: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:273
+        	Error:      	Not equal: 
+        	            	expected: "/gin-goniccom/path2/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/gin-goniccom/path2/
+        	            	+
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:274: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:274
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:297: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:297
+        	Error:      	Not equal: 
+        	            	expected: 404
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+    routes_test.go:301: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:301
+        	Error:      	Not equal: 
+        	            	expected: 404
+        	            	actual  : 200
+        	Test:       	TestRouteRedirectTrailingSlash
+--- FAIL: TestRouteRedirectFixedPath (0.00s)
+    routes_test.go:327: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:327
+        	Error:      	Not equal: 
+        	            	expected: "/Path4/"
+        	            	actual  : "/Path4"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/Path4/
+        	            	+/Path4
+        	Test:       	TestRouteRedirectFixedPath
+--- FAIL: TestRouterNotFound (0.00s)
+    routes_test.go:646: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:646
+        	Error:      	Not equal: 
+        	            	expected: 301
+        	            	actual  : 200
+        	Test:       	TestRouterNotFound
+    routes_test.go:648: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:648
+        	Error:      	Not equal: 
+        	            	expected: "/dir/"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/dir/
+        	            	+
+        	Test:       	TestRouterNotFound
+    routes_test.go:648: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:648
+        	Error:      	Not equal: 
+        	            	expected: "/dir/"
+        	            	actual  : "/dir"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/dir/
+        	            	+/dir
+        	Test:       	TestRouterNotFound
+    routes_test.go:648: 
+        	Error Trace:	/home/runner/work/gin/gin/routes_test.go:648
+        	Error:      	Not equal: 
+        	            	expected: "/dir/"
+        	            	actual  : "/dir"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/dir/
+        	            	+/dir
+        	Test:       	TestRouterNotFound
+--- FAIL: TestJoinPaths (0.00s)
+    utils_test.go:103: 
+        	Error Trace:	/home/runner/work/gin/gin/utils_test.go:103
+        	Error:      	Not equal: 
+        	            	expected: "/a/"
+        	            	actual  : "/a"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/a/
+        	            	+/a
+        	Test:       	TestJoinPaths
+    utils_test.go:104: 
+        	Error Trace:	/home/runner/work/gin/gin/utils_test.go:104
+        	Error:      	Not equal: 
+        	            	expected: "/a/"
+        	            	actual  : "/a"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/a/
+        	            	+/a
+        	Test:       	TestJoinPaths
+    utils_test.go:107: 
+        	Error Trace:	/home/runner/work/gin/gin/utils_test.go:107
+        	Error:      	Not equal: 
+        	            	expected: "/a/hola/"
+        	            	actual  : "/a/hola"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/a/hola/
+        	            	+/a/hola
+        	Test:       	TestJoinPaths
+    utils_test.go:108: 
+        	Error Trace:	/home/runner/work/gin/gin/utils_test.go:108
+        	Error:      	Not equal: 
+        	            	expected: "/a/hola/"
+        	            	actual  : "/a/hola"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-/a/hola/
+        	            	+/a/hola
+        	Test:       	TestJoinPaths
+FAIL
+FAIL	github.com/gin-gonic/gin	1.076s
+ok  	github.com/gin-gonic/gin/binding	2.055s
+?   	github.com/gin-gonic/gin/codec/json	[no test files]
+ok  	github.com/gin-gonic/gin/ginS	2.489s
+ok  	github.com/gin-gonic/gin/internal/bytesconv	1.154s
+ok  	github.com/gin-gonic/gin/internal/fs	1.540s
+ok  	github.com/gin-gonic/gin/render	3.061s
+FAIL

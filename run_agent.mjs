@@ -458,6 +458,32 @@ function parseCodexConfig(raw) {
   return [key, value];
 }
 
+/**
+ * A scenario's `pastes` filled in: `pastes: { ciLog: ci-log.txt }` reads that file (beside
+ * scenario.yaml) and puts its text wherever `{{ciLog}}` stands in `task` or a follow-up, so
+ * a block the user pastes into several turns is kept once and sent byte for byte the same.
+ * `read` maps a file name to its text; a placeholder with no paste, or a paste no turn
+ * uses, is an error.
+ */
+export function fillPastes(scenario, read) {
+  if (!scenario.pastes) return scenario;
+  for (const file of Object.values(scenario.pastes)) if (!/^[\w.-]+$/.test(String(file))) throw new Error(`paste file ${JSON.stringify(file)} must be a file name beside scenario.yaml`);
+  const text = Object.fromEntries(Object.entries(scenario.pastes).map(([name, file]) => [name, read(file).replace(/\n$/, '')]));
+  const used = new Set();
+  const fill = (turn) => (typeof turn !== 'string' ? turn : turn.replace(/\{\{(\w+)\}\}/g, (_, name) => {
+    if (!(name in text)) throw new Error(`scenario turn names {{${name}}}, which is not in pastes`);
+    used.add(name);
+    return text[name];
+  }));
+  const filled = { ...scenario, task: fill(scenario.task), ...(scenario.followups ? { followups: scenario.followups.map(fill) } : {}) };
+  const unused = Object.keys(text).filter((name) => !used.has(name));
+  if (unused.length) throw new Error(`pastes ${unused.join(', ')} appear in no turn`);
+  return filled;
+}
+
+/** scenarios/<name>/scenario.yaml, its pastes filled in. */
+export const readScenarioFile = (dir) => fillPastes(parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8')), (file) => readFileSync(join(dir, file), 'utf8'));
+
 /** The scenario as both arms run it: --max-turns replaces its turn cap. */
 export const effectiveScenario = (scenario, args) =>
   args.maxTurns || args.timeoutMin || args.interTurnDelaySec !== null && args.interTurnDelaySec !== undefined
@@ -1086,7 +1112,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   const clientKey = deps.clientKey ?? resolveBenchKey().key;
   if (!clientKey) throw new Error(`${name} needs ANYRAY_BENCH_CLIENT_KEY or ANYRAY_CLIENT_KEY`);
   const dir = join(cfg.root, 'scenarios', name);
-  const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args);
   if (name === 'sdk-docs') {
     if (scenario.maxTurns < 8 || scenario.maxTurns > 30) throw new Error('sdk-docs maxTurns must be 8–30');
@@ -1218,7 +1244,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   const userHookKeys = args.codexHooksB ? d.realHookKeys() : [];
   const hookEnv = args.codexHooksB ? d.wrappedCommandEnv() : {};
   const dir = join(cfg.root, 'scenarios', args.scenario);
-  const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args);
   const out = join(cfg.root, 'results', 'agent');
   mkdirSync(out, { recursive: true });
@@ -1430,7 +1456,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const { run, pricing } = cfg;
   if (viaGateway.length && !run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
   const dir = join(cfg.root, 'scenarios', args.scenario);
-  const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
+  const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args); // what both arms run (--max-turns)
 
   const out = join(cfg.root, 'results', 'agent');
