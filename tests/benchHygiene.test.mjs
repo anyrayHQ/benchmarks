@@ -224,7 +224,7 @@ test('citation-graded scenarios: every turn that asks for path:line asks for rep
 
 test('gin scenarios: each applies the same fixed-ports lock patch, hidden in the import commit', () => {
   const names = readdirSync(new URL('../scenarios/', import.meta.url)).filter((n) => /gin-gonic\/gin/.test(scenario(n).repo?.git ?? ''));
-  assert.deepEqual(names.sort(), ['gin-codex-marathon', 'gin-doc-audit', 'gin-long-session', 'gin-test-triage']);
+  assert.deepEqual(names.sort(), ['gin-ci-paste', 'gin-codex-marathon', 'gin-doc-audit', 'gin-long-session', 'gin-test-triage']);
   const copies = new Set();
   for (const name of names) {
     const s = scenario(name);
