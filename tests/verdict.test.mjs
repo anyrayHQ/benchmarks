@@ -2,8 +2,8 @@
 // invocation), and a Rule 0 verdict over solved pairs only. Offline: stubbed rounds.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { armSetups, armsFor, controlArgs, effectiveScenario, formatVerdict, parseArgs, resultFileName } from '../run_agent.mjs';
-import { bandPosition, noiseBand, solvedPairVerdict } from '../lib/stats.mjs';
+import { armSetups, armsFor, controlArgs, effectiveScenario, formatVerdict, parseArgs, resultFileName, verdictOptions } from '../run_agent.mjs';
+import { bandPosition, kindDifference, noiseBand, solvedPairVerdict } from '../lib/stats.mjs';
 
 const base = ['--scenario', 's', '--kinds', 'observation_mask'];
 const RUN = { model: 'm', gatewayUrl: 'https://gateway.test.invalid' };
@@ -227,6 +227,53 @@ test('solvedPairVerdict: --treatment a scores the ratio as A over B and reads Aâ
   assert.equal(a.stats.wins, 0);
   assert.equal(a.verdict, 'FAIL');
   assert.match(formatVerdict({ scenario: 's', compare: 'gateway', rounds, treatment: 'a' }), /treatment A \(ratio A\/B\)/);
+});
+
+// Under --kinds-b the treatment is the kinds the arms differ by: the other strategies acting
+// on either arm is not it (2026-10-15, repeat_factor on A vs off on B: the verdict read
+// "applied in 3/3" from command_digest while repeat_factor acted in rounds 2 and 3 only).
+
+/** A round with per-kind `applied` counts on each arm: { kind: n }. */
+const byKinds = (round, ratio, a, b) => {
+  const tally = (m) => ({ requests: 20, byKind: Object.fromEntries(Object.entries(m).map(([k, n]) => [k, { applied: n, skipped: {}, unconfirmed: 0 }])), otherApplied: {} });
+  return { ...rnd(round, ratio), optimizationA: tally(a), optimization: tally(b) };
+};
+const RF_AB = [
+  byKinds(1, 0.554, { command_digest: 27, repeat_factor: 0, content_census: 20 }, { command_digest: 0, content_census: 20 }),
+  byKinds(2, 2.079, { command_digest: 24, repeat_factor: 13, content_census: 20 }, { command_digest: 24, content_census: 20 }),
+  byKinds(3, 1.072, { command_digest: 18, repeat_factor: 8, content_census: 20 }, { command_digest: 0, content_census: 20 }),
+];
+
+test('kindDifference: what only A requests and what only B requests; null without --kinds-b or when equal', () => {
+  assert.deepEqual(kindDifference(['a', 'b', 'rf'], ['a', 'b']), { a: ['rf'], b: [] });
+  assert.deepEqual(kindDifference(['a', 'x'], ['a', 'y']), { a: ['x'], b: ['y'] });
+  assert.equal(kindDifference(['a'], null), null);
+  assert.equal(kindDifference(['a'], ['a']), null);
+});
+
+test('solvedPairVerdict: under --kinds-b only the differing kinds count as the treatment acting', () => {
+  const differingKinds = kindDifference(['command_digest', 'repeat_factor'], ['command_digest']);
+  const any = solvedPairVerdict(RF_AB, { treatment: 'a' });
+  assert.equal(any.treatmentEdits, 3, 'any kind: command_digest acted on A in every round');
+  const v = solvedPairVerdict(RF_AB, { treatment: 'a', differingKinds });
+  assert.equal(v.treatmentEdits, 2);
+  assert.deepEqual(v.idlePairs, [1]);
+  const out = formatVerdict({ scenario: 'gin-long-session', compare: 'gateway', rounds: RF_AB, treatment: 'a', differingKinds });
+  assert.match(out, /repeat_factor on A \(the kinds A and B differ by\) applied in 2\/3 solved pair\(s\); idle in round\(s\) 1/);
+  // The differing kind idle in every pair: nothing to measure, whatever else acted.
+  const idle = RF_AB.map((r) => ({ ...r, optimizationA: { ...r.optimizationA, byKind: { ...r.optimizationA.byKind, repeat_factor: { applied: 0, skipped: {}, unconfirmed: 0 } } } }));
+  const none = solvedPairVerdict(idle, { treatment: 'a', differingKinds });
+  assert.equal(none.verdict, 'INSUFFICIENT');
+  assert.match(none.reasons[0], /the kinds A and B differ by \(repeat_factor on A\) applied nothing in any of the 3 solved pairs/);
+  // A kind only B requests is read on B, even when A is the arm under test.
+  const onB = solvedPairVerdict(RF_AB, { treatment: 'a', differingKinds: kindDifference(['command_digest'], ['command_digest', 'repeat_factor']) });
+  assert.equal(onB.treatmentEdits, 0, 'B never applied repeat_factor');
+});
+
+test('verdictOptions: the arm under test, and the kinds a --kinds-b pair differs by', () => {
+  const ab = parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'command_digest,repeat_factor', '--kinds-b', 'command_digest', '--treatment', 'a']);
+  assert.deepEqual(verdictOptions(ab), { treatment: 'a', differingKinds: { a: ['repeat_factor'], b: [] } });
+  assert.deepEqual(verdictOptions(parseArgs(base)), { treatment: 'b', differingKinds: null });
 });
 
 test('parseArgs: --treatment names the arm under test, b by default, and needs --compare gateway', () => {
