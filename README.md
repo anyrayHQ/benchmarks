@@ -4,12 +4,22 @@
 [![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
 
 Does putting Anyray on a real agent's request path make the session cheaper, without
-making the result worse? This repo answers that the way a customer's bill would, against
+making the result worse? This repo measures it the way a customer's bill would, against
 Anyray's Rule 0: **a session must never cost more because of us.**
+
+**Contents:** [Latest results](#latest-results-2026-10-11) ·
+[Running it](#running-it) · [How a round works](#how-a-round-works) ·
+[Reading the verdict](#reading-the-verdict) · [Comparison modes](#comparison-modes) ·
+[Scenarios](#scenarios) · [Other lanes](#other-lanes) · [Run options](#run-options) ·
+[Gateway setup](#gateway-setup) · [Replay suite](#the-replay-suite-secondary) ·
+[Layout](#layout)
+
+Harness internals (what each check does and which fields it records) are in
+[docs/harness-internals.md](docs/harness-internals.md).
 
 ## Latest results (2026-10-11)
 
-18 scenarios across three kinds of agent client, each a paired run: the same agent and
+18 scenarios across three kinds of agent client. Each is a paired run: the same agent and
 task straight to Amazon Bedrock, and through a development build of the Anyray gateway,
 on Claude Sonnet 5. Every scenario ran three rounds, with a re-run when a pair was not
 usable. A round counts only when both arms solved the task.
@@ -39,236 +49,187 @@ in 17 of 18 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but nam
 | `cobra-pause` | Claude Code | 2/3 | $0.215 | $0.194 | 1.00× |
 | `cobra-web-flags` | Claude Code | 1/3 | $0.112 | $0.112 | 1.01× |
 
-Where the difference comes from:
+**Where the savings come from**
 
 - **Clients that send no cache markers** (`sdk-docs`, `framework-docs`): the gateway
   adds cache breakpoints, so most of each request's input becomes a cache read.
-- **A seat with many MCP tools:** gateway tool deferral keeps the tool schemas out of
-  every request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it
-  still defers about 7k tokens of rarely used tools per request.
+- **A seat with many MCP tools:** tool deferral keeps the tool schemas out of every
+  request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it still
+  defers about 7k tokens of rarely used tools per request.
 - **Doc and code-trace tasks:** the main agent reads the code itself with ranged batch
-  reads instead of fanning the trace out to subagents (the direct arms ran 3 to 6;
-  the Anyray arms none).
+  reads. The direct arms fanned the trace out to 3 to 6 subagents; the Anyray arms to none.
 - **Long test output** (`gin-test-triage`, `gin-long-session`): failures are grepped
   instead of read whole, and long command output is folded.
 
-Where it is close:
+**Where it is close**
 
-- On a task of 4 to 8 requests, Anyray's built-in saving is a few percent, while one
-  optional step (say, reading 25 lines before an edit) changes a session's cost by about
-  20%, so single rounds land on either side of 1.0×.
+- On a task of 4 to 8 requests the built-in saving is a few percent. One optional step
+  (say, reading 25 lines before an edit) moves a session's cost by about 20%, so single
+  rounds land on either side of 1.0×.
 - `cobra-pause` (1.00×): the prompt cache expires during the 6-minute pause, and both
   arms pay the same re-write.
-- `cobra-web-flags` (1.01×): Anyray Connect's read hint, which drives the doc-task
-  savings, leads the agent to read more code than this mostly-web task needs. With the
-  hint off the scenario ran 0.89× over 4 rounds.
+- `cobra-web-flags` (1.01×): Connect's read hint, which drives the doc-task savings, makes
+  the agent read more code than this mostly-web task needs. With the hint off it ran
+  0.89× over 4 rounds.
 
-Notes:
+> [!NOTE]
+> - `gin-doc-audit` and `pyrepo-long-session` have two counted rounds. In the other rounds
+>   the direct arm wrote scratch files to `/tmp`, outside its checkout, which the harness
+>   excludes on purpose. Every round of both, counted or not, was cheaper through Anyray.
+> - Quality misses: the Anyray arm once fell just under the citation bar on
+>   `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
+>   files). The direct arm missed twice (one `sdk-docs` round with no answer, one
+>   `pyrepo-long-session` round with ambiguous `lazy.py` citations).
+> - Three rounds per scenario give a median, not a confidence interval. The
+>   [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario.
 
-- `gin-doc-audit` and `pyrepo-long-session` have two counted rounds: in their other
-  rounds the direct arm wrote scratch files to `/tmp`, outside its checkout, which the
-  harness excludes on purpose. Every round of both, counted or not, was cheaper through
-  Anyray.
-- Quality misses: the Anyray arm once fell just under the citation bar on
-  `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
-  files); the direct arm missed twice (one `sdk-docs` round with no answer, one
-  `pyrepo-long-session` round with ambiguous `lazy.py` citations).
-- Three rounds per scenario give a median, not a confidence interval. The Rule 0 verdict
-  below needs at least 8 valid rounds per scenario.
+### Agent SDK app: arm E against arm B (2026-10-13)
 
-## The agent benchmark
+16 paired rounds of [`sdk-app-code-scan`](#agent-sdk-app-code-scan) on the dev gateway,
+Claude Sonnet 5.5, each arm on its own fresh key. Arm E ran a prototype Connect build: the
+`sdk` source plus the ANY-1124 path fix. Rounds 1 to 8 used the fix branch (5e6daef1a),
+rounds 9 to 16 used main (ee91f8337). The instructions were the same in both builds.
+
+| Rounds | E cheaper | Median E/B | Q3 | Max | Geometric mean (95% interval) |
+|---|---|---|---|---|---|
+| 1 to 8 | 6 of 8 | 0.941 | 0.989 | 1.103 | 0.961 (0.897 to 1.029) |
+| 9 to 16 | 8 of 8 | 0.844 | 0.877 | 0.939 | 0.830 (0.768 to 0.896) |
+| All 16 | 14 of 16 | 0.896 | 0.940 | 1.103 | 0.893 (0.841 to 0.949) |
+
+Every E session made 1 to 5 batch reads; 40 of 41 were served (one `invalid_arguments`).
+E made 238 Reads to B's 423, and 390 requests to B's 424. Every session completed in 7
+main-agent turns. B found 8 of 9 facts in every round; E found 8 of 9 in 15 rounds and 7
+in round 10. Both arms always missed `_SESSION_AUDIT_FORMAT`.
+
+## Running it
+
+Requirements: Node.js 20+, the `claude` CLI signed in to a Claude subscription (the
+upstream credential for both arms), `git`, and Go for the cobra and gin checks.
+
+```bash
+cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
+
+npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mask,code_graph
+npm run agent:report     # → results/agent/report.html
+```
+
+- Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so a re-run adds
+  rounds. `--label <name>` keeps a run in its own file.
+- `results/` is local only, because transcripts hold tool output. Share the report instead.
+- `--parallel N` runs up to N rounds at once (default 2, max 4). Each round is two
+  sessions on the one subscription, hence the low cap. Each round is saved as it finishes,
+  so an interrupted run keeps them.
+- `npm test` uses stubs and makes no model requests.
+
+## How a round works
 
 Each **round** runs the same task on a real open-source repo in two arms **at the same
 time**, each a full Claude Code session on its own fresh checkout:
-
-The `sdk-docs` and `framework-docs` scenarios below run their own agent in-process instead,
-on two per-token lanes.
 
 | Arm | How it reaches the model |
 |---|---|
 | **A · direct** | Claude Code straight to Anthropic. No gateway, hooks or MCP. |
 | **B · through Anyray** | The same Claude Code session via an Anyray gateway, sending only the client key. When this machine's `anyray-connect` is enrolled on that gateway, its hooks and MCP server are attached too. |
 
-Nothing is scripted. The model picks every step, with all of Claude Code's default
-tools, subagents included. Both arms get the same model, task, turn cap and upstream
-credential, and neither loads your own Claude Code settings.
+Nothing is scripted. The model picks every step, with all of Claude Code's default tools,
+subagents included. Both arms get the same model, task, turn cap and upstream credential,
+and neither loads your own Claude Code settings.
 
-Per round it records:
+Each round records:
 
-- **Cost:** Claude Code's billed total, with cache reads and writes, main agent and subagents.
-- **Turns, model requests, subagents** and their share of cost, and the subagent load:
-  how many requests the main agent made (`mainRequests`), how many the subagents made
-  (`subagentRequests`), and requests per subagent (`requestsPerSubagent`, null with no
-  subagents). The round line prints it as `4 subagents · 68 sub-req (17.0/agent) · 20
-  main-req`; the result's `subagentLoad` pools it per arm over the run.
-- **The Claude Code build each arm ran** (`setup.{a,b}.claudeVersion`, per round) and the
-  run's `claudeVersions` per arm, with a warning when a block mixed versions. The default
-  `claude` comes from PATH, which auto-update moves between rounds; `--claude-bin` pins it.
-- **Solved or not.** A bug-fix task must pass its test command in the session's checkout afterwards. A question must contain every key fact. An audit's `path:line` citations must resolve to real lines.
-- **Every model request:** cache read / write / uncached input, each tool call and its output.
-- **The gateway's own record,** when an admin key is set: which strategies were on for the run, and what each one did on each request (saved, stood down, held by the guard).
-- **Gateway pings,** when an admin key with `spend:read` is set: requests the gateway sends on the session's behalf (keep-warm pings) are billed but never reach Claude Code's total. After the Anyray arm finishes, the harness reads `GET /admin/v1/spend/sessions/<Claude Code session id>?includeSubagents=true` (re-reading for up to 30 s until the counts settle) and records `gatewayPingCount` and `gatewayPingCostUsd`. The arm's `costUsd`, which the ratio uses, becomes Claude Code's figure (kept as `clientCostUsd`) plus the ping cost. A gateway without that endpoint gives a one-line warning and null ping fields, and the cost stays the client figure.
-- **Booked vs measured savings** (`--compare anyray`): what the gateway's own records claim it
-  saved for the Anyray session (the sum of its traces' `savingsUsd`, the figure its spend rows and
-  console report) against what the pair actually cost (direct minus Anyray, pings included). A
-  round where Anyray cost more but the gateway still booked a saving prints a warning, and so does
-  the run's summary line (`savingsCheck` on the round and on the result).
-- **Gateway restarts:** the admin health report's replica start times before and after the round. A replica that is new or started again (60 s tolerance) sets `gatewayRestarted` and prints a warning, since such a round is not a fair pair.
+- **Cost:** Claude Code's billed total, cache reads and writes included, main agent and
+  subagents. Gateway keep-warm pings (billed, but not in Claude Code's total) are added
+  when an admin key with `spend:read` is set.
+- **Solved or not:** a bug fix must pass its test command, a question must contain every
+  key fact, and an audit's `path:line` citations must resolve to real lines.
+- **Work:** turns, model requests, subagents, each tool call, and cache read / write /
+  uncached input per request.
+- **The gateway's record** (with an admin key): which strategies were on, and what each did
+  on each request.
+- **Booked vs measured savings** (`--compare anyray`): what the gateway claims it saved
+  against what the pair really cost. A round where Anyray cost more but the gateway still
+  booked a saving prints a warning.
+- **Fairness flags:** a gateway restart during the round, a session that worked outside its
+  checkout, or mixed Claude Code versions. Each prints a warning.
 
-Across rounds it gives the **Rule 0 verdict** (`lib/stats.mjs`):
-- **Win rate:** Anyray must be cheaper in clearly more rounds than the 53% noise floor (the bar is 63%).
-- **Q3 ratio below 1:** Anyray must still be cheaper at the third quartile, so no more than a quarter of rounds may cost more.
-- **Quality parity:** Anyray must solve as many rounds as direct.
+### Which strategies the Anyray arm runs
 
-The verdict counts **solved pairs only**: rounds where both arms solved the task. A
-session that didn't solve it (e.g. it hit the turn cap) measured cost, not quality, so a
-cheap failure is never a win. Rounds only one arm solved are listed as quality events
-(who solved), rounds neither solved are listed apart, and rounds where an arm timed out
-or crashed (no cost) are excluded and listed. With fewer than 3 solved pairs the verdict
-is `INSUFFICIENT`. The earlier all-rounds line is still printed below it, and saved as
-`stats` (the solved-pair Rule 0 summary is `rule0Verdict`).
+`--compare anyray` and `gateway` need `--kinds <k1,k2>` (or `--strategy <kind>`). The
+Anyray arm sends them as `x-anyray-optimization-kinds`, so the gateway runs exactly those
+strategies, off-by-default ones included, unless an admin rule disables one. A run never
+inherits the tenant's defaults, which drift.
 
-### Reading the paired cost verdict
+A local pass-through proxy reads `x-anyray-optimization-result` on each response. Each
+round prints, per kind, how many requests applied it, skipped it (with the reason) or gave
+no feedback.
 
-The final `verdict` in each result file tests whether B is cheaper than A across
-valid paired rounds. Only rounds where **both arms solved**, both costs and the ratio
-are positive and finite, and neither arm worked outside its checkout count. Failed
-rounds and rounds across a gateway restart are excluded. The printout lists the
-exclusion counts and each arm's mean cost and cost variation.
+## Reading the verdict
 
-The verdict uses the geometric mean of B/A ratios and a two-sided 95% Student t
-interval on their logarithms. `pass` requires at least 8 valid rounds and an upper
-interval bound below 1. `fail` means the lower bound is above 1. Otherwise it is
-`inconclusive`; below 8 valid rounds it also says how many more are needed. The
-minimum detectable ratio is the largest hypothetical B/A ratio below 1 whose 95%
-interval would clear 1 at the observed variation and sample size. It is a confidence
-threshold, not a power guarantee. One round has no variance estimate, so its ratio
-cannot establish a cost win.
+Each result file has two verdicts.
 
-To recalculate from existing files, with no agent or model traffic:
+**Rule 0** (`lib/stats.mjs`), across solved pairs:
+
+| Bar | Pass when |
+|---|---|
+| Win rate | Anyray is cheaper in at least 63% of rounds (the noise floor is 53%) |
+| Q3 ratio | Below 1, so no more than a quarter of rounds cost more |
+| Quality parity | Anyray solves as many rounds as direct |
+
+**Paired cost verdict** (`verdict`): the geometric mean of B/A with a 95% interval.
+`pass` needs at least 8 valid rounds and an upper bound below 1. `fail` means the lower
+bound is above 1. Anything else is `inconclusive`, with the number of rounds still needed.
+
+Only **solved pairs** count: rounds where both arms solved the task. A cheap failure is
+never a win. Rounds only one arm solved are listed as quality events. Rounds with a
+crash, a timeout without cost, a gateway restart, or work outside the checkout are
+excluded and listed. Fewer than 3 solved pairs gives `INSUFFICIENT`.
+
+Recalculate from existing files, with no model traffic:
 
 ```bash
 node tools/bench-verdict.mjs results/agent/cobra-flag-groups--control*.json
 node tools/bench-verdict.mjs --json --min-rounds 12 results/agent/example.json
 ```
 
-The tool checks scenario, compare mode, model, and provider before pooling. Use
-`--allow-mixed` to override that check; the output then names the differences.
-It exits 0 for pass, 1 for fail, and 2 for inconclusive.
+It refuses to pool files with a different scenario, compare mode, model or provider
+(`--allow-mixed` overrides). Exit codes: 0 pass, 1 fail, 2 inconclusive.
 
-A **control** comparison (`--compare control`) runs direct against direct to show how
-far two identical setups drift apart. A result inside that band proves nothing.
-`--with-control` runs one alongside the main comparison, in parallel, with the same
-scenario, rounds, `--max-turns` and `--no-subagents`, into its own file (label suffixed
-`-control`), and prints its solved-pair median and range next to the verdict as the
-noise band, saying whether the main median falls below, inside or above it.
+## Comparison modes
 
-A **gateway** comparison (`--compare gateway`) runs the Anyray arm in both slots and
-sends `ANYRAY_BENCH_EXTRA_HEADERS` on B only. Both arms carry everything the gateway
-brings (e.g. Claude Code's behaviour behind a custom base URL, the shared tenant), so the
-ratio isolates the one header-selected feature. Kinds, strategy, metadata and client
-setup are the same in both slots; each slot gets its own session id (`…-a`, `…-b`) so the
-gateway keeps their traces, spend and session state apart. Gateway ping cost is added to
-both arms. Rounds the harness flags as run across a gateway restart are left out of the
-Rule 0 stats.
+| Mode | A | B | Use it to |
+|---|---|---|---|
+| `--compare anyray` (default) | direct | through Anyray | ask the end-to-end question |
+| `--compare control` | direct | direct | see how far two identical setups drift. A result inside that band proves nothing. |
+| `--compare gateway` | through Anyray | through Anyray + treatment | isolate one feature. Both arms carry everything else the gateway brings. |
+
+- `--with-control` runs a control next to the main comparison and prints its median and
+  range as the noise band.
+- **Header treatment:** `ANYRAY_BENCH_EXTRA_HEADERS` goes to B only under `gateway`.
+- **Rule treatment:** `--experiment-b <name>` tags B's `x-anyray-metadata`, and
+  `bench-rule params` adds a rule keyed on that tag. Each round records whether the rule
+  stayed the same; drop a round with `stable: false`.
+- **Strategy treatment:** `--kinds-b`, `--read-trim-b` and `--hook-posture-b` change B
+  only (see [Run options](#run-options)).
 
 ```bash
 ANYRAY_BENCH_EXTRA_HEADERS='x-example-feature: on' \
   npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare gateway --strategy thinking_trim --label feature-ab
-```
 
-When the treatment is a gateway **rule** and not a header, tag arm B instead:
-`--experiment-b <name>` sends `experiment=<name>` in B's `x-anyray-metadata` only, and
-`bench-rule params <name> --params …` (below) adds a rule keyed on that tag. Both arms run
-the same strategies; B runs them with the rule's params.
-
-```bash
 npm run bench-rule -- params my-exp-b --params '{"observation_mask":{"mintPaybackTurns":2}}'
 npm run agent -- --scenario pyrepo-long-session --compare gateway \
   --kinds relevance_filter,code_graph,observation_mask --experiment-b my-exp-b --label my-exp
 npm run bench-rule -- remove-params my-exp-b
 ```
 
-The run says before it starts which rule B's tag matches (or that none does), and each
-round records the rule as it stood before and after (`experimentRule`, with `stable: false`
-when it was missing or changed: drop that round).
+> [!WARNING]
+> A gateway may hold one strategy out of a session as its own control, drawn per session.
+> A round whose arms got different holdouts compared two strategy sets and prints a
+> warning. `--redraw-holdout N` restarts such a pair with fresh sessions, up to N times.
+> Name every kind the gateway may hold out in `--kinds`.
 
-A gateway may hold one strategy out of a session as its own control, drawn per session, so
-the two sessions of a round are drawn separately. Each round records which requested kinds
-were held out of each arm (`heldOut: { a, b, differs }`, from the `guard` the gateway names
-on a `safety_gate` skip) and prints a warning when the arms differ: that round compared two
-different strategy sets. `--redraw-holdout N` avoids spending a round on that: when either
-session reports a holdout on one of its first three responses, both are stopped and the
-pair starts again with fresh sessions (fresh draws), up to N times; the draws thrown away
-are recorded in the round's `redraws`. Name every kind the gateway may hold out in
-`--kinds`, since only requested kinds are watched.
-
-### Codex (`--client codex`)
-
-`--client codex` runs the same scenarios with Codex CLI in both arms (`codex exec`, on
-this machine's ChatGPT seat), for the gateway's Codex seat lane. Arm by arm:
-
-| Compare | A | B |
-|---|---|---|
-| `anyray` | Codex direct (its built-in provider, its own WebSocket to chatgpt.com) | Codex on the seat route anyray-connect writes, through the gateway |
-| `control` | Codex direct | Codex direct |
-| `gateway` | through the gateway | through the gateway, with the treatment |
-
-Each gateway arm is set up by running `anyray-connect --tools codex --subscription`
-into a private home against the bench gateway; the arm then uses that route, MCP server
-and tool approvals. Codex itself keeps the real `~/.codex` (the seat login is never
-copied), with `--ignore-user-config`, the route as `-c` overrides, the client key in an
-env var (never argv), and hooks off in both arms (except B under `--codex-hooks-b`,
-below). Each session's threads are deleted afterwards (`--keep-codex-threads` keeps them).
-With `ANYRAY_CONNECT_BIN` or `--connect-bin-b` set, each arm's home starts from a no-app
-profile and the round fails unless its MCP server (and hook) run the named build: an
-installed Connect app otherwise takes the configure over and runs its own.
-
-Cost is Codex's own per-response usage from the thread's rollout file, subagents
-included, priced from `pricing` above (cache writes at 1.25x). The seat bills in usage
-limits; the figure is list-price equivalent. What the gateway did comes from its traces
-(`ANYRAY_ADMIN_KEY`). `--kinds` names the kinds that tally reads and is not sent: the
-gateway refuses `x-anyray-optimization-kinds` on anything but an inference POST, so it
-would fail Codex's WebSocket upgrade (a GET), and the seat lane runs only
-`relevance_filter` and `content_census` anyway. Codex has no turn cap: `--max-turns` is
-refused, `--timeout-min` bounds each session.
-
-The Codex seat source trim (`codexSeatSourceTrim`) is a deployment-wide setting, so
-the pair that isolates it keeps the setting on and turns the trim off on B by rule:
-
-```bash
-npm run bench-rule -- params codex-trim-off --params '{"relevance_filter":{"minChars":1000000000}}'
-npm run agent -- --client codex --scenario gin-long-session --compare gateway \
-  --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8 --retry-invalid 4
-npm run bench-rule -- remove-params codex-trim-off
-```
-
-`--compare anyray` with the setting on asks the end-to-end question (the lane against
-Codex with no gateway at all).
-
-connect's Codex PreToolUse source trim is client-side, so its pair is two gateway arms
-with the hook on B alone:
-
-```bash
-npm run agent -- --client codex --scenario gin-long-session --compare gateway \
-  --kinds relevance_filter --codex-hooks-b --rounds 8 --retry-invalid 4
-```
-
-B runs exactly one hook: the one anyray-connect installed in B's home, declared as
-session config and trusted by its own `hooks.state` entry (never
-`--dangerously-bypass-hook-trust`); every handler in the real `~/.codex/hooks.json` is
-switched off by key as well. It runs through `lib/codexHookShim.mjs`, which runs connect's
-hook under B's home and puts that home in front of the `__anyray-shell-run` it answers
-with, so the trim reads B's profile and tees into B's `~/.anyray/hook-tee`, never the real
-one. The wrapped command keeps the real Go caches and git config (`wrappedCommandEnv`).
-A round counts B as acting only when B's own connect wrapped a command (the trace tallies
-are kept apart in `gatewayOptimization`, since the gateway edits both arms alike), and it
-leaves the stats (`hookLeak`) if any command was wrapped on A or by another connect on B.
-Each B session records the wraps, digest footers, the shim's outcomes and the tee count.
-Add `--connect-bin-b /abs/<dir>/anyray-connect` to configure B from another build (its
-sha256 prefix is recorded, never the path).
-
-### Scenarios
+## Scenarios
 
 | Scenario | Repo | Task | Graded by |
 |---|---|---|---|
@@ -290,90 +251,29 @@ sha256 prefix is recorded, never the path).
 | `sdk-docs` | a large Python codebase (pinned) | SDK tool loop without client cache markers, direct Bedrock vs gateway | Path:line citations resolve |
 | `framework-docs` | a large Python codebase (pinned) | The `pyrepo-docs` task run by an agent-framework graph agent, direct Bedrock vs gateway | Path:line citations resolve |
 
-Each is `scenarios/<name>/scenario.yaml` (plus a patch for bug-fix tasks). Every session
-is capped at `timeoutMin` (6 minutes by default) and `maxTurns`.
+Each scenario is `scenarios/<name>/scenario.yaml`, plus a patch for bug-fix tasks. A
+session is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. It ends once it
+has answered and has been idle for 30 seconds; wall time runs to the final answer.
 
-A session ends when it has answered. `claude -p` can stay alive after its final answer
-(a scheduled wakeup, a background command), so once the last turn's result is in, the
-input is closed, no background task runs and nothing has happened for 30 seconds, the
-harness ends it. Wall time runs to the final answer, never to the kill. A session killed
-at its timeout is graded on what it had answered: Claude Code holds a turn's result back
-while a background agent still runs, so when the main agent's last message completed its
-turn, that text is the answer (`timedOutAfterAnswer`). It is graded, but has no cost:
-Claude Code never reported the bill, and the background agent still running was cut off
-mid-task, so the round is excluded as having no cost. A main agent killed mid-request or
-mid-tool-call never answered: unsolved, no cost. Findings the main agent files with
-Claude Code's `ReportFindings` tool (accepted calls) are part of its answer: each is
-graded as `file:line — summary — failure scenario` beside the result text, at the same
-bar. Both arms follow the same rules.
+| Key | What it does |
+|---|---|
+| `followups:` | Runs one multi-turn session; each follow-up is a new user turn |
+| `followupDelaySec` | Idle time before each follow-up: one number, or one per follow-up (the last repeats) |
+| `patch:` | One file or a list, applied in order |
+| `hidePatch: true` | Re-imports the patched checkout as one commit, so `git diff` and `git log` cannot find the bug |
+| `gatewaySettleSec` | Wait after the session before reading the Anyray arm's ping cost |
 
-A scenario with
-`followups:` runs as one multi-turn session: each follow-up is sent as a new user turn
-when the previous answer is done. `patch:` is one file or a list, applied in order.
-`hidePatch: true` re-imports the patched checkout as a
-single commit, so the planted bug can't be found with `git diff` or `git log`. The gin
-scenarios also apply `fixed-ports-lock.patch`: several gin tests bind fixed ports, and
-both arms run `go test` on one machine at once, so the patch adds a `TestMain` that makes
-concurrent runs of that package's tests take turns, and gives each test binary its own
-temp dir, so `TestUnixSocket` never meets another run's socket. No test or library code changes.
-`followupDelaySec` idles before each follow-up, the way a person pausing would: one
-number for every follow-up, or a list with one per follow-up (the last repeats).
-`gatewaySettleSec` waits that long after the session before reading the gateway's ping
-cost for the Anyray arm, e.g. to let a keep-warm window run out.
+> [!WARNING]
+> A session gets the Claude seat's access token once and cannot refresh it. A scenario
+> with pauses refuses to start when the token expires before the pauses end (plus 15
+> minutes). Start again after Claude Code renews it, or set `ANYRAY_UPSTREAM_TOKEN` to a
+> long-lived token (`claude setup-token`).
 
-A session is handed the Claude seat's access token once and cannot refresh it, so a
-scenario with pauses refuses to start when the token expires before its pauses (plus 15
-minutes of work) are over. Start it again once Claude Code has renewed the token, or set
-`ANYRAY_UPSTREAM_TOKEN` to a long-lived one (`claude setup-token`).
+`npm run cold-turns -- results/agent/<file>.json` reads a pause-scenario round back: cost,
+cache breaks and strategy actions for each turn after a long pause, and anything that
+makes the round unreadable as a comparison.
 
-`npm run cold-turns -- results/agent/<file>.json` reads a pause-scenario round back: each
-arm's cost with pings, turns, requests, cache breaks, retrievals and held-out kinds, and
-for each turn that followed a long pause whether the gateway attested the cache expiry,
-the tokens each strategy removed, what the provider wrote and read, and why a strategy
-declined. It lists what makes a round unreadable as a comparison (a gateway restart,
-different kinds held out per arm, a rule that changed, a cold turn that was not attested).
-
-### Running it
-
-Requirements: Node.js 20+, the `claude` CLI signed in to a Claude subscription (the
-upstream credential for both arms), `git`, and Go for the cobra/gin checks.
-
-```bash
-cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
-
-npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
-npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
-npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mask,code_graph
-npm run agent:report     # → results/agent/report.html
-```
-
-`--parallel N` runs up to N rounds at once (default 2, max 4). Each round is still a
-pair of concurrent sessions, so N rounds means up to 2N Claude Code sessions, all on the
-one subscription, which is why the cap is low. `--parallel 1` runs rounds one after
-another. Rounds are numbered when the run starts, each is saved as soon as it finishes
-(an interrupted run keeps every finished round), and the result file stays in round
-order whichever finishes first. Round lines print as each round finishes, prefixed with
-its round number. With `--with-control`, the main comparison and the control share the
-one budget: at most N rounds in flight across both (at most 2N sessions), half the slots
-each (rounded up) while both are running. The default of 2 therefore runs one main and
-one control round side by side. The value is recorded as `parallel` in each arm's setup.
-
-Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so re-running adds
-rounds. `--label <name>` keeps a run in its own file (e.g. a single-strategy run). `results/` is local only, because transcripts hold tool output. Share the
-report instead.
-
-### Which strategies the Anyray arm runs
-
-`--compare anyray` (and `gateway`) needs `--kinds <k1,k2>` (or `--strategy <kind>`, which means
-`--kinds <kind>`). The Anyray arm sends them as `x-anyray-optimization-kinds`, so the
-gateway runs exactly those strategies, off-by-default ones included, unless an admin
-rule disables one. A run never inherits the tenant's defaults, which drift. The
-requested kinds are recorded in the result's setup.
-
-Claude Code does not surface response headers, so the Anyray arm's model traffic goes
-through a local pass-through proxy that reads `x-anyray-optimization-result` on each
-response. Each round records, per requested kind, how many requests applied it, skipped
-it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
+## Other lanes
 
 ### On AWS Bedrock
 
@@ -384,104 +284,90 @@ it (with the gateway's reason) or gave no feedback (unconfirmed), and prints it.
 | **A · direct** | Claude Code's own Bedrock client (`CLAUDE_CODE_USE_BEDROCK=1`), signed with an AWS profile on this machine. |
 | **B · through Anyray** | Claude Code connected by `anyray-connect --org`: the gateway key authenticates, and the gateway's routing sends the request to Bedrock with the credentials it holds. Nothing on the client names a provider. |
 
-The gateway must have Bedrock as its provider. Before the first round the harness sends
-one 1-token request the way arm B will, checks that Bedrock served it, and gives arm A
-the Bedrock model id it was served as, so both arms call the same model. Neither arm
-carries a subscription token. Rounds go to their own file (label `bedrock` by default).
-
 ```bash
 npm run agent -- --scenario pyrepo-docs --rounds 4 --provider bedrock --kinds observation_mask,code_graph
 ```
 
-`ANYRAY_BEDROCK_PROFILE` (default: `AWS_PROFILE`, else `default`) and
-`ANYRAY_BEDROCK_REGION` (default `us-east-1`) choose arm A's AWS profile and region;
-`ANYRAY_BEDROCK_MODEL` pins its model id instead of the one read back from the gateway.
-A gateway that answers with the client's own model id (it passes the request to Bedrock
-untranslated) gives nothing to read back, so the run asks for `ANYRAY_BEDROCK_MODEL`.
-Use the gateway's region, or the arms are priced and served differently.
+| Env var | Default | Sets |
+|---|---|---|
+| `ANYRAY_BEDROCK_PROFILE` | `AWS_PROFILE`, else `default` | Arm A's AWS profile |
+| `ANYRAY_BEDROCK_REGION` | `us-east-1` | Arm A's region. Use the gateway's region, or the arms are priced and served differently. |
+| `ANYRAY_BEDROCK_MODEL` | read back from the gateway | Arm A's model id. Required when the gateway answers with the client's own model id. |
+| `ANYRAY_BEDROCK_SMALL_MODEL` | Haiku 5.5 in the main model's profile | Arm A's small/fast model |
 
-Both arms also use the same small/fast model. Claude Code sends some side calls, such as
-WebFetch's page summary, to a small model. Arm B looks like the Anthropic API to Claude
-Code, so Claude Code picks its own Haiku there. On Bedrock, Claude Code sends those calls
-to the main model unless `ANTHROPIC_DEFAULT_HAIKU_MODEL` is set. Arm A would then pay
-Sonnet prices for calls arm B makes on Haiku, and the gap would look like a gateway saving.
-So arm A gets `ANTHROPIC_DEFAULT_HAIKU_MODEL` = Haiku 5.5 in the main model's inference
-profile (`us.anthropic.claude-sonnet-5` → `us.anthropic.claude-haiku-5-5`).
-`ANYRAY_BEDROCK_SMALL_MODEL` sets another id. Each arm's setup records the model and where
-it came from (`setup.<arm>.smallFastModel`). A round where the arms ran one model family
-on different models (`result.modelUsage`) is flagged in `modelsDiffer` with a warning.
+The gateway must have Bedrock as its provider. Before the first round, the harness sends
+one 1-token request the way arm B will, and gives arm A the model id Bedrock served, so
+both arms call the same model. Arm A also gets the same small model arm B uses, so side
+calls (such as WebFetch summaries) are not priced at Sonnet rates on A only. Rounds go to
+their own file (label `bedrock`).
 
-### SDK agent without client cache markers
+### Per-token agents: `sdk-docs` and `framework-docs`
 
-`sdk-docs` measures a script or agent framework that sends ordinary Anthropic Messages
-requests without `cache_control`. Both arms pay per token. A small local agent sends the
-same system prompt, tool definitions, and full conversation in each arm. It can read a
-file by numbered range, list a directory, or search for literal text; every tool stays
-inside its own checkout of the pinned Python repository. The direct arm calls Bedrock
-`InvokeModel` through the AWS CLI and local AWS profile. InvokeModel does not stream, and
-a long answer takes minutes, so the CLI read timeout is raised from its 60 s default to
-600 s; a failed call's error carries the CLI's stderr. The Anyray arm sends the native
-Messages body to the gateway's org lane with the benchmark client key as bearer; the
-gateway selects its provider. Neither arm uses Claude Code or a subscription seat.
+Both scenarios run their own agent in-process, without Claude Code or a subscription seat,
+and send no `cache_control` markers. Both arms pay per token. The agent can read a file by
+line range, list a directory, or search for text, all inside its own checkout.
+
+| Scenario | Agent | Direct arm | Anyray arm |
+|---|---|---|---|
+| `sdk-docs` | A small tool loop on the Messages API | Bedrock `InvokeModel` via the AWS CLI | Native Messages body to the gateway's org lane |
+| `framework-docs` | An agent-framework state graph (model node + tool node) | `AnthropicBedrock` client | Stock gateway setup: gateway URL as base URL, client key as API key |
 
 ```bash
 node run_agent.mjs --scenario sdk-docs --rounds 1 --provider bedrock
-```
-
-Set `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`),
-and configure the direct AWS profile and region as above. `ANYRAY_BEDROCK_MODEL` can
-pin the direct model; otherwise the existing gateway route probe resolves it. Use
-`--kinds <comma-list>` to request a measured gateway strategy set. The default sends
-no optimization selection header. `--inter-turn-delay-sec 310` pauses between model
-requests to test behavior beyond the five-minute cache lifetime. `--max-turns` must
-stay between 8 and 30; the scenario continues early answers until at least eight
-model requests have run. A final reply with no text (Sonnet 5 can end a turn on thinking
-alone) gets one more answer-only request with the same tools; an answer still empty is
-graded `error_no_answer`. `--retry-invalid N` runs a round again when either arm failed
-or did not solve it, as on the Claude Code scenarios. The round line prints each arm's cache-read share. The result
-file stores every request's token usage, estimated cost, and latency, plus the usual
-paired verdict and citation check. Run `node tools/bench-verdict.mjs` on that file to
-recalculate the verdict. A live run is required to establish route parity and measured
-savings; `npm test` uses stubs and makes no model requests.
-
-### Agent-framework agent
-
-`framework-docs` runs the `pyrepo-docs` task and grade with an agent built the way
-agent-framework users build one: a state graph with a model node and a tool node,
-its Anthropic chat model bound to three zod-declared tools (the same checkout-confined read,
-list and search as `sdk-docs`), and no cache markers. Both arms run the same graph and
-model class; only the HTTP client under the chat model differs. The direct arm uses
-`AnthropicBedrock` with the local AWS profile and region. The Anyray arm uses the stock
-setup for a gateway: the gateway URL as base URL and the benchmark client key as the
-API key. Each model request is one turn; the last allowed turn asks for the answer with
-the tools still declared but not callable. Sonnet 5 thinks when `thinking` is omitted and
-can end a turn on thinking alone, so a reply with neither tool calls nor text gets one
-more answer-only request with the same parameters; an answer still empty is graded
-`error_no_answer`.
-
-```bash
 node run_agent.mjs --scenario framework-docs --rounds 1 --provider bedrock --kinds <k1,k2>
 ```
 
-It takes the same flags and environment as `sdk-docs`; `--max-turns` must stay between
-2 and 80. The Anthropic SDK reads `ANTHROPIC_BASE_URL`, `ANTHROPIC_CUSTOM_HEADERS` and
-API keys from the environment, so a shell inside a routed Claude Code session would
-otherwise send both arms elsewhere. The agent builds its clients without them, and
-refuses any request to another host or with an `x-anyray-*` header it did not set.
-Each request's usage, cost, latency and content block types are stored in the result
-file.
+- Set `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`), and
+  the AWS profile and region [as for Bedrock](#on-aws-bedrock).
+- No `--kinds` means no optimization header is sent.
+- `--max-turns`: 8 to 30 for `sdk-docs` (it runs at least eight requests), 2 to 80 for
+  `framework-docs`.
+- `--inter-turn-delay-sec 310` pauses past the five-minute cache lifetime.
+- An answer that stays empty after one answer-only retry is graded `error_no_answer`.
+- The result stores each request's usage, cost and latency.
 
-### Agent SDK app: code scan with Connect's batch read
+### Codex (`--client codex`)
 
-`sdk-app-code-scan` is a Claude Agent SDK application, run by `run_sdk_app.mjs`, not
-`run_agent.mjs`. Its main agent sends three `auditor` subagents out in parallel, each with
-a list of security-critical functions in the pinned Python codebase. They trace them with
-the SDK's Read, Grep and Glob tools. `seeded-vulns.patch` plants nine vulnerabilities,
-three per slice, and is imported as one commit. Each audited function calls a helper that
-decides the outcome, defined at the end of another module (eight of nine past line 1,000),
-so finding one takes a search, then reads of located ranges in several files. A round is
-graded on how many of the nine deciding constants the report and its accepted
-ReportFindings quote.
+Runs the same scenarios with Codex CLI in both arms (`codex exec`, on this machine's
+ChatGPT seat), for the gateway's Codex seat lane.
+
+| Compare | A | B |
+|---|---|---|
+| `anyray` | Codex direct (its built-in provider, its own WebSocket to chatgpt.com) | Codex on the seat route anyray-connect writes, through the gateway |
+| `control` | Codex direct | Codex direct |
+| `gateway` | through the gateway | through the gateway, with the treatment |
+
+- Each gateway arm is set up by `anyray-connect --tools codex --subscription` in a private
+  home. The seat login is never copied, and hooks are off in both arms unless
+  `--codex-hooks-b`.
+- Cost is Codex's own per-response usage, priced from `config.yaml` (list-price
+  equivalent; the seat bills in usage limits).
+- `--kinds` only names which kinds to tally; it is not sent. The seat lane runs only
+  `relevance_filter` and `content_census`.
+- No turn cap: `--max-turns` is refused; `--timeout-min` bounds each session.
+
+```bash
+# Gateway-side Codex seat source trim, turned off on B by rule:
+npm run bench-rule -- params codex-trim-off --params '{"relevance_filter":{"minChars":1000000000}}'
+npm run agent -- --client codex --scenario gin-long-session --compare gateway \
+  --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8 --retry-invalid 4
+npm run bench-rule -- remove-params codex-trim-off
+
+# Connect's client-side PreToolUse source trim, on B only:
+npm run agent -- --client codex --scenario gin-long-session --compare gateway \
+  --kinds relevance_filter --codex-hooks-b --rounds 8 --retry-invalid 4
+```
+
+How B's hook is isolated from your real `~/.codex` is in
+[docs/harness-internals.md](docs/harness-internals.md#codex-hook-isolation).
+
+### Agent SDK app: code scan
+
+`sdk-app-code-scan` is a Claude Agent SDK app, run by `run_sdk_app.mjs`. Its main agent
+sends three `auditor` subagents out in parallel to trace security-critical functions in
+the pinned Python codebase. `seeded-vulns.patch` plants nine vulnerabilities, each decided
+by a helper far away in another module. A round is graded on how many of the nine
+deciding constants the report quotes.
 
 Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 600) in
 `--keys-dir`:
@@ -494,118 +380,89 @@ Every arm goes through the gateway on its own key, read from `<arm>.key` (mode 6
 | D | B plus Anyray Connect's local MCP server, offering `anyray_read_batch` |
 | E | D, with the server started as `__anyray-mcp-server sdk`, whose `initialize` result tells the model when to batch reads |
 
-For arm D the runner first enrolls Connect in a private HOME, once per run, the way an
-agent host does it (`D.key` must be an agent key). It configures no client there: the
-server needs only the enrolled profile. It then mounts only Connect's MCP
-server (`anyray-connect __anyray-mcp-server claude`, HOME set to that private HOME) in
-the app as `anyray-connect`. The app runs under its own environment and never reads that
-HOME. Before the first paid round, the runner checks with `tools/list` that the server
-offers the batch read. It then makes one batch read by absolute path in a fresh checkout,
-because the SDK's Read and Grep hand the model absolute paths. It stops if either check
-fails: a Connect build older than ANY-1124 refuses those paths (`unsafe_path`). D hides
-the server's own
-`anyray_retrieve` and `anyray_recall`, so it differs from B by one tool.
-
-Arm E needs a Connect build that serves the `sdk` source (`ANYRAY_CONNECT_BIN`). Its
-preflight also requires that `initialize` carries instructions, so a build without them
-stops the run instead of measuring D twice.
-
-Check the wiring first. This makes no model request and needs no key:
+D differs from B by one tool. `D.key` must be an agent key. Arm E needs a Connect build
+that serves the `sdk` source (`ANYRAY_CONNECT_BIN`). The run stops before the first paid
+round if the server's batch read or instructions are missing.
 
 ```bash
-node tools/probe-sdk-code-scan.mjs            # --arm E for arm E
-```
-
-It starts the server as the arm does in a fresh checkout, makes one batch read call, then
-starts the SDK with the arm's options against a closed local port and reads its init
-message. It shows which tools the model is offered and where the server runs. Last, it runs
-the app against a local fake of the Messages API that spawns one auditor, and reports
-whether the server's instructions reached the main agent's request and the auditor's.
-Then a paired run:
-
-```bash
+node tools/probe-sdk-code-scan.mjs            # wiring check, no model request, no key; --arm E for arm E
 node run_sdk_app.mjs --scenario sdk-app-code-scan --arms A,D --gateway <url> \
   --keys-dir <dir with A.key and D.key> --model claude-sonnet-5-5 --rounds 8 --budget 40 --label code-scan
 node tools/compare-sdk-app.mjs results/agent/sdk-app-code-scan--code-scan.json
 ```
 
 The comparison prints D/A, plus D/B when B ran (that pair isolates the batch read). It
-first checks that D's agents called the batch read with at least one call not errored, in
-at least half the D sessions. Each session records its tool calls by name and its
-`readBatch` calls and errors.
+first checks that D's agents really used the batch read in at least half the D sessions.
 
-#### Measured: arm E against arm B (2026-10-13)
+## Run options
 
-16 paired rounds on the dev gateway, Claude Sonnet 5.5, each arm on its own fresh key.
-Arm E ran a prototype Connect build: the `sdk` source plus the ANY-1124 path fix. Rounds
-1 to 8 used the fix branch (5e6daef1a) and rounds 9 to 16 used main (ee91f8337). The
-instructions were the same in both builds.
+| Flag / env | What it does |
+|---|---|
+| `--rounds N` | Rounds to run |
+| `--label <name>` | Keep the run in its own result file |
+| `--parallel N` | Rounds in flight at once (default 2, max 4) |
+| `--retry-invalid N` | Run another round in place of one the verdict drops, up to N extra. With `--rounds 1`, ends a quick test with one usable pair. |
+| `--max-turns N` | Both arms' turn cap. Below 80, Connect turns off its read hint and Explore decline, so B runs without what production gets (the run warns). Every Claude Code scenario is capped at 80. |
+| `--timeout-min N` | Both arms' wall-clock cap, for a slower model or route |
+| `--no-subagents` | Both arms run without `Task` and `Workflow` |
+| `--warm-up` | A throwaway one-turn session per arm first, so both start with a warm cache |
+| `--claude-bin <abs path>` / `ANYRAY_CLAUDE_BIN` | Pin the Claude Code binary. Without it, auto-update can change `claude` between rounds. |
+| `--mcp-catalog N` | Add a stub MCP server with N unused tools (200 ≈ a seat with many connectors). Pair with `--arm-env ENABLE_TOOL_SEARCH=false`. |
+| `--experiment <name>` | Tag the Anyray arm with `experiment=<name>`, for a gateway rule on this run only |
+| `--kinds-b <k1,k2>` | `gateway` mode: B requests other kinds than `--kinds` |
+| `--read-trim-b` / `--read-trim` | Connect's nested-Read trim on B only / on every Anyray arm |
+| `--hook-posture-b <name>=<on\|off>` / `--hook-posture` | Pin one team-policy hook switch on B only / on every Anyray arm |
+| `--client-tool-policy name=true\|false` | Set a Connect MCP switch in the Anyray arm, e.g. `readBatchRanges=true` |
+| `--seed-home <path>=<abs file>` | Copy a file into every Anyray arm's private HOME before Connect configures it |
+| `--arm-env b:KEY=VALUE` / `b:KEY=-` | Set or remove an env var on an arm, e.g. `b:DISABLE_PROMPT_CACHING=1` |
+| `--no-persist-session` | Run both arms without session transcripts, as runs before 2026-10-12 did |
+| `--redraw-holdout N` | Restart a pair when the arms got different holdouts |
+| `ANYRAY_BENCH_EXTRA_HEADERS` | Extra gateway headers for the Anyray arm (B only under `gateway`), one `name: value` per line |
+| `ANYRAY_BENCH_SHARED_HEADERS` | Headers on every Anyray arm, such as `x-anyray-tool-defer: off` where the dev org's default differs from production |
 
-| Rounds | E cheaper | Median E/B | Q3 | Max | Geometric mean (95% interval) |
-|---|---|---|---|---|---|
-| 1 to 8 | 6 of 8 | 0.941 | 0.989 | 1.103 | 0.961 (0.897 to 1.029) |
-| 9 to 16 | 8 of 8 | 0.844 | 0.877 | 0.939 | 0.830 (0.768 to 0.896) |
-| All 16 | 14 of 16 | 0.896 | 0.940 | 1.103 | 0.893 (0.841 to 0.949) |
+Each flag is recorded in the result file. The exact fields, limits and refusals are in
+[docs/harness-internals.md](docs/harness-internals.md#run-options-in-detail).
 
-Every E session made 1 to 5 batch reads, and 40 of 41 were served (one
-`invalid_arguments`). E made 238 Reads to B's 423, and 390 requests to B's 424.
-Main-agent turns were 7 in every session, and every session completed. B found 8 of 9
-facts in every round. E found 8 of 9 in 15 rounds and 7 in one, round 10. Both arms always
-missed `_SESSION_AUDIT_FORMAT`.
+**Reading a round line.** Watch these to spot an unfair pair:
 
-### Connect's client-tool switches
+- `start <read> read / <written> written`: what each agent's first request read from and
+  wrote to the cache. A large gap between the arms is a cold start, not the work.
+- `N subagents · M sub-req (M/N per agent) · K main-req`: the subagent load.
+- `OUTSIDE CHECKOUT`: the session touched files outside its checkout. Another copy of the
+  repo on the machine is the usual cause: remove it.
 
-`--client-tool-policy name=true|false` (repeatable) sets one of anyray-connect's local
-switches for what its MCP server advertises, in the Anyray arm's connect profile
-(`clientToolPolicies`), after connect has configured the arm. For example
-`--client-tool-policy readBatchRanges=true` offers the ranged batch read. The switches
-used are recorded in the arm's setup.
+## Gateway setup
 
-### Keeping the pair like for like
+### Use a dedicated tenant
 
-- `--warm-up` runs a throwaway one-turn session with each arm's exact setup before the
-  timed one, so both arms start with their stable prefix already in the provider's cache.
-  Without it, an arm whose setup changed since the previous run starts cold while the
-  other reads a prefix that run left warm. The warm-up's cost is recorded on the session
-  (`warmUp.costUsd`) and never added to the session's cost.
-- Each round line shows `start <read> read / <written> written`: what the first request of
-  each agent (main and subagents) read from the cache and wrote to it. A large difference
-  between the arms is a cold start, not the work.
-- `--claude-bin <abs path>` (or `ANYRAY_CLAUDE_BIN=<abs path>`; the flag wins) pins the
-  Claude Code binary both arms spawn, for the task session and the warm-up: a `claude`
-  executable (for example `~/.local/share/claude/versions/2.1.286`, which is the binary
-  itself), or a directory holding one. The path must exist and be executable.
-  Without it `claude` comes from PATH, and Claude Code's auto-update can move it between
-  rounds, which changes how the sessions split work into subagents (requests per
-  subagent) without the harness saying so. The run header line ends with the version in
-  use (`· Claude Code 2.1.286 pinned by --claude-bin: …`), each arm's setup records it
-  (`client`, `claudeVersion`, `claudeBinSource`; never the path), each round records the
-  version its sessions ran, and the end-of-run summary lists the versions per arm with a
-  warning when they were mixed.
-- Each round line shows each arm's subagent load, `N subagents · M sub-req (M/N per
-  agent) · K main-req`, and the end-of-run summary pools it per arm (`subagentLoad` in the
-  result file, with `requestsPerSubagent` for A and B).
-- A session that reads, searches or `cd`s outside its own checkout is flagged
-  `OUTSIDE CHECKOUT` with a count (`outsideCheckout` on the session). Another copy of the
-  scenario's repo elsewhere on the machine is the usual cause: remove it.
-- Gateway rewrites that stood aside are counted by the reason their result header names
-  (`budgetNoticeReasons`, `toolDeferReasons` on the session, and in brackets on the round
-  line). A not-applied result with no reason is counted `unnamed`.
-- Citations: a path from the repository root resolves exactly; a path that names exactly
-  one file by its tail also resolves and is counted apart (`bySuffix`); a tail that names
-  several files is `ambiguous` and stays unresolved.
+> [!IMPORTANT]
+> The gateway keeps regret-guard verdicts, cooloffs and holdouts per tenant, and the
+> tenant comes from the client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose tenant
+> only benchmarks use, and `ANYRAY_BENCH_TENANT` to its id. Without it the run warns and
+> uses the shared `default` tenant. A separate tenant needs a multi-tenant gateway
+> (`ANYRAY_MULTI_TENANT=true`).
 
-### Choosing a Claude Code integration level
+### Turn strategies on for benchmark traffic only
 
-`--integration-level gateway|gateway_hooks|gateway_hooks_mcp` assigns that level to the
-benchmark key before the first round and restores its previous assignment after the
-run, including a failed run or Ctrl-C. It is available with `--compare anyray` and
-`--compare gateway`. Leave it unset to keep the current behavior. `--read-trim` needs
-`gateway_hooks_mcp`, because the lower levels have no retrieval tool. The requested
-level is recorded in the result, and each Anyray arm must report the same applied
-level and pass the matching hooks, MCP, permission, skill, and session checks.
+```bash
+npm run bench-rule -- show           # what is on and off, and what the regret guard suppresses now
+npm run bench-rule -- enable [kind…] # default: every strategy that is off
+npm run bench-rule -- only <kind…>   # just these on, every other strategy off
+                                     # either takes --params '{"<kind>":{…}}'
+npm run bench-rule -- per-experiment <kind…>  # one rule per kind, picked with --strategy <kind>
+npm run bench-rule -- remove                  # removes what enable, only and per-experiment added
+npm run bench-rule -- params <experiment> --params '{"<kind>":{…}}'  # params for one experiment tag
+npm run bench-rule -- remove-params <experiment>                    # removes exactly that rule
+```
 
-Use a Connect build that reports `appliedIntegrationLevel` in `status --json`:
+- Every rule matches `metadata.tool == "anyray-bench"`, which only this harness sends, so
+  other traffic keeps its config.
+- The config before the change is saved to `results/optimizer-config.before.json`.
+- `params` writes are revision-checked: a concurrent edit is retried, never overwritten.
+  Param names are checked against the deployed optimizer, since a misspelt one does nothing.
+- Gateways in `config.yaml` `run.blocked_gateways` are refused.
+
+### Pick a Claude Code integration level
 
 ```bash
 ANYRAY_CONNECT_BIN=/absolute/path/to/anyray-connect npm run agent -- \
@@ -615,209 +472,30 @@ npm run bench-level -- set gateway
 npm run bench-level -- clear
 ```
 
-The override is used for enrollment, status, and fallback MCP commands; results
-record only its basename. See [Pinned Connect builds](#pinned-connect-builds) for how
-the harness makes sure the arm runs that build. `bench-level` uses `ANYRAY_GATEWAY_URL`,
-`ANYRAY_ADMIN_KEY`, and `ANYRAY_BENCH_CLIENT_KEY` (or `ANYRAY_CLIENT_KEY`). It
-backs up the prior assignment under ignored `results/` and sends revision-checked
-team-policy writes that preserve the skills list and other policy fields. For a
-service key pass `--agent <id>` (the key's policy ID); for a user seat pass
-`--user <id>`. `ANYRAY_BENCH_AGENT_ID` / `ANYRAY_BENCH_USER_ID` set the same for
-`run_agent.mjs`. The tool never reads any key's secret.
+`--integration-level gateway|gateway_hooks|gateway_hooks_mcp` sets the level on the
+benchmark key for the run and restores it afterwards, even on Ctrl-C. `--read-trim` needs
+`gateway_hooks_mcp`. For a service key pass `--agent <id>`; for a user seat `--user <id>`.
 
-### Is the Anyray arm connected correctly?
+### Connect checks and pinned builds
 
-The Anyray arm is set up by `anyray-connect` in a private HOME, and every round checks
-the result twice (`lib/connectChecks.mjs`), recording both lists in the arm's setup
-(`connectChecks`, `sessionChecks`) and printing how many passed:
+Every round checks that `anyray-connect` set up the Anyray arm correctly: what it wrote
+before the session, and what the session loaded. A failed required check fails the round
+instead of measuring a half-connected client.
 
-- **What connect wrote**, before the session starts: `ANTHROPIC_BASE_URL` is the gateway,
-  no direct-cloud switch is set, the metadata header is there, the auth matches the lane
-  (subscription: passthrough headers and no auth token; org: the gateway key as the auth
-  token and no provider pin). Hooks, the `anyray` MCP server, its tool permission and
-  the `anyray` skill are checked against the requested integration level.
-- **What the session loaded**, from Claude Code's init event: the `anyray` MCP server
-  and retrieve tool are present at `gateway_hooks_mcp` and absent at lower levels.
-
-A failed required check fails the round instead of measuring a half-connected client.
-Advisory checks (tool search setting, connectors MCP) are reported only.
-
-### Pinned Connect builds
-
-`ANYRAY_CONNECT_BIN=<abs path>` (every Anyray arm) and `--connect-bin-b <abs path>` (arm B
-of `--compare gateway`) pin the anyray-connect build an arm runs. If the Connect desktop
-app is installed, connect hands its setup to the app. The arm's launcher
-(`<HOME>/.anyray/bin/anyray-connect`) then links to the app's binary. Hooks and the MCP
-server would run the app's build even though every command is still named
-`anyray-connect`. Two things stop that:
-
-- Before connect runs, every arm of a run with a pinned build gets a profile with
-  `{"trayAppPath": "/nonexistent/Anyray Connect.app"}` at `.anyray/connect.json`. connect
-  then does the setup itself. With `--connect-bin-b`, arm A gets the same profile. Your
-  own `--seed-home .anyray/connect.json=<file>` replaces it. The arm's `setup.seedHome`
-  records it with `by: "harness: …"`.
-- A check follows each hook, MCP server and `apiKeyHelper` command to the file it runs,
-  symlinks included. It compares that file to the pinned build by real path, or by
-  content for a copy. A different build fails the arm's setup before the session. The
-  same check runs again after the session (`session: …`) and fails the round if a refresh
-  re-pointed the launcher. Details name sha256 prefixes and an app bundle name, never an
-  absolute path. Without a pinned build the check is reported only.
-
-`--arm-env b:KEY=-` removes a key connect wrote. connect re-applies its configuration
-when its MCP server starts, which would write the key straight back, so such a session
-runs with connect's refresh off, and the round fails if the key is back in the arm's
-settings afterwards.
-
-### Other run options
-
-- `--max-turns N`: both arms' turn cap instead of the scenario's `maxTurns`. Recorded in
-  each arm's setup (`maxTurns`, `maxTurnsSource: "--max-turns"`). Below 80, anyray-connect
-  turns off its main-agent read hint and Explore-subagent decline (it reads the cap off the
-  Claude Code process), so the Anyray arm runs without what a production session (no cap)
-  gets. The run warns, and the result records `connectWorkMode: "off_turn_cap"`. Every
-  Claude Code scenario is capped at 80 for that reason; results recorded before 2026-10-12
-  ran at 20 to 40 turns, with the mode off.
-- `--claude-bin <abs path>` / `ANYRAY_CLAUDE_BIN`: the Claude Code binary both arms spawn
-  (see "Keeping the pair like for like"). Recorded in `request.claudeBin` (`source`,
-  `version`) when pinned, and in each arm's setup as `claudeVersion` / `claudeBinSource`.
-- `--timeout-min N`: both arms' wall-clock session cap instead of the scenario's
-  `timeoutMin`. Use it when a slower model or route cannot finish inside the scenario's
-  cap (Opus 5.5 on Bedrock runs past `pyrepo-docs`'s 10 minutes). Recorded in
-  `request.timeoutMin`.
-- `--no-subagents`: both arms run Claude Code with `--disallowed-tools Task Workflow`, so
-  neither can spawn subagents. Recorded in the result's `request.noSubagents`.
-- `--mcp-catalog N`: both arms also run a stub MCP server (`tools/mcp-catalog-server.mjs`)
-  that lists N synthetic tools of about 2,085 chars each, never needed by the task. It is
-  catalog weight: 200 is the shape of a seat with many connectors (~417k chars of MCP
-  schema). Pair it with `--arm-env ENABLE_TOOL_SEARCH=false` to keep Claude Code's own
-  tool search off, so the gateway sees the whole catalog. Recorded in `request.mcpCatalog`.
-- `--experiment <name>` (`--compare anyray`): the Anyray arm sends `experiment=<name>` in
-  `x-anyray-metadata`, so a gateway rule matching that experiment applies to this run
-  only. Unlike `--strategy` it does not imply a kind or an isolation check; the two can't
-  be combined. Recorded in `request.experiment`.
-- `--experiment-b <name>` (`--compare gateway`): arm B alone sends `experiment=<name>`; A
-  keeps `--experiment` if given, else no tag. For a treatment that is a gateway rule (see
-  `bench-rule params`). Recorded in `request.experimentB`.
-- `--redraw-holdout N`: restart a pair when the gateway drew either session into a holdout
-  (see the gateway comparison above). Stopped attempts are not in the round's cost.
-- Sessions keep their Claude Code transcript (both arms), as Claude Code does outside the bench,
-  so connect hooks that read it (the digest cost gate's usage, read trim, retrieval proof) see
-  one. Transcripts in the real HOME are removed after the session. `--no-persist-session` runs
-  both arms with `--no-session-persistence`, as every run before 2026-10-12 did; each result
-  records `request.persistSession` (absent in older files, which did not persist).
-- `--retry-invalid N`: when a round would be dropped from the verdict (an arm not solved, a
-  failed round, a file outside the checkout, a gateway restart), run another round in its
-  place, up to N extra rounds in all. The dropped round stays in the result file and the
-  verdict; `retries` lists each one and the round that replaced it. Use it with `--rounds 1`
-  to end a quick test with one usable pair.
-- `--kinds-b <k1,k2>` (`--compare gateway`): arm B requests these kinds instead of `--kinds`,
-  so the pair isolates one strategy (e.g. the shipped defaults vs the defaults plus one
-  default-off kind). Recorded in `request.kindsB` and in each arm's `optimizationKinds`.
-- `--read-trim-b` (`--compare gateway`): connect's nested-Read trim on arm B only, so the
-  pair isolates it. Needs `--integration-level gateway_hooks_mcp` when a level is set.
-  Recorded in `request.readTrimB`.
-- `--hook-posture-b <name>=<on|off>` (`--compare gateway`, repeatable): pin one of connect's
-  team-policy hook switches (`fleetHookPolicy.<name>`) on arm B only, the same way
-  `--read-trim-b` pins `readTrim`. For example `--hook-posture-b logRead=on`.
-  `--hook-posture <name>=<on|off>` pins it on every Anyray arm. `--read-trim-b` is
-  `--hook-posture-b readTrim=on`, and `--read-trim` is `--hook-posture readTrim=on`.
-  - The pinned arm's hooks read a private copy of connect's profile with key refresh off,
-    so policy sync cannot rewrite it. With a switch on, session persistence is on too, so
-    the hook can read the transcript.
-  - After each round the harness reads the profile back. If a pinned switch changed or
-    disappeared, the round fails.
-  - A switch set both on and off for one arm is refused, and so is naming the same switch
-    in both flags. `--integration-level gateway` and `--bare` install no hooks, so they
-    refuse it too.
-  - A keeps the team posture for that switch (the result's `anyray.connectPolicy.hooks`).
-    The harness does not know which switches your connect build reads, so a name it does
-    not know changes nothing.
-  - Recorded in `request.hookPostureB` / `request.hookPosture`, each arm's
-    `setup.hookPosture`, the session's `hookPosture` (`set`, `pinned`, `atEnd`), and the
-    round line's arm label (`anyray + hook:logRead`, or `hook:logRead=off`).
-- `--seed-home <path>=<absolute file>` (repeatable): copy a file into every Anyray arm's
-  private HOME before anyray-connect configures it. Use it to give the arm local evidence
-  a fresh HOME lacks, such as `.anyray/hook-digest-routers.json` for the digest cost gate
-  (`hooks.digestEconomics`). Under `--compare gateway` both arms get the same files, so it
-  is never the treatment.
-  - `<path>` is relative to the HOME and must stay inside it. Needs an anyray-connect arm:
-    `--compare control` and `--bare` refuse it, and so does an arm connect could not
-    configure.
-  - Recorded as each file's HOME path and a sha256 prefix (`request.seedHome`,
-    `setup.seedHome`), never the source path or the file. Keep a seeded run apart with
-    `--label`.
-  - After each session the arm records the gate's counts as connect left them:
-    `setup.activity.hookDigestRouters` (router, version, emits, read-backs) and
-    `setup.activity.hookTeeDigest`. `setup.activity.hookHints.truncatedTestRun` counts the
-    truncated-test-run hints connect added, by wording: `first_10k` (the original) and
-    `head_tail` (the wording `hooks.shellRewrite` turns on, ANY-995).
-- `ANYRAY_BENCH_EXTRA_HEADERS`: extra gateway headers for the Anyray arm, one
-  `name: value` per line. The harness's own headers (key, metadata, provider, auth mode,
-  kinds) can't be overridden. Only the header names are recorded (`request.extraHeaders`,
-  and which slots sent them in `request.extraHeadersOn`). Under `--compare gateway` they go
-  to B only.
-- `ANYRAY_BENCH_SHARED_HEADERS`: the same format, sent on every Anyray arm: a setting both
-  arms must share, such as `x-anyray-tool-defer: off` where the dev org's default differs
-  from production. Never the treatment, so a header named in both lists is an error. The
-  names are recorded in `request.sharedHeaders`.
-- `--arm-env b:DISABLE_PROMPT_CACHING=1` (`--compare anyray`): the Anyray arm's Claude Code
-  sends no `cache_control` markers of its own, leaving prompt caching to the gateway.
-
-### Keeping benchmark traffic in its own tenant
-
-The gateway keeps regret-guard verdicts, session cooloffs and holdouts per tenant, and a
-request's tenant comes from its client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose
-tenant only benchmarks use, and `ANYRAY_BENCH_TENANT` to that tenant's id. The Anyray
-arm (harness- or connect-configured) then uses it instead of `ANYRAY_CLIENT_KEY`, and
-the result records `tenant: { tenant, keyVar, dedicated }` (never the key). Without it
-the run warns and records the shared `default` tenant. A separate tenant needs a
-multi-tenant gateway (`ANYRAY_MULTI_TENANT=true`, tenants and keys from the control
-plane): on a single-tenant deployment every key is in `default`.
-
-### Turning strategies on for benchmark traffic only
-
-```bash
-npm run bench-rule -- show           # what the gateway has on and off, and what its regret guard suppresses now
-npm run bench-rule -- enable [kind…] # default: every strategy that is off
-npm run bench-rule -- only <kind…>   # just these on, every other strategy off
-                                     # either takes --params '{"<kind>":{…}}'
-npm run bench-rule -- per-experiment <kind…>  # one rule per kind, selected per session
-npm run bench-rule -- remove
-npm run bench-rule -- params <experiment> --params '{"<kind>":{…}}'  # params for one experiment tag
-npm run bench-rule -- remove-params <experiment>                    # removes exactly that rule
-```
-
-`per-experiment` adds one rule per strategy. A rule matches `tool == "anyray-bench"` and
-`experiment == <kind>`, turns that strategy on and every other one off. Pick the strategy
-for a run with `npm run agent -- --scenario <name> --strategy <kind>`: the Anyray arm
-sends `experiment=<kind>` in `x-anyray-metadata`, and each round records whether any
-other strategy acted (`isolation.ok`). `remove` deletes every rule `enable`, `only` and
-`per-experiment` added.
-
-`params <experiment>` adds one rule that matches `tool == "anyray-bench"` and
-`experiment == <experiment>` and carries strategy params only: it turns nothing on or off,
-so a session with that tag runs the strategies it would have run anyway, with those
-params. Param names are checked against the strategies the deployed optimizer lists, since
-a misspelt one is accepted and then does nothing. The optimizer config is one document
-that other people edit too, so `params` and `remove-params` re-read it right before
-writing, send the revision they read (a concurrent change is refused and retried, never
-overwritten), and read it back to confirm every other rule is unchanged. `remove` and
-`per-experiment` do not touch these rules.
-
-This adds one override rule to the gateway's optimizer config. The rule matches
-`metadata.tool == "anyray-bench"`, which only this harness sends, so other traffic on
-the gateway keeps its config. The config as it was before the change is saved to
-`results/optimizer-config.before.json`. Gateways listed in `config.yaml`
-`run.blocked_gateways` are refused by both the runner and this tool.
+`ANYRAY_CONNECT_BIN=<abs path>` (every Anyray arm) and `--connect-bin-b <abs path>` (B
+only) pin the Connect build an arm runs. The harness makes sure an installed Connect
+desktop app cannot take over, and fails the round if a different build ran. Details:
+[docs/harness-internals.md](docs/harness-internals.md#connect-checks).
 
 ## The replay suite (secondary)
 
 `run.mjs` sends 38 fixed payloads (`<suite>/payloads/*.json`) once directly and once
-through the gateway, and compares the billed tokens, cost and a judge's view of the two
-answers. It is a quick way to check that a gateway change does something on a known
-request shape. It is **not** evidence of savings:
+through the gateway, and compares billed tokens, cost and a judge's view of the two
+answers. It is a quick check that a gateway change does something on a known request
+shape. It is **not** evidence of savings:
+
 - **Payload design:** each payload was built around a pattern the optimizer targets.
-- **No caching:** nothing is ever served from cache, so every trimmed token counts at full price.
+- **No caching:** nothing is served from cache, so every trimmed token counts at full price.
 - **Single requests:** there are no turns, subagents or cache writes to pay for.
 
 ```bash
@@ -829,10 +507,9 @@ npm run replay:report                              # → RESULTS.md (local)
 ## On your own traffic
 
 The scenarios here are ours, not yours. [`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator)
-points at your own gateway with a client key, sends each of your own captured prompts
-twice (once with `x-anyray-optimize: off`, once the ordinary way) and reports the
-input-token delta from your provider's `usage` field, plus whether the facts you marked
-as required survive. Its results stay with you and are never committed anywhere.
+sends each of your own captured prompts to your gateway twice (once with
+`x-anyray-optimize: off`) and reports the input-token delta and whether the facts you
+marked as required survive. Its results stay with you.
 
 ## Layout
 
@@ -855,4 +532,5 @@ lib/cost.mjs          price usage, incl. cache reads and 5-minute/1-hour writes
 config.yaml           model, pricing, blocked gateways, replay workload list
 run.mjs · report.mjs · show.mjs · lib/client.mjs · lib/judge.mjs · lib/toAnthropic.mjs
                       the replay suite
+docs/harness-internals.md  what each harness check does and records
 ```
