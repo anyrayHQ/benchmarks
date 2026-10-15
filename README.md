@@ -72,16 +72,17 @@ in 17 of 18 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but nam
   the agent read more code than this mostly-web task needs. With the hint off it ran
   0.89× over 4 rounds.
 
-> [!NOTE]
-> - `gin-doc-audit` and `pyrepo-long-session` have two counted rounds. In the other rounds
->   the direct arm wrote scratch files to `/tmp`, outside its checkout, which the harness
->   excludes on purpose. Every round of both, counted or not, was cheaper through Anyray.
-> - Quality misses: the Anyray arm once fell just under the citation bar on
->   `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
->   files). The direct arm missed twice (one `sdk-docs` round with no answer, one
->   `pyrepo-long-session` round with ambiguous `lazy.py` citations).
-> - Three rounds per scenario give a median, not a confidence interval. The
->   [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario.
+**Notes**
+
+- `gin-doc-audit` and `pyrepo-long-session` have two counted rounds. In the other rounds
+  the direct arm wrote scratch files to `/tmp`, outside its checkout, which the harness
+  excludes on purpose. Every round of both, counted or not, was cheaper through Anyray.
+- Quality misses: the Anyray arm once fell just under the citation bar on
+  `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
+  files). The direct arm missed twice (one `sdk-docs` round with no answer, one
+  `pyrepo-long-session` round with ambiguous `lazy.py` citations).
+- Three rounds per scenario give a median, not a confidence interval. The
+  [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario.
 
 ### Agent SDK app: arm E against arm B (2026-10-13)
 
@@ -223,11 +224,10 @@ npm run agent -- --scenario pyrepo-long-session --compare gateway \
 npm run bench-rule -- remove-params my-exp-b
 ```
 
-> [!WARNING]
-> A gateway may hold one strategy out of a session as its own control, drawn per session.
-> A round whose arms got different holdouts compared two strategy sets and prints a
-> warning. `--redraw-holdout N` restarts such a pair with fresh sessions, up to N times.
-> Name every kind the gateway may hold out in `--kinds`.
+A gateway may hold one strategy out of a session as its own control, drawn per session.
+A round whose arms got different holdouts compared two strategy sets and prints a
+warning. `--redraw-holdout N` restarts such a pair with fresh sessions, up to N times.
+Name every kind the gateway may hold out in `--kinds`.
 
 ## Scenarios
 
@@ -263,11 +263,10 @@ has answered and has been idle for 30 seconds; wall time runs to the final answe
 | `hidePatch: true` | Re-imports the patched checkout as one commit, so `git diff` and `git log` cannot find the bug |
 | `gatewaySettleSec` | Wait after the session before reading the Anyray arm's ping cost |
 
-> [!WARNING]
-> A session gets the Claude seat's access token once and cannot refresh it. A scenario
-> with pauses refuses to start when the token expires before the pauses end (plus 15
-> minutes). Start again after Claude Code renews it, or set `ANYRAY_UPSTREAM_TOKEN` to a
-> long-lived token (`claude setup-token`).
+A session gets the Claude seat's access token once and cannot refresh it. A scenario
+with pauses refuses to start when the token expires before the pauses end (plus 15
+minutes). Start again after Claude Code renews it, or set `ANYRAY_UPSTREAM_TOKEN` to a
+long-lived token (`claude setup-token`).
 
 `npm run cold-turns -- results/agent/<file>.json` reads a pause-scenario round back: cost,
 cache breaks and strategy actions for each turn after a long pause, and anything that
