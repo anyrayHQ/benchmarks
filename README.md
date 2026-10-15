@@ -7,7 +7,7 @@ Does putting Anyray on a real agent's request path make the session cheaper, wit
 making the result worse? This repo measures it the way a customer's bill would, against
 Anyray's Rule 0: **a session must never cost more because of us.**
 
-**Contents:** [Latest results](#latest-results-2026-10-11) ·
+**Contents:** [Latest results](#latest-results-2026-10-15) ·
 [Running it](#running-it) · [How a round works](#how-a-round-works) ·
 [Reading the verdict](#reading-the-verdict) · [Comparison modes](#comparison-modes) ·
 [Scenarios](#scenarios) · [Other lanes](#other-lanes) · [Run options](#run-options) ·
@@ -17,72 +17,82 @@ Anyray's Rule 0: **a session must never cost more because of us.**
 Harness internals (what each check does and which fields it records) are in
 [docs/harness-internals.md](docs/harness-internals.md).
 
-## Latest results (2026-10-11)
+## Latest results (2026-10-15)
 
-18 scenarios across three kinds of agent client. Each is a paired run: the same agent and
-task straight to Amazon Bedrock, and through a development build of the Anyray gateway,
-on Claude Sonnet 5. Every scenario ran three rounds, with a re-run when a pair was not
-usable. A round counts only when both arms solved the task.
+16 scenarios across three kinds of agent client, each a paired run: the same agent and
+task straight to Amazon Bedrock, and through a development build of the Anyray gateway
+with its nine default strategies, on Claude Sonnet 5 (Claude Code 2.1.296 on both arms).
+One round per scenario, with a re-run when a pair was not usable. A round counts only
+when both arms solved the task and neither wrote outside its checkout.
 
-Over 52 counted rounds the direct sessions cost **$41.24** and the same sessions through
-Anyray **$19.90 (0.48×)**. Anyray was cheaper in 48 rounds, and below 1.0× on the median
-in 17 of 18 scenarios, one of them (`cobra-pause`, 0.998×) a tie in all but name.
+Over 15 counted pairs the direct sessions cost **$12.47** and the same sessions through
+Anyray **$5.65 (0.45×)**. Anyray was cheaper in 13 of them; the median scenario ran 0.52×.
 
-| Scenario | Client | Rounds won | Direct (median) | Anyray (median) | Ratio (median) |
-|---|---|---|---|---|---|
-| `sdk-docs` | SDK tool loop | 3/3 | $1.466 | $0.341 | 0.21× |
-| `cobra-flag-groups`, 200-tool MCP seat | Claude Code | 3/3 | $0.186 | $0.039 | 0.21× |
-| `framework-docs` | Agent-framework graph agent | 3/3 | $1.500 | $0.378 | 0.25× |
-| `cobra-dispatch`, 200-tool MCP seat | Claude Code | 3/3 | $0.338 | $0.083 | 0.26× |
-| `pyrepo-pillar-docs` | Claude Code | 3/3 | $1.667 | $0.708 | 0.35× |
-| `pyrepo-state-docs` | Claude Code | 3/3 | $2.081 | $0.662 | 0.35× |
-| `gin-long-session` | Claude Code | 3/3 | $0.870 | $0.462 | 0.53× |
-| `gin-test-triage` | Claude Code | 3/3 | $0.357 | $0.183 | 0.55× |
-| `pyrepo-docs` | Claude Code | 3/3 | $1.347 | $0.738 | 0.55× |
-| `pyrepo-long-session` | Claude Code | 2/2 | $1.838 | $1.290 | 0.70× |
-| `cobra-dispatch` | Claude Code | 3/3 | $0.106 | $0.094 | 0.73× |
-| `cobra-3pause` | Claude Code | 3/3 | $0.670 | $0.496 | 0.74× |
-| `gin-doc-audit` | Claude Code | 2/2 | $1.819 | $1.313 | 0.75× |
-| `cobra-flag-groups` | Claude Code | 2/3 | $0.050 | $0.040 | 0.79× |
-| `cobra-walkaway` | Claude Code | 3/3 | $0.096 | $0.078 | 0.87× |
-| `pyrepo-loader` | Claude Code | 3/3 | $0.216 | $0.182 | 0.91× |
-| `cobra-pause` | Claude Code | 2/3 | $0.215 | $0.194 | 1.00× |
-| `cobra-web-flags` | Claude Code | 1/3 | $0.112 | $0.112 | 1.01× |
+| Scenario | Client | Direct | Anyray | Ratio |
+|---|---|---|---|---|
+| `cobra-flag-groups`, 200-tool MCP seat | Claude Code | $0.187 | $0.039 | 0.21× |
+| `pyrepo-pillar-docs` | Claude Code | $2.192 | $0.532 | 0.24× |
+| `cobra-dispatch`, 200-tool MCP seat | Claude Code | $0.300 | $0.076 | 0.25× |
+| `sdk-docs` | SDK tool loop | $1.546 | $0.418 | 0.27× |
+| `framework-docs` | Agent-framework graph agent | $1.244 | $0.436 | 0.35× |
+| `pyrepo-docs` | Claude Code | $2.235 | $0.789 | 0.35× |
+| `gin-test-triage` | Claude Code | $0.418 | $0.150 | 0.36× |
+| `pyrepo-state-docs` | Claude Code | $1.647 | $0.853 | 0.52× |
+| `gin-long-session` | Claude Code | $0.874 | $0.553 | 0.63× |
+| `cobra-pause` | Claude Code | $0.278 | $0.210 | 0.76× |
+| `cobra-dispatch` | Claude Code | $0.092 | $0.071 | 0.78× |
+| `pyrepo-loader` | Claude Code | $0.224 | $0.180 | 0.80× |
+| `cobra-flag-groups` | Claude Code | $0.050 | $0.047 | 0.96× |
+| `gin-doc-audit` | Claude Code | $1.092 | $1.147 | 1.05× |
+| `cobra-web-flags` | Claude Code | $0.091 | $0.146 | 1.60× |
+| `pyrepo-long-session` | Claude Code | not counted | | |
 
-**Where the savings come from**
+The previous run (2026-10-11: 18 scenarios, three rounds each, 52 counted rounds) came in
+at 0.48×. One round per scenario is a spot check: a single scenario's ratio moves by 0.2
+or more between runs on the agent's path alone (`pyrepo-docs` 0.55× then, 0.35× now;
+`cobra-web-flags` 1.01× then, 1.60× now).
+
+**Where the difference comes from**
 
 - **Clients that send no cache markers** (`sdk-docs`, `framework-docs`): the gateway
   adds cache breakpoints, so most of each request's input becomes a cache read.
-- **A seat with many MCP tools:** tool deferral keeps the tool schemas out of every
-  request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it still
-  defers about 7k tokens of rarely used tools per request.
-- **Doc and code-trace tasks:** the main agent reads the code itself with ranged batch
-  reads. The direct arms fanned the trace out to 3 to 6 subagents; the Anyray arms to none.
+- **A seat with many MCP tools:** gateway tool deferral keeps the tool schemas out of
+  every request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it
+  still defers about 7k tokens of rarely used tools per request.
+- **Doc and code-trace tasks** (`pyrepo-docs`, `pyrepo-pillar-docs`, `pyrepo-state-docs`):
+  the Anyray arm's main agent reads the code itself with ranged batch reads, in 33 to 39
+  requests and none in subagents; the direct arms made 97 to 130, 83 to 86 of them in the
+  3 to 5 subagents they fanned the trace out to.
 - **Long test output** (`gin-test-triage`, `gin-long-session`): failures are grepped
   instead of read whole, and long command output is folded.
 
-**Where it is close**
+**Where it is close or lost**
 
-- On a task of 4 to 8 requests the built-in saving is a few percent. One optional step
-  (say, reading 25 lines before an edit) moves a session's cost by about 20%, so single
-  rounds land on either side of 1.0×.
-- `cobra-pause` (1.00×): the prompt cache expires during the 6-minute pause, and both
-  arms pay the same re-write.
-- `cobra-web-flags` (1.01×): Connect's read hint, which drives the doc-task savings, makes
-  the agent read more code than this mostly-web task needs. With the hint off it ran
-  0.89× over 4 rounds.
+- On a task of 4 to 8 requests (`cobra-flag-groups`, `cobra-dispatch`, `pyrepo-loader`),
+  Anyray's built-in saving is a few percent, while one optional step changes a session's
+  cost by about 20%, so single rounds land on either side of 1.0×.
+- `gin-doc-audit` (1.05×): in the counted round the direct arm did the audit without
+  subagents and finished at $1.09, against a $1.82 median in the 2026-10-11 run; the
+  Anyray arm's $1.15 is below its own $1.31 median there. The first round (0.43×) was
+  not counted: its direct arm wrote to `/tmp`.
+- `cobra-web-flags` (1.60×): to load the deferred WebFetch tool, the gateway's tool
+  search ran an extra model step inside one request, adding about 9k uncached input
+  tokens ($0.04 of the $0.15). Usually the model calls the deferred tool directly: only
+  one of 82 earlier Anyray sessions of this scenario paid more than 1k uncached input.
 
 **Notes**
 
-- `gin-doc-audit` and `pyrepo-long-session` have two counted rounds. In the other rounds
-  the direct arm wrote scratch files to `/tmp`, outside its checkout, which the harness
-  excludes on purpose. Every round of both, counted or not, was cheaper through Anyray.
-- Quality misses: the Anyray arm once fell just under the citation bar on
-  `pyrepo-state-docs` (9 of 87 citations named a bare `state.py`, which matches two
-  files). The direct arm missed twice (one `sdk-docs` round with no answer, one
-  `pyrepo-long-session` round with ambiguous `lazy.py` citations).
-- Three rounds per scenario give a median, not a confidence interval. The
-  [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario.
+- New in the default set since the 2026-10-11 run: `repeat_factor`, which replaces a long
+  block repeated across tool results or pasted user context with a pointer to its first
+  copy, still in the request. It acted only on the two long sessions. An on/off pair
+  (three rounds of each long session) found it lossless and under 1% of session cost
+  here: it acted in 2 of 6 sessions, each time on one repeated block of about 470 tokens.
+- `pyrepo-long-session` has no counted pair: in both of its rounds the direct arm wrote
+  a scratch file to `/tmp`, outside its checkout, which the harness excludes on purpose.
+  Both were cheaper through Anyray (0.59× and 0.72×).
+- Both arms solved every round. `cobra-3pause` and `cobra-walkaway` were not in this run.
+- The [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario;
+  this run is a one-round check against the last multi-round one.
 
 ### Agent SDK app: arm E against arm B (2026-10-13)
 
