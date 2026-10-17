@@ -197,6 +197,15 @@ never a win. Rounds only one arm solved are listed as quality events. Rounds wit
 crash, a timeout without cost, a gateway restart, or work outside the checkout are
 excluded and listed. Fewer than 3 solved pairs gives `INSUFFICIENT`.
 
+Under `--kinds-b`, both arms send the kinds they differ by in
+`x-anyray-optimization-shadow-kinds`. The gateway runs them on a copy of each request
+and reports whether they would have saved tokens, without changing what it sends. Rule 0
+then scores only **on-shape pairs**, where the kinds would act in both arms' sessions.
+In the other pairs the treatment had nothing to act on, so both arms sent the same bytes
+and the ratio is session noise. The printout lists those rounds as off-shape. If an arm
+got no shadow answer (an older gateway, or a kind that stores content for retrieval and
+can't run in shadow), every solved pair is scored and the printout says why.
+
 Recalculate from existing files, with no model traffic:
 
 ```bash

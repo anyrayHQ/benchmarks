@@ -72,11 +72,12 @@ test('non-inference calls lose the selection headers (the gateway 400s them) and
   try {
     await (await fetch(`${proxy.url}/v1/messages/count_tokens`, {
       method: 'POST',
-      headers: { 'x-anyray-optimization-kinds': 'observation_mask', 'x-anyray-optimization-profile': 'exact', 'x-anyray-api-key': 'ark_fake' },
+      headers: { 'x-anyray-optimization-kinds': 'observation_mask', 'x-anyray-optimization-profile': 'exact', 'x-anyray-optimization-shadow-kinds': 'repeat_factor', 'x-anyray-api-key': 'ark_fake' },
       body: '{}',
     })).text();
     assert.equal(gw.seen[0].headers['x-anyray-optimization-kinds'], undefined);
     assert.equal(gw.seen[0].headers['x-anyray-optimization-profile'], undefined);
+    assert.equal(gw.seen[0].headers['x-anyray-optimization-shadow-kinds'], undefined);
     assert.equal(gw.seen[0].headers['x-anyray-api-key'], 'ark_fake');
     assert.deepEqual(proxy.results, []);
     assert.equal(proxy.stripped, 1);
