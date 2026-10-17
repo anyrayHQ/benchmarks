@@ -136,7 +136,7 @@ import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, 
 import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
-import { parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
+import { SHADOW_HEADER, parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
 import { experimentRules, sameRules, validExperimentName } from './lib/benchRule.mjs';
 import { resolveBenchKey, benchTenantSetup } from './lib/benchKey.mjs';
 import { bedrockOptions, bedrockSmallModel, probeGatewayRoute, assertBedrockRoute, modelMismatch } from './lib/bedrock.mjs';
@@ -541,6 +541,15 @@ const postureOption = (posture) => (Object.entries(posture).some((e) => !isReadT
 /** The kinds a slot requests: `--kinds-b` replaces `--kinds` on slot B. */
 const slotKinds = (args, slot) => (slot === 'b' && args.kindsB ? [args.kindsB, '--kinds-b'] : [args.kinds ?? null, args.kindsSource ?? null]);
 
+/**
+ * Under --kinds-b, the kinds the arms differ by, which both Anyray arms ask the gateway to
+ * evaluate in shadow: the verdict then scores only the pairs where they would act in both.
+ */
+const shadowKindsOf = (args) => {
+  const d = args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null;
+  return d ? [...d.a, ...d.b] : [];
+};
+
 /** How a gateway pair's verdict reads it: the arm under test and, under --kinds-b, the kinds the arms differ by. */
 export const verdictOptions = (args) => ({ treatment: args.treatment ?? 'b', differingKinds: args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null });
 
@@ -559,7 +568,9 @@ export const slotOptions = (args, arms, slot) => ({
   extraHeaders: [
     ...(arms[slot] === 'anyray' ? args.sharedHeaders ?? [] : []),
     ...(carriesExtraHeaders(arms, slot) ? args.extraHeaders ?? [] : []),
+    ...(arms[slot] === 'anyray' && shadowKindsOf(args).length ? [`${SHADOW_HEADER}: ${shadowKindsOf(args).join(',')}`] : []),
   ],
+  ...(arms[slot] === 'anyray' && shadowKindsOf(args).length ? { shadowKinds: shadowKindsOf(args) } : {}),
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
   ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // both slots: the same synthetic catalog on either arm
   provider: args.provider ?? 'anthropic',
@@ -587,6 +598,7 @@ export const requestRecord = (args) => ({
   experiment: args.experiment ?? null,
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
   ...(args.kindsB ? { kindsB: args.kindsB } : {}), // arm B's own kinds
+  ...(shadowKindsOf(args).length ? { shadowKinds: shadowKindsOf(args) } : {}), // evaluated in shadow on both Anyray arms
   ...(args.codexConfigB ? { codexConfigB: Object.fromEntries(args.codexConfigB) } : {}), // arm B's own Codex config
   ...(args.codexHooksB ? { codexHooksB: true } : {}), // arm B alone runs connect's Codex PreToolUse hook
   ...(args.connectBinB ? { connectBinB: args.connectBinBDigest ?? null } : {}), // arm B's connect build (sha256 prefix, never the path)
@@ -893,8 +905,11 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds, treatm
   const p = v.stats;
   const under = treatment === 'a' ? ' · treatment A (ratio A/B)' : '';
   const out = [
-    `\n${scenario} [${compare}] solved pairs ${v.k}/${v.n}: wins ${p.wins}/${v.k}, median ${x2(p.median)}, Q3 ${x2(p.q3)}, max ${x2(p.max)}${under} → ${v.verdict}`,
+    `\n${scenario} [${compare}] ${v.offShapePairs ? `on-shape pairs ${v.k}/${v.solved}` : `solved pairs ${v.k}/${v.n}`}: wins ${p.wins}/${v.k}, median ${x2(p.median)}, Q3 ${x2(p.q3)}, max ${x2(p.max)}${under} → ${v.verdict}`,
   ];
+  if (v.offShapePairs) {
+    out.push(`  on-shape pairs ${v.k}/${v.solved} (${differingNames(differingKinds)} would act in both arms)${v.offShapePairs.length ? `; off-shape, not scored: round(s) ${v.offShapePairs.join(', ')}` : ''}`);
+  } else if (v.shapeNote) out.push(`  ${v.shapeNote}`);
   if (v.treatmentEdits != null) {
     const what = differingKinds ? `${differingNames(differingKinds)} (the kinds A and B differ by) applied` : `treatment ${treatment.toUpperCase()} applied an optimization`;
     out.push(`  ${what} in ${v.treatmentEdits}/${v.k} solved pair(s)${v.idlePairs?.length && v.treatmentEdits ? `; idle in round(s) ${v.idlePairs.join(', ')}` : ''}`);
