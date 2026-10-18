@@ -270,6 +270,14 @@ name and its `readBatch` calls and errors.
   and the round fails if the key is back in the arm's settings afterwards.
 - **`--client-tool-policy`**: written to the Anyray arm's connect profile
   (`clientToolPolicies`) after connect configured it. Recorded in the arm's setup.
+- **`--client-tool-policy-b`**: the same, on arm B alone, layered over `--client-tool-policy`
+  (a switch set by both is refused). Recorded as `request.clientToolPoliciesB`. A switch left
+  unset follows the tenant's policy, so a tenant-on tool is measured with A on the default,
+  B set off, and `--treatment a`. The arms share their kinds, so the verdict counts the
+  treatment as acting only where it made more connect client-tool calls than the control:
+  each session records `readBatchCalls` / `readBatchOk` and `searchContextCalls` /
+  `searchContextOk` (`mcp__anyray__anyray_search_context`, Symbol context), main agent and
+  subagents.
 - **`ANYRAY_BENCH_EXTRA_HEADERS`**: the harness's own headers (key, metadata, provider,
   auth mode, kinds) cannot be overridden. Only names are recorded (`request.extraHeaders`,
   and `request.extraHeadersOn` for the slots).
