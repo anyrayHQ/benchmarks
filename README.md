@@ -261,6 +261,10 @@ Name every kind the gateway may hold out in `--kinds`.
 | `pyrepo-long-session-pause` | a large Python codebase (pinned) | The same five turns with three 7-minute pauses, for arms on 5-minute cache entries (API key, Bedrock): three cold turns in about an hour | Path:line citations resolve |
 | `sdk-docs` | a large Python codebase (pinned) | SDK tool loop without client cache markers, direct Bedrock vs gateway | Path:line citations resolve |
 | `framework-docs` | a large Python codebase (pinned) | The `pyrepo-docs` task run by an agent-framework graph agent, direct Bedrock vs gateway | Path:line citations resolve |
+| `hono-dispatch` | honojs/hono (pinned) | Explain how a request reaches its route handler and middleware (TypeScript) | Key facts in the answer |
+| `vite-transform` | vitejs/vite (pinned) | Explain how the dev server resolves, loads and transforms a module request (TypeScript) | Key facts in the answer |
+| `vite-docs` | vitejs/vite (pinned) | Developer docs: dev server startup, module transform, HMR (TypeScript) | Path:line citations resolve |
+| `commander-fix` | tj/commander.js (pinned) | Fix a planted bug in list options (JavaScript, runs without `npm install`) | `node --test bench-check/list-options.test.js` passes |
 
 Each scenario is `scenarios/<name>/scenario.yaml`, plus a patch for bug-fix tasks. A
 session is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. It ends once it

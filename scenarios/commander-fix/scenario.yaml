@@ -1,0 +1,27 @@
+title: "Bug fix in tj/commander.js — list option values appended to its default"
+# The JavaScript counterpart of cobra-flag-groups: one planted regression in a CommonJS
+# library with no runtime dependencies, so the checkout runs without `npm install`.
+# Pinned at the v14.0.3 release.
+repo:
+  git: https://github.com/tj/commander.js.git
+  ref: 8247364da749736570161e95682b07fc2d72497b
+# bug.patch plants the regression in the library code.
+# check.patch adds bench-check/, the grading tests: plain node:test and node:assert,
+# since the checkout has no node_modules and the repo's own tests need jest.
+patch: [bug.patch, check.patch]
+# Imported as a single commit, so the bug can't be found with git diff/log.
+hidePatch: true
+task: >-
+  A user reports that since the last change, an option that takes a list of values no
+  longer replaces its default when it is given on the command line. With
+  `.option('-t, --tag <tags...>', 'image tags', ['latest'])`, running `app --tag v1 v2`
+  gives `tag: ['latest', 'v1', 'v2']` instead of `['v1', 'v2']`. Find the cause, fix it
+  in the library code (not the tests), and make sure
+  `node --test bench-check/list-options.test.js` passes.
+# Graded by running this in the session's workdir afterwards: exit 0 = solved. Names the
+# file: Node 22 does not expand a bare directory, and a glob that matches nothing passes.
+check: "node --test bench-check/list-options.test.js"
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 6

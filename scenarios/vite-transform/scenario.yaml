@@ -1,0 +1,24 @@
+title: "Codebase question in a large TypeScript codebase — how the dev server serves a module request"
+# The TypeScript counterpart of pyrepo-loader: the answer spans top-level functions and
+# classes in several files under packages/vite/src/node/server/, found by searching names.
+repo:
+  git: https://github.com/vitejs/vite.git
+  ref: 284f6b58d6b511cebdd52ab7731975f385bf3c6b # v7.3.7
+task: >-
+  I'm new to this codebase. Explain how, in dev mode, the dev server serves a browser
+  request for a source module such as `/src/main.ts`: which middleware handles it, how
+  the module id is resolved, loaded and transformed through the plugin pipeline, where
+  the result is cached in the module graph, and which functions are involved, in which
+  files. Cite file names and function names.
+# Graded by the answer containing each of these.
+keyFacts:
+  - "transformMiddleware"
+  - "transform.ts"
+  - "transformRequest"
+  - "pluginContainer"
+  - "resolveId"
+  - "moduleGraph"
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 8
