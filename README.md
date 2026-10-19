@@ -433,6 +433,7 @@ first checks that D's agents really used the batch read in at least half the D s
 | `--read-trim-b` / `--read-trim` | Connect's nested-Read trim on B only / on every Anyray arm |
 | `--hook-posture-b <name>=<on\|off>` / `--hook-posture` | Pin one team-policy hook switch on B only / on every Anyray arm |
 | `--client-tool-policy name=true\|false` | Set a Connect MCP switch in the Anyray arm, e.g. `readBatchRanges=true` |
+| `--client-tool-policy-b name=true\|false` | `gateway` mode: set a Connect MCP switch on B only, e.g. `searchContext=false` (read with `--treatment a`) |
 | `--seed-home <path>=<abs file>` | Copy a file into every Anyray arm's private HOME before Connect configures it |
 | `--arm-env b:KEY=VALUE` / `b:KEY=-` | Set or remove an env var on an arm, e.g. `b:DISABLE_PROMPT_CACHING=1` |
 | `--no-persist-session` | Run both arms without session transcripts, as runs before 2026-10-12 did |

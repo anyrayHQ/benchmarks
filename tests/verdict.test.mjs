@@ -350,3 +350,26 @@ test('parseArgs: --treatment names the arm under test, b by default, and needs -
   assert.throws(() => parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'observation_mask', '--treatment', 'c']), /--treatment must be a or b/);
   assert.throws(() => parseArgs([...base, '--treatment', 'a']), /--treatment a needs --compare gateway/);
 });
+
+test('solvedPairVerdict: a client-tool treatment acts through batch reads the control arm did not make', () => {
+  // --client-tool-policy-b readBatch=false --treatment a: no optimizer edits on either arm,
+  // A batch-reads and B cannot. The edit tally alone would call A idle.
+  const reads = (r, a, b) => ({ ...r, sessions: { a: { totals: { ...r.sessions.a.totals, readBatchCalls: a } }, b: { totals: { ...r.sessions.b.totals, readBatchCalls: b } } } });
+  const rounds = [2, 1.8, 1.9, 2.1, 1.7, 2.2].map((x, i) => reads(tallied(i + 1, x, 0, 0), 19, 0));
+  assert.equal(solvedPairVerdict(rounds, { treatment: 'a' }).verdict, 'INSUFFICIENT', 'without the option, edits decide');
+  const v = solvedPairVerdict(rounds, { treatment: 'a', clientToolTreatment: true });
+  assert.equal(v.treatmentEdits, 6);
+  assert.equal(v.verdict, 'PASS');
+  // The treatment arm read no more than the control: it still did nothing to measure.
+  const idle = rounds.map((r) => reads(r, 0, 0));
+  const w = solvedPairVerdict(idle, { treatment: 'a', clientToolTreatment: true });
+  assert.equal(w.verdict, 'INSUFFICIENT');
+  assert.match(w.reasons[0], /treatment arm A made no connect client-tool call \(batch read, Symbol context search\) the control arm did not/);
+  // Symbol context searches count the same way, and optimizer edits shared by both arms never do.
+  const searches = (r, a, b) => ({ ...r, sessions: { a: { totals: { ...r.sessions.a.totals, searchContextCalls: a } }, b: { totals: { ...r.sessions.b.totals, searchContextCalls: b } } } });
+  const sc = [2, 1.8, 1.9].map((x, i) => searches(tallied(i + 1, 0.9, 3, 3), 4, 0));
+  assert.equal(solvedPairVerdict(sc, { treatment: 'a', clientToolTreatment: true }).treatmentEdits, 3);
+  const editsOnly = sc.map((r) => searches(r, 0, 0));
+  assert.equal(solvedPairVerdict(editsOnly, { treatment: 'a', clientToolTreatment: true }).verdict, 'INSUFFICIENT', 'shared edits are not the treatment');
+  assert.match(formatVerdict({ scenario: 's', compare: 'gateway', rounds, treatment: 'a', clientToolTreatment: true }), /→ PASS/);
+});

@@ -302,6 +302,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--kinds-b') a.kindsB = parseKinds(argv[++i]); // arm B's own kinds (--compare gateway)
     else if (argv[i] === '--connect-bin-b') a.connectBinB = argv[++i] ?? ''; // arm B configured by another anyray-connect build (--compare gateway)
     else if (argv[i] === '--client-tool-policy') a.clientToolPolicies = { ...(a.clientToolPolicies ?? {}), ...parseClientToolPolicy(argv[++i]) }; // name=true|false, repeatable: connect's MCP tool switches on the Anyray arm
+    else if (argv[i] === '--client-tool-policy-b') a.clientToolPoliciesB = { ...(a.clientToolPoliciesB ?? {}), ...parseClientToolPolicy(argv[++i]) }; // the same, on arm B only (--compare gateway)
     else if (argv[i] === '--warm-up') a.warmUp = true; // both arms: a throwaway one-turn session first, so each starts with a warm prefix
     else if (argv[i] === '--no-subagents') a.noSubagents = true; // both arms: --disallowed-tools Task Workflow
     else if (argv[i] === '--mcp-catalog') a.mcpCatalog = parseMcpCatalog(argv[++i]); // both arms: a stub MCP server listing N synthetic tools (catalog weight)
@@ -348,7 +349,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
   if (SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
-    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession !== undefined || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
+    if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.clientToolPoliciesB || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession !== undefined || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
@@ -392,6 +393,11 @@ export function parseArgs(argv, env = process.env) {
     const same = Object.keys(a.hookPostureB).find((name) => Object.hasOwn(a.hookPosture, name)); // same value: both ways is refused above
     if (same) throw new Error(`--hook-posture already sets ${same}=${a.hookPosture[same]} on both arms: use one of --hook-posture and --hook-posture-b`);
   }
+  if (a.clientToolPoliciesB) {
+    if (a.compare !== 'gateway') throw new Error('--client-tool-policy-b needs --compare gateway: it sets arm B of two gateway arms');
+    const same = Object.keys(a.clientToolPoliciesB).find((name) => Object.hasOwn(a.clientToolPolicies ?? {}, name));
+    if (same) throw new Error(`--client-tool-policy already sets ${same}=${a.clientToolPolicies[same]} on both arms: use one of --client-tool-policy and --client-tool-policy-b`);
+  }
   if (pinsHooks && a.integrationLevel === 'gateway') throw new Error("--hook-posture needs connect's hooks: --integration-level gateway installs none");
   // The Anyray arm always names the strategies it measures: the tenant's defaults drift
   // (admin changes, regret-guard verdicts), so a run that inherits them is not reproducible.
@@ -399,7 +405,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.strategy && !a.kinds) [a.kinds, a.kindsSource] = [parseKinds(a.strategy), '--strategy'];
   // --bare measures the seat that changed only its base URL: nothing client-side, nothing optimized.
   if (a.bare && !gateway) throw new Error('--bare needs --compare anyray or gateway');
-  if (a.bare && a.clientToolPolicies) throw new Error('--bare runs without anyray-connect, which is what reads --client-tool-policy');
+  if (a.bare && (a.clientToolPolicies || a.clientToolPoliciesB)) throw new Error('--bare runs without anyray-connect, which is what reads --client-tool-policy');
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
@@ -428,7 +434,7 @@ const CODEX_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
   if (SDK_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs its own SDK agent, not Codex`);
   if (a.provider !== 'anthropic') throw new Error('--client codex runs on the ChatGPT seat: --provider does not apply');
-  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
+  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--client-tool-policy-b', a.clientToolPoliciesB], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
   const used = claudeOnly.filter(([, on]) => on).map(([flag]) => flag);
   if (used.length) throw new Error(`--client codex does not take ${used.join(', ')}: ${used.includes('--max-turns') ? 'Codex has no turn cap (use --timeout-min); ' : ''}those are Claude Code switches`);
   if (a.codexModel !== undefined && !CODEX_MODEL.test(a.codexModel)) throw new Error(`--codex-model takes a model id, got ${JSON.stringify(a.codexModel)}`);
@@ -506,6 +512,7 @@ export const controlArgs = (args) => ({
   experimentB: null,
   kindsB: null,
   readTrimB: false,
+  clientToolPoliciesB: null,
   connectBinB: undefined,
   connectBinBDigest: undefined,
   codexHooksB: false, // a direct arm has no connect hook to run
@@ -538,6 +545,12 @@ const isReadTrimOn = ([name, value]) => name === 'readTrim' && value === 'on';
 /** slotOptions' `hookPosture`: present only when the slot pins more than readTrim=on. */
 const postureOption = (posture) => (Object.entries(posture).some((e) => !isReadTrimOn(e)) ? { hookPosture: posture } : {});
 
+/** A slot's connect client-tool switches: `--client-tool-policy`, then `--client-tool-policy-b` on slot B (parseArgs refused any overlap). */
+const slotClientToolPolicies = (args, slot) => {
+  const own = slot === 'b' ? args.clientToolPoliciesB ?? null : null;
+  return args.clientToolPolicies || own ? { ...(args.clientToolPolicies ?? {}), ...(own ?? {}) } : null;
+};
+
 /** The kinds a slot requests: `--kinds-b` replaces `--kinds` on slot B. */
 const slotKinds = (args, slot) => (slot === 'b' && args.kindsB ? [args.kindsB, '--kinds-b'] : [args.kinds ?? null, args.kindsSource ?? null]);
 
@@ -551,7 +564,11 @@ const shadowKindsOf = (args) => {
 };
 
 /** How a gateway pair's verdict reads it: the arm under test and, under --kinds-b, the kinds the arms differ by. */
-export const verdictOptions = (args) => ({ treatment: args.treatment ?? 'b', differingKinds: args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null });
+export const verdictOptions = (args) => ({
+  treatment: args.treatment ?? 'b',
+  differingKinds: args.kindsB ? kindDifference(slotKinds(args, 'a')[0], args.kindsB) : null,
+  ...(args.clientToolPoliciesB ? { clientToolTreatment: true } : {}), // --client-tool-policy-b: the treatment acts through client-tool calls
+});
 
 /**
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
@@ -576,7 +593,7 @@ export const slotOptions = (args, arms, slot) => ({
   provider: args.provider ?? 'anthropic',
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
-  ...(arms[slot] === 'anyray' && args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
+  ...(arms[slot] === 'anyray' && slotClientToolPolicies(args, slot) ? { clientToolPolicies: slotClientToolPolicies(args, slot) } : {}),
   ...(slot === 'b' && arms[slot] === 'anyray' && args.connectBinB ? { connectBin: args.connectBinB } : {}), // --connect-bin-b
   // --connect-bin-b: A's build (ANYRAY_CONNECT_BIN) is pinned as much as B's, so both arms
   // start from the same no-app profile and must run exactly their build.
@@ -614,6 +631,7 @@ export const requestRecord = (args) => ({
   ...((args.sharedHeaders ?? []).length ? { sharedHeaders: args.sharedHeaders.map((h) => h.slice(0, h.indexOf(':')).trim()) } : {}),
   ...(args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(args.clientToolPolicies ? { clientToolPolicies: args.clientToolPolicies } : {}),
+  ...(args.clientToolPoliciesB ? { clientToolPoliciesB: args.clientToolPoliciesB } : {}), // the switches arm B alone sets
   ...(args.seedHome?.length ? { seedHome: args.seedHome.map(({ path, sha256 }) => ({ path, sha256 })) } : {}), // never the source path
 });
 
@@ -789,7 +807,7 @@ export const whyNot = (reasons) => {
 
 /** Session totals. Claude Code's result record is the billed truth (main + subagents). */
 export function summarize(session, pricing) {
-  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0 };
+  const t = { requests: session.requests.length, subagents: session.subagents.length, toolCalls: 0, hookTrimmed: 0, retrieveCalls: 0, retrieveOk: 0, readBatchCalls: 0, readBatchOk: 0, searchContextCalls: 0, searchContextOk: 0 };
   let mainIn = 0;
   let subIn = 0;
   // Direct sessions break ~0 times; a gateway that edits history unevenly shows up here.
@@ -819,6 +837,14 @@ export function summarize(session, pricing) {
       if (b.name === 'mcp__anyray__anyray_retrieve') {
         t.retrieveCalls++;
         if (b.result && !b.result.isError) t.retrieveOk++;
+      }
+      if (b.name === 'mcp__anyray__anyray_read_batch') {
+        t.readBatchCalls++; // adoption: the tool's description is paid every turn, recovered only here
+        if (b.result && !b.result.isError) t.readBatchOk++;
+      }
+      if (b.name === 'mcp__anyray__anyray_search_context') {
+        t.searchContextCalls++; // Symbol context: identifiers with their complete TS/JS declarations
+        if (b.result && !b.result.isError) t.searchContextOk++;
       }
     }
   }
@@ -860,6 +886,7 @@ export const armLabel = (args, arms, slot) => {
     ...(args.readTrimB ? ['read-trim'] : []),
     ...(args.connectBinB ? ['connect-bin-b'] : []),
     ...Object.entries(args.hookPostureB ?? {}).filter((e) => !isReadTrimOn(e)).map(([k, v]) => (v === 'on' ? `hook:${k}` : `hook:${k}=off`)),
+    ...Object.entries(args.clientToolPoliciesB ?? {}).map(([k, v]) => `policy:${k}=${v}`),
   ] : [];
   return `anyray${treatment.length ? ` + ${treatment.join(' + ')}` : ' (baseline)'}`;
 };
@@ -899,9 +926,9 @@ const BAND_SAYS = {
  * crashes); then, with --with-control, the control's noise band; last, the pre-ANY-733
  * all-rounds line unchanged, so earlier outputs stay comparable.
  */
-export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b', differingKinds = null }) {
+export function formatVerdict({ scenario, compare, rounds, controlRounds, treatment = 'b', differingKinds = null, clientToolTreatment = false }) {
   const kept = rounds.filter((x) => !x.gatewayRestarted);
-  const v = solvedPairVerdict(kept, { treatment, differingKinds });
+  const v = solvedPairVerdict(kept, { treatment, differingKinds, clientToolTreatment });
   const p = v.stats;
   const under = treatment === 'a' ? ' · treatment A (ratio A/B)' : '';
   const out = [
@@ -911,7 +938,7 @@ export function formatVerdict({ scenario, compare, rounds, controlRounds, treatm
     out.push(`  on-shape pairs ${v.k}/${v.solved} (${differingNames(differingKinds)} would act in both arms)${v.offShapePairs.length ? `; off-shape, not scored: round(s) ${v.offShapePairs.join(', ')}` : ''}`);
   } else if (v.shapeNote) out.push(`  ${v.shapeNote}`);
   if (v.treatmentEdits != null) {
-    const what = differingKinds ? `${differingNames(differingKinds)} (the kinds A and B differ by) applied` : `treatment ${treatment.toUpperCase()} applied an optimization`;
+    const what = clientToolTreatment && !differingKinds ? `treatment ${treatment.toUpperCase()} made connect client-tool calls the control arm did not` : differingKinds ? `${differingNames(differingKinds)} (the kinds A and B differ by) applied` : `treatment ${treatment.toUpperCase()} applied an optimization`;
     out.push(`  ${what} in ${v.treatmentEdits}/${v.k} solved pair(s)${v.idlePairs?.length && v.treatmentEdits ? `; idle in round(s) ${v.idlePairs.join(', ')}` : ''}`);
   }
   if (v.insufficient) out.push(`  verdict insufficient: ${v.reasons[0]}`);
@@ -1465,7 +1492,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
   if (args.connectBinB) digestConnectBinB(args);
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length) {
+  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length && !args.clientToolPoliciesB) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;
@@ -1653,7 +1680,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       ` · start ${t.start.read} read / ${t.start.written} written` +
       (t.outsideCheckout ? ` · ${t.outsideCheckout} OUTSIDE CHECKOUT` : '') +
       endNote(t) +
-      (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed` : '') +
+      (arms[slot] === 'anyray' ? ` · ${t.hookTrimmed} hook-trimmed · ${t.readBatchCalls ?? 0} batch reads · ${t.searchContextCalls ?? 0} symbol searches` : '') +
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       whyNot(sessions[slot].budgetNoticeReasons) +
       (sessions[slot].toolDefer && sessions[slot].toolDefer.applied + sessions[slot].toolDefer.notApplied > 0 ? ` · tool defer applied ${sessions[slot].toolDefer.applied}/${Object.values(sessions[slot].toolDefer).reduce((x, y) => x + y, 0)}${whyNot(sessions[slot].toolDeferReasons)}` : '') +
