@@ -1,0 +1,30 @@
+title: "Document a large TypeScript codebase — how the dev server starts, serves a module and pushes HMR"
+# The TypeScript counterpart of pyrepo-docs: docs for a large, unfamiliar TypeScript
+# monorepo, read-heavy, where most of the code is top-level exported functions and classes
+# that an agent finds by searching their names and then reads in full.
+repo:
+  git: https://github.com/vitejs/vite.git
+  ref: 284f6b58d6b511cebdd52ab7731975f385bf3c6b # v7.3.7
+task: >-
+  Write developer documentation for this codebase, for an engineer joining the team.
+  Cover how `vite` (the dev command) starts the dev server, from the CLI through
+  `createServer` to config resolution and plugin setup; how a browser request for a
+  source module is resolved, loaded and transformed through the plugin pipeline and
+  cached in the module graph; and how a file change becomes an HMR update in the
+  browser, from the file watcher through `handleHMRUpdate` and module graph invalidation
+  to the websocket message the client receives. Output the documentation as Markdown in
+  your final answer, with a section per stage, and cite the code for every claim as
+  path:line, with each path written from the repository root
+  (packages/vite/src/node/server/index.ts:120, not index.ts:120).
+# Every claim must cite real code. Solved when at least `min` path:line citations
+# appear and at least `resolveRate` of them resolve to an existing line in the checkout.
+# A path that names exactly one file by its tail (server/hmr.ts for
+# packages/vite/src/node/server/hmr.ts) also resolves; one that names several files
+# (hmr.ts, config.ts, index.ts) does not.
+citations:
+  min: 10
+  resolveRate: 0.9
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 10

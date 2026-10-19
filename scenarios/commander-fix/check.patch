@@ -1,0 +1,71 @@
+diff --git a/bench-check/list-options.test.js b/bench-check/list-options.test.js
+new file mode 100644
+index 0000000..97dfb39
+--- /dev/null
++++ b/bench-check/list-options.test.js
+@@ -0,0 +1,65 @@
++// Checks for options that take a list of values (`<values...>`), in plain node:test so
++// they run without the repo's dev dependencies: `node --test bench-check/list-options.test.js`.
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const { Command, Option } = require('../');
++
++const tagProgram = () =>
++  new Command()
++    .exitOverride()
++    .option('-t, --tag <tags...>', 'image tags', ['latest']);
++
++test('values given on the command line replace the default list', () => {
++  const program = tagProgram();
++  program.parse(['--tag', 'v1', 'v2'], { from: 'user' });
++  assert.deepEqual(program.opts().tag, ['v1', 'v2']);
++});
++
++test('the default list is used when the option is not given', () => {
++  const program = tagProgram();
++  program.parse([], { from: 'user' });
++  assert.deepEqual(program.opts().tag, ['latest']);
++});
++
++test('repeating the option collects the values of every occurrence', () => {
++  const program = tagProgram();
++  program.parse(['--tag', 'v1', '--tag', 'v2', 'v3'], { from: 'user' });
++  assert.deepEqual(program.opts().tag, ['v1', 'v2', 'v3']);
++});
++
++test('a custom parser still starts from the default value', () => {
++  const program = new Command()
++    .exitOverride()
++    .option('-v, --verbose', 'more output', (_, previous) => previous + 1, 0);
++  program.parse(['-v', '-v', '-v'], { from: 'user' });
++  assert.equal(program.opts().verbose, 3);
++});
++
++test('a list option restricted to choices also replaces its default', () => {
++  const program = new Command()
++    .exitOverride()
++    .addOption(
++      new Option('-l, --level <levels...>', 'log levels')
++        .choices(['debug', 'info', 'warn'])
++        .default(['info']),
++    );
++  program.parse(['--level', 'debug', 'warn'], { from: 'user' });
++  assert.deepEqual(program.opts().level, ['debug', 'warn']);
++});
++
++test('a list value from the environment replaces the default', () => {
++  const program = new Command()
++    .exitOverride()
++    .addOption(
++      new Option('-t, --tag <tags...>', 'image tags')
++        .env('BENCH_CHECK_TAGS')
++        .default(['latest']),
++    );
++  process.env.BENCH_CHECK_TAGS = 'v9';
++  try {
++    program.parse([], { from: 'user' });
++  } finally {
++    delete process.env.BENCH_CHECK_TAGS;
++  }
++  assert.deepEqual(program.opts().tag, ['v9']);
++});
