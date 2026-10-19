@@ -902,14 +902,45 @@ export const pingNote = (t) =>
     : t.gatewayPingCount === null ? ' · pings n/a'
     : ` · ${t.gatewayPingCount} pings $${t.gatewayPingCostUsd.toFixed(3)} (client $${t.clientCostUsd?.toFixed(3)})`;
 
+/** The citation rule: at least `min` citations resolve, and at least `resolveRate` of them all. */
+export const citationsPass = (rule, c) => c.resolved >= rule.min && c.resolved / Math.max(1, c.total) >= (rule.resolveRate ?? 0.9);
+
 export function solved(scenario, session) {
   if (scenario.check) return !!session.check?.passed;
-  if (scenario.citations) {
-    const c = session.citations ?? { total: 0, resolved: 0 };
-    return c.resolved >= scenario.citations.min && c.resolved / Math.max(1, c.total) >= (scenario.citations.resolveRate ?? 0.9);
-  }
+  if (scenario.citations) return citationsPass(scenario.citations, session.citations ?? { total: 0, resolved: 0 });
   const text = answerText(session);
   return (scenario.keyFacts ?? []).every((f) => text.includes(f));
+}
+
+/**
+ * A citation-graded session that was not solved but wrote a doc file to its checkout that
+ * would pass the citation rule (lib/agentRun.mjs writtenDocs): `{ path, resolved, total }`
+ * for the passing file with the most resolved citations, else null. Reported only: the
+ * session stays unsolved, since the final answer is what is graded.
+ */
+export function answeredViaFile(scenario, session) {
+  if (scenario.check || !scenario.citations || solved(scenario, session)) return null;
+  const passing = (session.writtenDocs ?? []).filter((d) => d.citations && citationsPass(scenario.citations, d.citations));
+  if (!passing.length) return null;
+  const best = passing.reduce((x, y) => (y.citations.resolved > x.citations.resolved ? y : x));
+  return { path: best.path, resolved: best.citations.resolved, total: best.citations.total };
+}
+
+/**
+ * The round line's written-docs part: the doc file the session wrote (the one it answered
+ * in, else the one with the most resolved citations), and whether it answered via that
+ * file. '' when it wrote none.
+ */
+export function writtenDocsNote(session) {
+  if (session.writtenDocs === null) return session.writtenDocsError ? ' · written docs n/a' : '';
+  const docs = session.writtenDocs ?? [];
+  if (!docs.length) return '';
+  const via = session.answeredViaFile ?? null;
+  const ahead = (x, y) => (y.citations?.resolved ?? -1) - (x.citations?.resolved ?? -1) || y.bytes - x.bytes; // > 0: y ranks first
+  const shown = (via && docs.find((d) => d.path === via.path)) ?? docs.reduce((x, y) => (ahead(x, y) > 0 ? y : x));
+  const what = shown.citations ? `${shown.citations.resolved}/${shown.citations.total} citations` : shown.notGraded ? `${shown.bytes} bytes, not graded` : `${shown.bytes} bytes`;
+  const more = docs.length - 1 + (session.writtenDocsOmitted ?? 0);
+  return ` · wrote ${shown.path} (${what})${more ? ` +${more} more` : ''}${via ? ' · answered via file (not solved)' : ''}`;
 }
 
 const x2 = (v) => (v == null ? 'n/a' : v.toFixed(2));
@@ -1618,6 +1649,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
       gatewaySpend,
     };
+    // A doc the session wrote to a file instead of its answer: reported, never solved.
+    for (const slot of ['a', 'b']) {
+      const via = answeredViaFile(scenario, sessions[slot]);
+      if (via) sessions[slot].answeredViaFile = via;
+    }
     // A model family the arms ran on different models (say Haiku for Claude Code's side
     // calls) is a client difference that would read as a gateway one.
     const modelsDiffer = modelMismatch(sessions.a.totals.models, sessions.b.totals.models);
@@ -1684,7 +1720,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       (sessions[slot].budgetNotice ? ` · notice applied ${sessions[slot].budgetNotice.applied}/${Object.values(sessions[slot].budgetNotice).reduce((x, y) => x + y, 0)}` : '') +
       whyNot(sessions[slot].budgetNoticeReasons) +
       (sessions[slot].toolDefer && sessions[slot].toolDefer.applied + sessions[slot].toolDefer.notApplied > 0 ? ` · tool defer applied ${sessions[slot].toolDefer.applied}/${Object.values(sessions[slot].toolDefer).reduce((x, y) => x + y, 0)}${whyNot(sessions[slot].toolDeferReasons)}` : '') +
-      `${pingNote(t)} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
+      `${pingNote(t)}${writtenDocsNote(sessions[slot])} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +
         `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
