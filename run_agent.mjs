@@ -124,7 +124,7 @@ import { basename, isAbsolute, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome } from './lib/agentRun.mjs';
+import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome, sharedOutsideWrites } from './lib/agentRun.mjs';
 import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults, codexHookSpec, realCodexHookKeys, wrappedCommandEnv, shellRunEnvFor } from './lib/codexAgent.mjs';
 import { checkConnectBinary } from './lib/connectChecks.mjs';
 import { ANYRAY_BIN, CONNECT_BIN_PINNED } from './lib/connectArm.mjs';
@@ -896,6 +896,12 @@ export const endNote = (t) =>
   (t.answeredAtMs != null ? ` · answered at ${Math.round(t.answeredAtMs / 1000)}s` : '') +
   (t.timedOutAfterAnswer ? ` · TIMED OUT after answering (${t.agentsRunningAtEnd} agent(s) still running; no cost)` : t.endReason === 'timeout' ? ' · TIMED OUT' : '');
 
+/** The ratio line's note on a file both arms wrote outside their checkouts: the first, and how many more. */
+export const sharedFileNote = (r) => {
+  const shared = r.sharedOutsideWrites ?? [];
+  return shared.length ? ` · SHARED FILE with the other arm: ${shared[0]}${shared.length > 1 ? ` (+${shared.length - 1})` : ''}` : '';
+};
+
 /** The round line's gateway-ping part: '' for a direct arm, 'n/a' when unreadable. */
 export const pingNote = (t) =>
   t.gatewayPingCount === undefined ? ''
@@ -1636,6 +1642,9 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     }
     // --compare anyray keeps its one-arm shape; gateway records both slots.
     const gatewaySpend = args.compare === 'gateway' ? spend : spend.b ?? null;
+    // A file both arms wrote outside their checkouts (the same /tmp log name, say): running at
+    // once, either can overwrite or read the other's, so the pair is not like for like.
+    const shared = sharedOutsideWrites(sessions.a, sessions.b);
     const r = {
       round,
       runTag: runTags.b,
@@ -1648,6 +1657,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       ...roundRatio(sessions.a, sessions.b),
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
       gatewaySpend,
+      ...(shared.length ? { sharedOutsideWrites: shared } : {}),
     };
     // A doc the session wrote to a file instead of its answer: reported, never solved.
     for (const slot of ['a', 'b']) {
@@ -1723,7 +1733,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       `${pingNote(t)}${writtenDocsNote(sessions[slot])} · ${r.quality[slot] ? 'solved' : 'NOT solved'}${t.resultSubtype && t.resultSubtype !== 'success' ? ` (${t.resultSubtype})` : ''}`;
     log(
       `${line('a', ta)}\n${line('b', tb)}\n` +
-        `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}` +
+        `  round ${round} ratio B/A ${r.ratio?.toFixed(3)}${sharedFileNote(r)}` +
         (r.heldOut && viaGateway.some((slot) => r.heldOut[slot].length) ? `\n  round ${round} held out by the gateway's session gate: ${viaGateway.map((slot) => `${slot.toUpperCase()} ${r.heldOut[slot].join(', ') || 'none'}`).join(' · ')}` : '') +
         (r.optimizationA ? `\n  round ${round} A ${formatKindTally(r.optimizationA)}` : '') +
         (r.optimization ? `\n  round ${round} ${args.compare === 'gateway' ? 'B ' : ''}${formatKindTally(r.optimization)}` : '') +
@@ -1739,9 +1749,10 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   };
 
   // --retry-invalid N: a round the verdict would drop (exclusionReasons: not solved, failed,
-  // outside the checkout, a gateway restart) runs again under the next free number, at most
-  // N extra rounds in all, so a one-round test still ends with a usable pair. The dropped
-  // round stays in the file and the verdict as before; `record.retries` names each one.
+  // outside the checkout, a file both arms wrote outside their checkouts, a gateway restart)
+  // runs again under the next free number, at most N extra rounds in all, so a one-round test
+  // still ends with a usable pair. The dropped round stays in the file and the verdict as
+  // before; `record.retries` names each one.
   let nextRound = first + args.rounds;
   let retriesLeft = args.retryInvalid ?? 0;
   const attempt = async (round) => {

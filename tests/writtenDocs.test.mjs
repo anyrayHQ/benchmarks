@@ -186,10 +186,10 @@ test('benchVerdict: answered via file is counted among the not-solved exclusions
   assert.equal(plain.notSolvedAnsweredViaFile, 0);
   for (const k of ['verdict', 'n', 'excludedCount', 'excludedByReason', 'geometricMeanRatio', 'confidenceInterval95']) assert.deepEqual(v[k], plain[k], k);
   const block = formatVerdictBlock(v).split('\n');
-  assert.ok(block.includes('Excluded: 1  (not solved 1 (answered via file 1), failed round 0, outside checkout 0, gateway restart 0; reasons may overlap)'), block.join('\n'));
+  assert.ok(block.includes('Excluded: 1  (not solved 1 (answered via file 1), failed round 0, outside checkout 0, shared file 0, gateway restart 0; reasons may overlap)'), block.join('\n'));
   assert.ok(block.includes('Excluded rounds: 2 (not solved: B answered via file)'), block.join('\n'));
   const before = formatVerdictBlock(plain).split('\n');
-  assert.ok(before.includes('Excluded: 1  (not solved 1, failed round 0, outside checkout 0, gateway restart 0; reasons may overlap)'));
+  assert.ok(before.includes('Excluded: 1  (not solved 1, failed round 0, outside checkout 0, shared file 0, gateway restart 0; reasons may overlap)'));
   assert.ok(before.includes('Excluded rounds: 2 (not solved)'));
 });
 
