@@ -30,6 +30,7 @@ it records. For running the benchmark, start at the [README](../README.md).
 | Strategy feedback | Per requested kind: applied, skipped (with the gateway's reason) or unconfirmed, read by a local pass-through proxy from `x-anyray-optimization-result`, since Claude Code does not surface response headers. |
 | Stand-aside reasons | Rewrites that stood aside are counted by the reason in their result header (`budgetNoticeReasons`, `toolDeferReasons`, and in brackets on the round line). A not-applied result with no reason is counted `unnamed`. |
 | Outside checkout | A session that reads, searches or `cd`s outside its checkout: `outsideCheckout`, with a count. |
+| Shared file | The absolute paths outside its checkout a session wrote (shell redirects and `tee`, an unquoted `-o`, `cp`/`mv` targets, the Write and Edit tools; not Claude Code's own files, the hook tee or `/dev`): `outsideWrites`, up to 50 paths and a count, never contents. The paths both arms wrote are the round's `sharedOutsideWrites`: the arms run at once, so each can overwrite or read the other's file. The ratio line prints `SHARED FILE with the other arm: <path> (+N)`. |
 | Citations | A path from the repository root resolves exactly. A tail that names exactly one file also resolves and is counted apart (`bySuffix`). A tail that names several files is `ambiguous` and stays unresolved. |
 
 ## Verdict details
@@ -41,9 +42,9 @@ all-rounds line is still printed below it and saved as `stats`; the solved-pair 
 is `rule0Verdict`.
 
 **Paired cost verdict** (`verdict`). Valid rounds: both arms solved, both costs and the
-ratio are positive and finite, neither arm worked outside its checkout, and no gateway
-restart. The printout lists the exclusion counts and each arm's mean cost and cost
-variation.
+ratio are positive and finite, neither arm worked outside its checkout, the arms wrote no
+file outside their checkouts in common (`shared file`), and no gateway restart. The
+printout lists the exclusion counts and each arm's mean cost and cost variation.
 
 It uses the geometric mean of B/A ratios and a two-sided 95% Student t interval on their
 logarithms. The minimum detectable ratio is the largest hypothetical B/A ratio below 1

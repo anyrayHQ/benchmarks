@@ -163,7 +163,8 @@ Each round records:
   against what the pair really cost. A round where Anyray cost more but the gateway still
   booked a saving prints a warning.
 - **Fairness flags:** a gateway restart during the round, a session that worked outside its
-  checkout, or mixed Claude Code versions. Each prints a warning.
+  checkout, a file both arms wrote outside their checkouts, or mixed Claude Code versions.
+  Each prints a warning.
 
 ### Which strategies the Anyray arm runs
 
@@ -195,7 +196,8 @@ bound is above 1. Anything else is `inconclusive`, with the number of rounds sti
 Only **solved pairs** count: rounds where both arms solved the task. A cheap failure is
 never a win. Rounds only one arm solved are listed as quality events. Rounds with a
 crash, a timeout without cost, a gateway restart, or work outside the checkout are
-excluded and listed. Fewer than 3 solved pairs gives `INSUFFICIENT`.
+excluded and listed, and so are rounds in which both arms wrote the same file outside
+their checkouts (`shared file`). Fewer than 3 solved pairs gives `INSUFFICIENT`.
 
 Under `--kinds-b`, both arms send the kinds they differ by in
 `x-anyray-optimization-shadow-kinds`. The gateway runs them on a copy of each request
@@ -455,6 +457,9 @@ Each flag is recorded in the result file. The exact fields, limits and refusals 
 - `N subagents · M sub-req (M/N per agent) · K main-req`: the subagent load.
 - `OUTSIDE CHECKOUT`: the session touched files outside its checkout. Another copy of the
   repo on the machine is the usual cause: remove it.
+- `SHARED FILE with the other arm`: both arms wrote the same file outside their checkouts,
+  usually a test log under `/tmp`. The arms run at once, so each could overwrite or read
+  the other's. The round is excluded as `shared file`.
 
 ## Gateway setup
 
