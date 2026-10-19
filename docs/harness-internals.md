@@ -87,6 +87,21 @@ Findings the main agent files with Claude Code's `ReportFindings` tool (accepted
 are part of its answer: each is graded as `file:line — summary — failure scenario` beside
 the result text, at the same bar. Both arms follow the same rules.
 
+A session can write its documentation to a file in the checkout and answer with a short
+pointer to it. `git diff` (and so `diff`/`diffPatch`) skips untracked files, so before the
+checkout is deleted the harness lists the doc files (`.md`, `.markdown`, `.rst`, `.txt`) the
+session created or changed: `writtenDocs`, each with its path, git status and bytes, never
+its contents (at most 20, the rest counted in `writtenDocsOmitted`). Files already changed
+before the session (a scenario patch, the warm-up) are left out. On a citation-graded
+scenario each file up to 2 MB gets the answer's citation check. A listing that fails
+records `writtenDocs: null` and `writtenDocsError`; the round goes on. When an unsolved
+citation-graded session wrote a file that would pass the citation rule, `answeredViaFile`
+names it (`{ path, resolved, total }`). The session stays unsolved: the final answer is
+what is graded, and Rule 0 and the verdict are unchanged. The round line adds
+` · wrote <path> (<resolved>/<total> citations)` and ` · answered via file (not solved)`,
+and the verdict's Excluded line counts such rounds within not solved
+(`not solved 2 (answered via file 1)`).
+
 The gin scenarios also apply `fixed-ports-lock.patch`. Several gin tests bind fixed ports,
 and both arms run `go test` on one machine at once. The patch adds a `TestMain` that makes
 concurrent runs of that package's tests take turns, and gives each test binary its own
