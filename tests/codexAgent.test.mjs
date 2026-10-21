@@ -325,11 +325,11 @@ test('--client codex takes Codex switches, refuses Claude Code ones, and keeps i
 
 test('a gateway-compare Codex round pairs both gateway arms, tallies each from its traces, and scores treatment A', async () => {
   const label = `offline-${process.pid}-${Date.now()}`;
-  const args = parseArgs(['--scenario', 'cobra-dispatch', '--client', 'codex', '--compare', 'gateway', '--kinds', 'relevance_filter', '--experiment-b', 'codex-trim-off', '--treatment', 'a', '--rounds', '1', '--label', label, '--parallel', '1']);
+  const args = parseArgs(['--scenario', 'cobra-dispatch', '--client', 'codex', '--compare', 'gateway', '--kinds', 'relevance_filter', '--experiment-b', 'relevance-off', '--treatment', 'a', '--rounds', '1', '--label', label, '--parallel', '1']);
   const work = [];
   const homes = [];
   const seen = [];
-  const rule = [{ label: 'anyray-bench: params for experiment=codex-trim-off', params: { relevance_filter: { minChars: 1e9 } } }];
+  const rule = [{ label: 'anyray-bench: params for experiment=relevance-off', params: { relevance_filter: { minChars: 1e9 } } }];
   const deps = {
     clientKey: KEY, connectBinPinned: false,
     log: () => {},
@@ -338,7 +338,7 @@ test('a gateway-compare Codex round pairs both gateway arms, tallies each from i
     describeRepo: () => ({ files: 1 }),
     armHomeParent: () => tmpdir(),
     connectPolicy: async () => ({}),
-    readOptimizerConfig: async () => ({ strategies: [], overrides: { rules: rule.map((r) => ({ ...r, when: { metadata: { tool: ['anyray-bench'], experiment: ['codex-trim-off'] } } })) } }),
+    readOptimizerConfig: async () => ({ strategies: [], overrides: { rules: rule.map((r) => ({ ...r, when: { metadata: { tool: ['anyray-bench'], experiment: ['relevance-off'] } } })) } }),
     gatewayReplicaStarts: async () => ({ r1: '2026-10-12T09:00:00.000Z' }),
     configureCodexArmHome: ({ home }) => { homes.push(home); return { ...armHome, home }; },
     runCodexAgent: async (o) => {
@@ -352,7 +352,7 @@ test('a gateway-compare Codex round pairs both gateway arms, tallies each from i
   try {
     const { record } = await runComparison(args, cfg, { deps });
     assert.equal(record.client, 'codex');
-    assert.deepEqual(seen.map((s) => [s.arm, s.sessionId.slice(-2), s.experiment]), [['anyray', '-a', null], ['anyray', '-b', 'codex-trim-off']]);
+    assert.deepEqual(seen.map((s) => [s.arm, s.sessionId.slice(-2), s.experiment]), [['anyray', '-a', null], ['anyray', '-b', 'relevance-off']]);
     assert.equal(new Set(homes).size, 2, 'each arm its own private home');
     const r = record.rounds[0];
     assert.equal(r.ratio, 0.02 / 0.015);

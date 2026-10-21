@@ -355,7 +355,9 @@ node run_agent.mjs --scenario framework-docs --rounds 1 --provider bedrock --kin
 ### Codex (`--client codex`)
 
 Runs the same scenarios with Codex CLI in both arms (`codex exec`, on this machine's
-ChatGPT seat), for the gateway's Codex seat lane.
+ChatGPT seat). The gateway's Codex seat lane relays traffic byte-identical and optimizes
+nothing, so a `--compare anyray` pair measures the
+relay's overhead and connect's client-side hook, not a gateway trim.
 
 | Compare | A | B |
 |---|---|---|
@@ -368,17 +370,10 @@ ChatGPT seat), for the gateway's Codex seat lane.
   `--codex-hooks-b`.
 - Cost is Codex's own per-response usage, priced from `config.yaml` (list-price
   equivalent; the seat bills in usage limits).
-- `--kinds` only names which kinds to tally; it is not sent. The seat lane runs only
-  `relevance_filter` and `content_census`.
+- `--kinds` only names which kinds to tally; it is not sent. The seat lane runs no strategy.
 - No turn cap: `--max-turns` is refused; `--timeout-min` bounds each session.
 
 ```bash
-# Gateway-side Codex seat source trim, turned off on B by rule:
-npm run bench-rule -- params codex-trim-off --params '{"relevance_filter":{"minChars":1000000000}}'
-npm run agent -- --client codex --scenario gin-long-session --compare gateway \
-  --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8 --retry-invalid 4
-npm run bench-rule -- remove-params codex-trim-off
-
 # Connect's client-side PreToolUse source trim, on B only:
 npm run agent -- --client codex --scenario gin-long-session --compare gateway \
   --kinds relevance_filter --codex-hooks-b --rounds 8 --retry-invalid 4

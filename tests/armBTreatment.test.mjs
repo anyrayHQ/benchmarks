@@ -10,9 +10,9 @@ const gw = (...more) => parseArgs(['--scenario', 's', '--compare', 'gateway', '-
 const arms = armsFor('gateway');
 
 test('--kinds-b: B requests its own kinds, A keeps --kinds', () => {
-  const args = { ...gw('--kinds-b', `${SIX},context_dedupe`), extraHeaders: [] };
+  const args = { ...gw('--kinds-b', `${SIX},repeat_factor`), extraHeaders: [] };
   assert.deepEqual(slotOptions(args, arms, 'a').kinds, SIX.split(','));
-  assert.deepEqual(slotOptions(args, arms, 'b').kinds, [...SIX.split(','), 'context_dedupe']);
+  assert.deepEqual(slotOptions(args, arms, 'b').kinds, [...SIX.split(','), 'repeat_factor']);
   assert.equal(slotOptions(args, arms, 'b').kindsSource, '--kinds-b');
   assert.equal(slotOptions(args, arms, 'a').kindsSource, '--kinds');
 });
@@ -36,15 +36,15 @@ test('--read-trim-b: refused outside --compare gateway, beside --read-trim, or b
 });
 
 test('requestRecord, armLabel and armSetups name the B-only treatment', () => {
-  const args = { ...gw('--kinds-b', `${SIX},context_dedupe`, '--read-trim-b'), extraHeaders: [] };
+  const args = { ...gw('--kinds-b', `${SIX},repeat_factor`, '--read-trim-b'), extraHeaders: [] };
   const rec = requestRecord(args);
-  assert.deepEqual(rec.kindsB, [...SIX.split(','), 'context_dedupe']);
+  assert.deepEqual(rec.kindsB, [...SIX.split(','), 'repeat_factor']);
   assert.equal(rec.readTrimB, true);
   assert.equal(armLabel(args, arms, 'a'), 'anyray (baseline)');
-  assert.equal(armLabel(args, arms, 'b'), 'anyray + kinds+context_dedupe + read-trim');
+  assert.equal(armLabel(args, arms, 'b'), 'anyray + kinds+repeat_factor + read-trim');
   const setups = armSetups(args, arms, { model: 'm', gatewayUrl: 'https://gateway.test.invalid' }, { maxTurns: 40 });
   assert.deepEqual(setups.a.optimizationKinds.requested, SIX.split(','));
-  assert.deepEqual(setups.b.optimizationKinds.requested, [...SIX.split(','), 'context_dedupe']);
+  assert.deepEqual(setups.b.optimizationKinds.requested, [...SIX.split(','), 'repeat_factor']);
   assert.match(setups.a.readTrim, /^off/);
   assert.doesNotMatch(setups.b.readTrim, /^off/);
 });
@@ -74,7 +74,7 @@ test('neither flag set: the record and labels are unchanged, and controlArgs dro
   assert.equal('kindsB' in rec, false);
   assert.equal('readTrimB' in rec, false);
   assert.equal(armLabel(args, arms, 'b'), 'anyray (baseline)');
-  const c = controlArgs({ ...gw('--kinds-b', `${SIX},context_dedupe`, '--read-trim-b'), extraHeaders: [] });
+  const c = controlArgs({ ...gw('--kinds-b', `${SIX},repeat_factor`, '--read-trim-b'), extraHeaders: [] });
   assert.equal(c.kindsB, null);
   assert.equal(c.readTrimB, false);
   assert.equal('connectBinB' in requestRecord(controlArgs({ ...gw('--connect-bin-b', '/opt/b/anyray-connect'), extraHeaders: [] })), false);

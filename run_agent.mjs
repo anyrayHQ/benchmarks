@@ -96,7 +96,7 @@
 //      between rounds. The run header prints the version; each arm's setup records it
 //      (`client`, `claudeVersion`, `claudeBinSource`, never the path), per round too)
 //   node run_agent.mjs --client codex --scenario gin-long-session --compare gateway \
-//     --kinds relevance_filter --experiment-b codex-trim-off --treatment a --rounds 8
+//     --kinds relevance_filter --codex-hooks-b --rounds 8
 //     (--client codex: both arms run `codex exec` on this machine's ChatGPT seat instead of
 //      Claude Code; see runCodexComparison and lib/codexAgent.mjs. --codex-model / --codex-effort
 //      pin the model and reasoning effort for both arms; --keep-codex-threads keeps the threads)
