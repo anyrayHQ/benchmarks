@@ -165,9 +165,8 @@ anything but an inference POST, so it would fail Codex's WebSocket upgrade (a GE
 the gateway did comes from its traces (`ANYRAY_ADMIN_KEY`). Cache writes are priced at
 1.25x.
 
-The Codex seat source trim (`codexSeatSourceTrim`) is deployment-wide, so its pair keeps
-the setting on and turns the trim off on B by rule. `--compare anyray` with the setting on
-asks the end-to-end question.
+The gateway's Codex seat lane relays byte-identical and optimizes nothing. `--compare anyray` asks whether the relay costs
+anything; `--codex-hooks-b` isolates connect's client-side hook.
 
 Under `--codex-hooks-b`, B runs exactly one hook: the one anyray-connect installed in B's
 home, declared as session config and trusted by its own `hooks.state` entry (never
