@@ -124,6 +124,8 @@ import { basename, isAbsolute, join, normalize } from 'node:path';
 import { createHash } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
+import { fillPastes } from './lib/scenarioPastes.mjs';
+import { PlanError, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, assertPlanPin, planAnswer, printPlanAnswer } from './lib/planLock.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome, sharedOutsideWrites } from './lib/agentRun.mjs';
 import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults, codexHookSpec, realCodexHookKeys, wrappedCommandEnv, shellRunEnvFor } from './lib/codexAgent.mjs';
 import { checkConnectBinary } from './lib/connectChecks.mjs';
@@ -288,6 +290,12 @@ export function parseArgs(argv, env = process.env) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--scenario') a.scenario = argv[++i];
     else if (argv[i] === '--claude-bin') claudeBinFlag = argv[++i] ?? ''; // the Claude Code binary both arms spawn (wins over ANYRAY_CLAUDE_BIN)
+    else if (argv[i] === '--scenarios-dir') {
+      const value = argv[++i];
+      if (!value || value.startsWith('--')) throw new Error('--scenarios-dir needs a path');
+      a.scenariosDir = resolveScenariosDir(value, env);
+    }
+    else if (argv[i] === '--json') a.json = true;
     else if (argv[i] === '--rounds') a.rounds = Number(argv[++i]);
     else if (argv[i] === '--compare') a.compare = argv[++i];
     else if (argv[i] === '--label') a.label = argv[++i]; // keeps e.g. a single-strategy run apart
@@ -329,6 +337,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--seed-home') a.seedHome = [...(a.seedHome ?? []), parseSeedHome(argv[++i])]; // <path>=<file>, repeatable: placed in every Anyray arm's HOME before connect configures it
     else throw new Error(`unknown flag ${argv[i]}`);
   }
+  if (a.json && !a.scenariosDir) throw new Error('--json needs --scenarios-dir');
   if (!a.scenario) throw new Error('--scenario <name> is required');
   if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
   a.client ??= 'claude-code';
@@ -464,28 +473,7 @@ function parseCodexConfig(raw) {
   return [key, value];
 }
 
-/**
- * A scenario's `pastes` filled in: `pastes: { ciLog: ci-log.txt }` reads that file (beside
- * scenario.yaml) and puts its text wherever `{{ciLog}}` stands in `task` or a follow-up, so
- * a block the user pastes into several turns is kept once and sent byte for byte the same.
- * `read` maps a file name to its text; a placeholder with no paste, or a paste no turn
- * uses, is an error.
- */
-export function fillPastes(scenario, read) {
-  if (!scenario.pastes) return scenario;
-  for (const file of Object.values(scenario.pastes)) if (!/^[\w.-]+$/.test(String(file))) throw new Error(`paste file ${JSON.stringify(file)} must be a file name beside scenario.yaml`);
-  const text = Object.fromEntries(Object.entries(scenario.pastes).map(([name, file]) => [name, read(file).replace(/\n$/, '')]));
-  const used = new Set();
-  const fill = (turn) => (typeof turn !== 'string' ? turn : turn.replace(/\{\{(\w+)\}\}/g, (_, name) => {
-    if (!(name in text)) throw new Error(`scenario turn names {{${name}}}, which is not in pastes`);
-    used.add(name);
-    return text[name];
-  }));
-  const filled = { ...scenario, task: fill(scenario.task), ...(scenario.followups ? { followups: scenario.followups.map(fill) } : {}) };
-  const unused = Object.keys(text).filter((name) => !used.has(name));
-  if (unused.length) throw new Error(`pastes ${unused.join(', ')} appear in no turn`);
-  return filled;
-}
+export { fillPastes } from './lib/scenarioPastes.mjs';
 
 /** scenarios/<name>/scenario.yaml, its pastes filled in. */
 export const readScenarioFile = (dir) => fillPastes(parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8')), (file) => readFileSync(join(dir, file), 'utf8'));
@@ -1127,8 +1115,24 @@ export async function withIntegrationLevel(requested, work, { level, signal = pr
   }
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+async function main(args) {
+  let lock;
+  if (args.scenariosDir) {
+    // The frozen plan and run pins are checked before resolving any binary or credentials.
+    lock = verifyPlan(args.scenariosDir);
+    if (!lock.scenarios.some((s) => s.id === args.scenario)) {
+      throw new PlanError('plan_scenario_not_frozen', { scenario: args.scenario });
+    }
+    const defaults = runDefaults();
+    assertPlanPin(lock, 'client', args.client);
+    assertPlanPin(lock, 'provider', args.provider);
+    assertPlanPin(lock, 'model', defaults.model);
+    if (args.compare !== 'control') assertPlanPin(lock, 'gatewayHost', gatewayHost(defaults.gateway));
+    const claude = resolveClaudeBin(args.claudeBin);
+    const version = claudeVersion(claude.bin);
+    assertPlanPin(lock, 'clientVersion', version);
+    args.claude = { ...claude, version };
+  }
   const cfg = loadConfig();
   const level = args.integrationLevel ? createBenchLevel({ gatewayUrl: cfg.run.gatewayUrl, adminKey: process.env.ANYRAY_ADMIN_KEY, clientKey: resolveBenchKey(process.env, () => {}).key, agent: process.env.ANYRAY_BENCH_AGENT_ID, user: process.env.ANYRAY_BENCH_USER_ID }) : null;
   const { main, control } = await withIntegrationLevel(args.integrationLevel, () => runAll(args, cfg), { level });
@@ -1148,6 +1152,7 @@ async function main() {
     const kinds = slotKinds(args, slot)[0];
     if (kinds && feedback.length) console.log(`  all rounds${viaGateway.length > 1 ? `, ${slot.toUpperCase()}` : ''}, ${formatKindTally(tallyKinds(feedback, kinds))}`);
   }
+  return lock ? { ok: true, command: 'run', planHash: lock.planHash, scenario: args.scenario, compare: args.compare, resultFile: file } : undefined;
 }
 
 /**
@@ -1190,7 +1195,7 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   if (!run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
   const clientKey = deps.clientKey ?? resolveBenchKey().key;
   if (!clientKey) throw new Error(`${name} needs ANYRAY_BENCH_CLIENT_KEY or ANYRAY_CLIENT_KEY`);
-  const dir = join(cfg.root, 'scenarios', name);
+  const dir = join(args.scenariosDir ?? join(cfg.root, 'scenarios'), name);
   const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args);
   if (name === 'sdk-docs') {
@@ -1322,7 +1327,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   // is switched off on B), and where the wrapped command's toolchains keep their caches.
   const userHookKeys = args.codexHooksB ? d.realHookKeys() : [];
   const hookEnv = args.codexHooksB ? d.wrappedCommandEnv() : {};
-  const dir = join(cfg.root, 'scenarios', args.scenario);
+  const dir = join(args.scenariosDir ?? join(cfg.root, 'scenarios'), args.scenario);
   const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args);
   const out = join(cfg.root, 'results', 'agent');
@@ -1534,7 +1539,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   }
   const { run, pricing } = cfg;
   if (viaGateway.length && !run.gatewayUrl) throw new Error('set ANYRAY_GATEWAY_URL');
-  const dir = join(cfg.root, 'scenarios', args.scenario);
+  const dir = join(args.scenariosDir ?? join(cfg.root, 'scenarios'), args.scenario);
   const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args); // what both arms run (--max-turns)
 
@@ -1790,7 +1795,28 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   return { record, file, viaGateway };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => {
-  console.error(redactLevelError(e));
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const json = process.argv.includes('--json');
+  // Capture even log functions stored in LIVE before redirecting all run output.
+  const stdout = process.stdout.write.bind(process.stdout);
+  if (json) process.stdout.write = process.stderr.write.bind(process.stderr);
+  let parsed = false;
+  try {
+    const args = parseArgs(process.argv.slice(2));
+    parsed = true;
+    const answer = await main(args);
+    if (json) stdout(JSON.stringify(answer) + '\n');
+  } catch (e) {
+    if (e instanceof PlanError) {
+      printPlanAnswer(planAnswer('run', e), json, stdout);
+      process.exitCode = 3;
+    } else if (json) {
+      if (parsed) console.error(redactLevelError(e));
+      stdout(JSON.stringify({ ok: false, command: 'run', code: parsed ? 'run_failed' : 'usage', message: parsed ? 'Run failed' : 'Invalid run arguments', ...(parsed ? { error: e?.name ?? 'Error' } : {}) }) + '\n');
+      process.exitCode = 1;
+    } else {
+      console.error(redactLevelError(e));
+      process.exitCode = 1;
+    }
+  }
+}

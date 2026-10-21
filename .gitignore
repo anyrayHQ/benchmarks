@@ -17,3 +17,8 @@ RESULTS.md
 # Per-target env files (hold keys)
 .env.*
 !.env.example
+
+# YOUR SCENARIOS ARE YOURS: client code, tasks and logs stay local.
+# Only the shipped examples belong in this public repository.
+client-scenarios/*
+!client-scenarios/example-*/
