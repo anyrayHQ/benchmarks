@@ -51,7 +51,8 @@ test('freeze writes plan.lock.json with the plan hash and scenario ids, and none
     assert.ok(!child.stdout.includes(marker(what)), `freeze --json prints the ${what}`);
   }
   // An allowlist, so a new field is a deliberate change: no room for content or per-file digests.
-  assert.deepEqual(Object.keys(lock).sort(), ['algorithm', 'frozenAt', 'nonce', 'pins', 'planHash', 'scenarios', 'version']);
+  // ANY-1486 added the predicted bands and the kit commit that made them (kitFreezePredictions).
+  assert.deepEqual(Object.keys(lock).sort(), ['algorithm', 'benchmarksCommit', 'frozenAt', 'nonce', 'pins', 'planHash', 'predictions', 'scenarios', 'version']);
   assert.equal(lock.version, 1);
   assert.equal(lock.algorithm, 'hmac-sha256');
   assert.deepEqual(Object.keys(lock.pins).sort(), ['client', 'clientVersion', 'gatewayHost', 'model', 'provider']);
