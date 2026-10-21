@@ -1,0 +1,29 @@
+version: 1
+# Only attributable counted pairs from README Latest results (2026-10-15).
+# The 2026-10-11 aggregate cannot be attributed to shapes. All seeds are below
+# eight public rounds and therefore produce prediction: none.
+shapes:
+  - id: cc-mcp-many
+    match: { client: claude-code, mcp: many }
+    expect: saving
+    band: { lo: 0.21, hi: 0.25 }
+    rounds: 2
+    source: 'README Latest results (2026-10-15): cobra-flag-groups 0.21x and cobra-dispatch 0.25x, each one counted round on a 200-tool MCP seat.'
+  - id: cc-docs-single
+    match: { client: claude-code, mcp: none, requests: single, pause: false, outcome: citations }
+    expect: saving
+    band: { lo: 0.24, hi: 0.35 }
+    rounds: 2
+    source: 'README Latest results (2026-10-15): pyrepo-pillar-docs 0.24x and pyrepo-docs 0.35x, one counted round each. This provisional doc-task band leaves out pyrepo-state-docs 0.52x and gin-doc-audit 1.05x; they share these features. Their rounds are not counted behind this selected band.'
+  - id: cc-keyfacts-single
+    match: { client: claude-code, mcp: none, requests: single, pause: false, outcome: keyFacts }
+    expect: parity
+    band: { lo: 0.78, hi: 1.60 }
+    rounds: 3
+    source: 'README Latest results (2026-10-15): cobra-dispatch 0.78x, pyrepo-loader 0.80x, cobra-web-flags 1.60x, one counted round each. These single-turn sessions have maxTurns 80, not the short class. The wide parity band includes the WebFetch outlier rather than pooling check tasks to obtain 0.78-0.96x.'
+  - id: cc-check-single
+    match: { client: claude-code, mcp: none, requests: single, pause: false, outcome: check }
+    expect: parity
+    band: { lo: 0.36, hi: 0.96 }
+    rounds: 2
+    source: 'README Latest results (2026-10-15): gin-test-triage 0.36x and cobra-flag-groups 0.96x, one counted round each. Both are single-turn check tasks with maxTurns 80. The shape features cannot distinguish an 80 KB triage from a 4-8 request fix, so this deliberately wide band covers both.'

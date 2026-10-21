@@ -134,6 +134,45 @@ npm run agent:report     # → results/agent/report.html
   so an interrupted run keeps them.
 - `npm test` uses stubs and makes no model requests.
 
+### Plan before spending
+
+For client scenarios, set `source: client` (or `proposed` for a task we proposed)
+and pin `repo.ref` to a 40-character commit. Keep the directory locally. Then:
+
+```bash
+npm run -s plan -- --scenarios-dir ./client-scenarios --budget-usd 500 --session-cost-usd 0.15 --gateway https://your-gateway.example --json
+```
+
+`--session-cost-usd` is your typical cost of one direct session. The plan splits the
+budget evenly across scenarios and reports pairs needed, the saving detectable at
+that budget, and a spend ceiling. It uses the paired log-ratio SD prior of 0.924,
+80% power and two-sided 95% confidence: 20%, 10% and 30% savings need 135, 604 and
+53 pairs respectively. An insufficient budget is reported with `resolvable: false`.
+
+The plan reads the tenant session gate using `ANYRAY_TRACE_TOKEN`, `ANYRAY_TRACE_KEY`
+or `ANYRAY_ADMIN_KEY`, in that order. `--tenant <id>` selects a tenant. It refuses an
+unreadable gate or one where every gated kind is effectively in shadow. It makes
+no model calls and writes no files. Omit `--json` for human output; use
+`--client codex` to classify a Codex seat (the default is Claude Code).
+
+[predictions.yaml](predictions.yaml) records bands from the published results.
+Every current seed has fewer than eight attributable public rounds, so it prints
+`prediction: none`. The older aggregate run cannot supply per-shape round counts.
+The check-single shape also cannot distinguish a short fix from test-output
+triage; its source records both ratios and the resulting wide band.
+
+Freeze records these predictions and the kit's Git HEAD before the run:
+
+```bash
+npm run -s freeze -- --scenarios-dir ./client-scenarios --model claude-sonnet-5 --provider anthropic --client claude-code --client-version 2.1.300 --gateway https://your-gateway.example --json
+npm run -s verify -- --scenarios-dir ./client-scenarios --json
+```
+
+The keyed plan hash covers every scenario file, pins, kit commit and prediction.
+Verify retains the frozen predictions even if the catalog changes. Use
+`freeze --replace` to write a new plan with a fresh nonce and current catalog.
+The lock contains ids, hashes and predictions; task and file contents stay local.
+
 ## How a round works
 
 Each **round** runs the same task on a real open-source repo in two arms **at the same
@@ -285,6 +324,7 @@ has answered and has been idle for 30 seconds; wall time runs to the final answe
 |---|---|
 | `followups:` | Runs one multi-turn session; each follow-up is a new user turn |
 | `followupDelaySec` | Idle time before each follow-up: one number, or one per follow-up (the last repeats) |
+| `mcpTools` | Optional non-negative integer count of MCP tools for planning. To reproduce a synthetic seat, also pass `--mcp-catalog N` on the run; it applies to both arms. |
 | `patch:` | One file or a list, applied in order |
 | `hidePatch: true` | Re-imports the patched checkout as one commit, so `git diff` and `git log` cannot find the bug |
 | `pastes: { name: file }` | Puts that file's text (beside `scenario.yaml`) wherever `{{name}}` stands in the task or a follow-up, byte for byte the same each time |
