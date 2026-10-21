@@ -1,7 +1,7 @@
 # Anyray Benchmarks
 
 [![ci](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml/badge.svg)](https://github.com/anyrayHQ/benchmarks/actions/workflows/ci.yml)
-[![node](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](package.json)
+[![node](https://img.shields.io/badge/node-%E2%89%A522.13-3c873a)](package.json)
 
 Does putting Anyray on a real agent's request path make the session cheaper, without
 making the result worse? This repo measures it the way a customer's bill would, against
