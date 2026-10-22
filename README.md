@@ -31,15 +31,28 @@ Code. Nothing that spends money starts until you say **Start**.
 
 - Claude Code, signed in, and Anyray Connect installed.
 - Node.js 22.13+, npm and git, plus whatever your test's check command needs.
-- These in your environment. Mint both keys in your Anyray console under **Users**:
+- Run Connect once to get your test key:
 
-| Variable | What it holds | Where to get it |
-| --- | --- | --- |
-| `ANYRAY_GATEWAY_URL` | Your gateway's `https://` origin | Your console |
-| `ANYRAY_BENCH_CLIENT_KEY` | A service key used only for the test's own traffic | **Agents** → **Add agent** |
-| `ANYRAY_ADMIN_KEY` | An admin API key with `config:read`, `observability:read` and `clienttests:write` | **Admin API keys** → **Add admin API key** |
+```bash
+anyray-connect test-key --json
+```
 
-Keep keys out of the chat and out of scenario files.
+Connect uses your enrolled identity and saves a key that lasts seven days in
+`~/.anyray/test-kit.env`, readable only by you (mode 0600). The kit reads the file.
+You can override its gateway and key with `ANYRAY_GATEWAY_URL` and
+`ANYRAY_BENCH_CLIENT_KEY`. Keep keys out of chat and scenario files.
+
+From the kit checkout, check this machine before planning:
+
+```bash
+npm run -s doctor -- --json
+```
+
+Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
+gateway context, one 1-token probe, the upstream credential and header settings.
+It reports each failed code and its fix. Exit 0 means ready; exit 2 means fix a
+check and retry. Probe latency over ten seconds is a `gateway_slow` warning.
+Doctor never prints a key. Rerun the test-key command when the key expires.
 
 ### 1. Install the plugin
 
@@ -251,11 +264,14 @@ the minimum budget. It uses the paired log-ratio SD prior of 0.924,
 80% power and two-sided 95% confidence: 20%, 10% and 30% savings need 135, 604 and
 53 pairs respectively. An insufficient budget is reported with `resolvable: false`.
 
-The plan reads the tenant session gate using `ANYRAY_TRACE_TOKEN`, `ANYRAY_TRACE_KEY`
-or `ANYRAY_ADMIN_KEY`, in that order. `--tenant <id>` selects a tenant. It refuses an
-unreadable gate or one where every gated kind is effectively in shadow. It makes
-no model calls and writes no files. Omit `--json` for human output; use
-`--client codex` to classify a Codex seat (the default is Claude Code).
+With the test key, the plan reads your tenant's context. Kinds that are on or in
+shadow are evaluated on the test sessions only. Kinds that are off stay off. An
+unreadable context blocks planning. The plan makes no model calls and writes no
+files. Omit `--json` for human output; use `--client codex` to classify a Codex seat
+(the default is Claude Code).
+
+Operators and CI can still set an admin token to use the existing routes. On that
+path, `--tenant <id>` selects a tenant and an all-shadow gate blocks planning.
 
 [predictions.yaml](predictions.yaml) records bands from the published results.
 Every current seed has fewer than eight attributable public rounds, so it prints
@@ -282,11 +298,11 @@ rounds. Plans show how often the band was right; reports read the current catalo
 
 ### Measure, run and share a client plan
 
-Use Claude Code for kit execution. Set `ANYRAY_GATEWAY_URL` to the frozen gateway,
-`ANYRAY_BENCH_CLIENT_KEY` to a dedicated benchmark service key, and one admin token
-(`ANYRAY_TRACE_TOKEN`, `ANYRAY_TRACE_KEY` or `ANYRAY_ADMIN_KEY`). Keep credentials in
-the environment. Both arms use the one resolved `--claude-bin` build, checked
-against the version in the lock.
+Use Claude Code for kit execution. Run `anyray-connect test-key --json`, then
+`npm run -s doctor -- --json`. Plan, noise, run, verdict, report, publish-result
+and release-check need no admin token. Both arms use the resolved `--claude-bin`
+build, checked against the version in the lock. Keep the same gateway and key
+throughout the test.
 
 ```bash
 npm run -s noise -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 6 --budget-usd 500 --json
@@ -317,8 +333,8 @@ allows the run to continue. Two consecutive failures stop with `run_failed`;
 `auth_error` stops at once. Other failure labels are `timeout`, `no_result`,
 `crash` and `gateway_error`. Failure stops exit 1.
 
-Paired runs use the tenant's defaults without a kinds selection header. They
-record `kindsObserved`, use `tool: anyray-bench` on every gateway request, and use
+Paired runs use the test key's evaluation cohort without a kinds selection header.
+They record `kindsObserved`, use `tool: anyray-bench` on every gateway request, and use
 a hash prefix for attribution instead of the client's scenario name. Early
 holdouts of any kind trigger fresh pairs; the final draw is excluded as
 `holdout drawn`, even with `--redraw-holdout 0`. The default is two redraws.
@@ -376,7 +392,7 @@ requires the gateway's ANY-1491 schema update; the seed twin omits it.
 npm run twins -- --release v1.10.520 --gateway https://your-gateway.example --rounds 8 --json
 ```
 
-Twins use the same benchmark and admin credentials, freeze a fresh temporary copy,
+Twins require benchmark and admin credentials. They freeze a fresh temporary copy,
 measure six noise rounds, run paired rounds (eight by default), and publish with
 the supplied release tag. The gateway version is recorded separately. The committed
 twins remain unchanged, and the temporary copy is removed on exit.
