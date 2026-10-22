@@ -4,7 +4,7 @@ import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenari
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
-import { readKitRecords, kitVerdict } from '../lib/kitResults.mjs';
+import { readKitRecords, kitVerdict, verdictLabel } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { sessionGateState } from '../lib/traces.mjs';
@@ -140,7 +140,7 @@ try {
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
   else if (command === 'noise' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
-  else if (command === 'verdict' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: ${s.verdict}; Rule 0 ${s.rule0}`).join('\n') + `\nPooled Rule 0: ${answer.rule0Verdict}\n`);
+  else if (command === 'verdict' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: ${verdictLabel(s)}; Rule 0 ${s.rule0}`).join('\n') + `\nPooled Rule 0: ${answer.rule0Verdict}\n`);
   else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog));
   else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');
   else printPlanAnswer(answer, json);

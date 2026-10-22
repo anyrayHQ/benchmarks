@@ -53,7 +53,7 @@ test('the verdict words are benchVerdict\'s and Rule 0\'s exactly, per scenario 
 
   const ids = lock.scenarios.map((s) => s.id);
   assert.deepEqual(out.scenarios.map((s) => s.id), ids, 'every frozen scenario, in the lock\'s order');
-  for (const id of ids) assert.deepEqual(out.scenarios.find((s) => s.id === id), expected(lock, id, rounds[id]), id);
+  for (const id of ids) { const { why, ...rest } = out.scenarios.find((s) => s.id === id); assert.deepEqual(rest, expected(lock, id, rounds[id]), id); assert.equal(typeof why, rest.verdict === 'inconclusive' ? 'string' : 'undefined', `${id}: only an inconclusive scenario says why`); }
 
   const pooled = ids.flatMap((id) => rounds[id] ?? []).filter((r) => !r.gatewayRestarted);
   assert.equal(out.rule0Verdict, solvedPairVerdict(pooled).verdict, 'the pooled Rule 0 verdict over every scenario\'s rounds');
@@ -91,7 +91,7 @@ test('before any paired round there is no Rule 0 verdict: NO DATA, and every sce
   const out = json(await verdict(copy, dir, env), 'verdict --json');
   assert.equal(out.ok, true, JSON.stringify(out).slice(0, 400));
   assert.equal(out.rule0Verdict, 'NO DATA');
-  for (const s of out.scenarios) assert.deepEqual(s, expected(lock, s.id, []), s.id);
+  for (const { why, ...s } of out.scenarios) { assert.deepEqual(s, expected(lock, s.id, []), s.id); assert.match(why, /0 valid pairs, \d+ needed/); }
 });
 
 test('the run-side commands are npm scripts, and a relative --scenarios-dir resolves from where npm was run', async (t) => {
