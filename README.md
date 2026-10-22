@@ -4,11 +4,13 @@
 [![node](https://img.shields.io/badge/node-%E2%89%A522.13-3c873a)](package.json)
 
 Does putting Anyray on a real agent's request path make the session cheaper, without
-making the result worse? This repo measures it the way a customer's bill would, against
-Anyray's Rule 0: **a session must never cost more because of us.**
+making the result worse? Test it on the work you were going to test anyway: Claude Code
+runs your task direct and through your gateway, pair after pair, and judges the pairs
+against Anyray's Rule 0: **a session must never cost more because of us.**
 
-**Contents:** [Latest results](#latest-results-2026-10-15) ·
-[Running it](#running-it) · [How a round works](#how-a-round-works) ·
+**Contents:** [Test it on your own work](#test-it-on-your-own-work) ·
+[Latest results](#latest-results-2026-10-15) · [Kit commands](#kit-commands) ·
+[Running the bench](#running-the-bench) · [How a round works](#how-a-round-works) ·
 [Reading the verdict](#reading-the-verdict) · [Comparison modes](#comparison-modes) ·
 [Scenarios](#scenarios) · [Other lanes](#other-lanes) · [Run options](#run-options) ·
 [Gateway setup](#gateway-setup) · [Replay suite](#the-replay-suite-secondary) ·
@@ -16,6 +18,118 @@ Anyray's Rule 0: **a session must never cost more because of us.**
 
 Harness internals (what each check does and which fields it records) are in
 [docs/harness-internals.md](docs/harness-internals.md).
+
+## Test it on your own work
+
+Bring the test you planned to run before trusting us with your traffic. The
+`anyray-test` skill records it, shows what your budget can prove, and runs it in Claude
+Code. Nothing that spends money starts until you say **Start**.
+
+`Define → Plan → Freeze → Start → Noise rounds → Paired runs → Verdict → Report → Publish → Every release`
+
+### Before you start
+
+- Claude Code, signed in, and Anyray Connect installed.
+- Node.js 22.13+, npm and git, plus whatever your test's check command needs.
+- These in your environment. Mint both keys in your Anyray console under **Users**:
+
+| Variable | What it holds | Where to get it |
+| --- | --- | --- |
+| `ANYRAY_GATEWAY_URL` | Your gateway's `https://` origin | Your console |
+| `ANYRAY_BENCH_CLIENT_KEY` | A service key used only for the test's own traffic | **Agents** → **Add agent** |
+| `ANYRAY_ADMIN_KEY` | An admin API key with `config:read`, `observability:read` and `clienttests:write` | **Admin API keys** → **Add admin API key** |
+
+Keep keys out of the chat and out of scenario files.
+
+### 1. Install the plugin
+
+In Claude Code:
+
+```text
+/plugin marketplace add anyrayHQ/benchmarks
+/plugin install anyray-test@anyray-benchmarks
+```
+
+On first use the skill checks out this kit at its pinned release.
+
+### 2. Tell Claude your test
+
+From the root of your repository, ask Claude to measure Anyray on your test and include
+the test itself:
+
+```text
+Measure Anyray on this test: the lint step is red. Run go vet ./... and fix every finding without changing behavior.
+```
+
+Claude saves your words unchanged as `source: client` in
+`anyray-test/client-1/scenario.yaml`, pins the commit and how to grade the result, and
+may propose two or three scenarios of its own as `source: proposed`. Your test is never
+reworded or dropped. Scenario files stay on your machine.
+
+### 3. Review the plan
+
+Claude asks for your budget and the cost of one direct session, then shows the plan.
+For example:
+
+```text
+client-1: prediction: none; pairs planned: 12
+At this budget you can detect at least 52.6% saving (prior SD, 80% power, two-sided 95%).
+Spend ceiling: $28.80 (noise: 6 rounds, $9.60; paired runs: 12 pairs, $19.20)
+Budget resolves the bands: no
+```
+
+The spend ceiling is the most the test can spend, noise rounds included. A predicted
+range appears once our public results cover your task's shape with at least eight rounds;
+until then the plan says `prediction: none`.
+
+### 4. Freeze it
+
+Approve the plan and Claude freezes it: one plan hash over every scenario file, the pins
+(model, provider, Claude Code version, gateway) and the predictions. Any later change is
+a new plan, so neither side can adjust the test after seeing a result.
+
+### 5. Say Start
+
+Claude shows the ceiling again and waits. Only an explicit **Start** for this frozen plan
+begins paid work. "Go ahead", silence, or approving the freeze does not count.
+
+### 6. Noise first, then paired runs
+
+First Claude runs your task direct twice per round, six rounds, to measure how much its
+cost moves on its own. Then each paired round runs it once direct and once through your
+gateway, on your tenant's defaults. A round the gateway draws into its holdout is redrawn
+or excluded. A losing pair is never retried.
+
+### 7. Read the verdict
+
+For example:
+
+```text
+client-1: pass; Rule 0 PASS
+Pooled Rule 0: PASS
+```
+
+Rule 0 passes only when Anyray wins clearly more pairs than noise alone would and the
+third quartile still saves: it judges the tail, not the average. Claude copies the
+verdict word for word and writes a redacted `anyray-test/report.html` you can share.
+Paste a plan, verdict or report back to Claude later to pick up where you left off.
+
+### 8. Publish, if you want to
+
+Publishing sends only hashes, counts and statistics to your gateway: no task,
+repository, transcript or tool output. The Measurement card in your console then shows
+the result, for example:
+
+```text
+Your test (plan 2d13843, 20 pairs): 0.75x, Rule 0 PASS.
+```
+
+### 9. Rerun it on every release
+
+Commit the frozen plan to a private repository and add
+[the regression workflow](kit/workflows/anyray-regression.yml). It reruns the same test
+whenever your gateway moves to a new release. Setup is under
+[Rerun on every release](#rerun-on-every-release).
 
 ## Latest results (2026-10-15)
 
@@ -112,40 +226,9 @@ E made 238 Reads to B's 423, and 390 requests to B's 424. Every session complete
 main-agent turns. B found 8 of 9 facts in every round; E found 8 of 9 in 15 rounds and 7
 in round 10. Both arms always missed `_SESSION_AUDIT_FORMAT`.
 
-## Running it
+## Kit commands
 
-Requirements: Node.js 20+, the `claude` CLI signed in to a Claude subscription (the
-upstream credential for both arms), `git`, and Go for the cobra and gin checks.
-
-```bash
-cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
-
-npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
-npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
-npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mask,code_graph
-npm run agent:report     # → results/agent/report.html
-```
-
-- Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so a re-run adds
-  rounds. `--label <name>` keeps a run in its own file.
-- `results/` is local only, because transcripts hold tool output. Share the report instead.
-- `--parallel N` runs up to N rounds at once (default 2, max 4). Each round is two
-  sessions on the one subscription, hence the low cap. Each round is saved as it finishes,
-  so an interrupted run keeps them.
-- `npm test` uses stubs and makes no model requests.
-
-### Install the Claude Code plugin
-
-In Claude Code, add the marketplace and install the skill:
-
-```text
-/plugin marketplace add anyrayHQ/benchmarks
-/plugin install anyray-test@anyray-benchmarks
-```
-
-Ask to measure Anyray savings on your own test. The `anyray-test` skill records
-your words, prepares a frozen plan and asks for an explicit Start before paid
-runs. You can also bring back the kit's plan, verdict or report to continue.
+The skill runs these for you. To drive the kit yourself, run them from this checkout.
 
 ### Plan before spending
 
@@ -279,6 +362,30 @@ measure six noise rounds, run paired rounds (eight by default), and publish with
 the supplied release tag. The gateway version is recorded separately. The committed
 twins remain unchanged, and the temporary copy is removed on exit.
 
+
+## Running the bench
+
+Our own paired bench on public scenarios, the one behind [Latest results](#latest-results-2026-10-15).
+
+Requirements: Node.js 22.13+, the `claude` CLI signed in to a Claude subscription (the
+upstream credential for both arms), `git`, and Go for the cobra and gin checks.
+
+```bash
+cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
+
+npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
+npm run agent -- --scenario cobra-flag-groups --rounds 6 --kinds observation_mask,code_graph
+npm run agent:report     # → results/agent/report.html
+```
+
+- Rounds accumulate in `results/agent/<scenario>--<compare>.json`, so a re-run adds
+  rounds. `--label <name>` keeps a run in its own file.
+- `results/` is local only, because transcripts hold tool output. Share the report instead.
+- `--parallel N` runs up to N rounds at once (default 2, max 4). Each round is two
+  sessions on the one subscription, hence the low cap. Each round is saved as it finishes,
+  so an interrupted run keeps them.
+- `npm test` uses stubs and makes no model requests.
 
 ## How a round works
 
