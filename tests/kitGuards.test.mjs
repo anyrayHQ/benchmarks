@@ -58,7 +58,6 @@ test('execution refusals happen before even the version invocation, without need
     [{ ANYRAY_GATEWAY_URL: 'https://other.example.test' }, 'plan_pin_mismatch'],
     [{ ANYRAY_BENCH_EXTRA_HEADERS: 'x-anyray-tool-defer: off' }, 'env_refused'],
     [{ ANYRAY_BENCH_CLIENT_KEY: '' }, 'bench_key_missing'],
-    [{ ANYRAY_ADMIN_KEY: '' }, 'admin_key_missing'],
   ]) assert.equal(onlyJson(run(extra), code).code, code);
   assert.deepEqual(claude.invocations(), []);
 });

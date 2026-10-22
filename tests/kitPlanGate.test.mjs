@@ -77,16 +77,18 @@ test('--tenant reaches the gate read as ?tenant=, and without it no tenant is se
   assert.deepEqual(without?.query, {});
 });
 
-test('a gate the plan cannot read is refused, never assumed: no admin key (and no request), a 403, a body with no strategies', async (t) => {
+// ANY-1516: without an admin key plan reads GET /connect/test/context on the test key
+// (tests/kitTestKey.test.mjs); with neither credential it refuses test_key_missing (exit 2).
+test('a gate the plan cannot read is refused, never assumed: no admin key and no test key (and no request), a 403, a body with no strategies', async (t) => {
   const dir = writeScenariosDir(tempDir(t), shapedScenarios());
 
   const unasked = await fakeGateway(t);
   const env = planEnv(t);
   delete env.ANYRAY_ADMIN_KEY;
   const k = await planRun(t, dir, unasked, [...BUDGET, '--json'], { env });
-  const kOut = json(k, 'plan --json without an admin key');
-  assert.deepEqual({ ok: kOut.ok, code: kOut.code, reason: kOut.reason }, { ok: false, code: 'plan_tenant_unreadable', reason: 'no_admin_key' });
-  assert.equal(k.status, 3);
+  const kOut = json(k, 'plan --json without an admin key or a test key');
+  assert.deepEqual({ ok: kOut.ok, code: kOut.code }, { ok: false, code: 'test_key_missing' });
+  assert.equal(k.status, 2);
   assert.deepEqual(unasked.requests, [], 'without a key, plan made a request anyway');
 
   for (const [label, opts, reason] of [

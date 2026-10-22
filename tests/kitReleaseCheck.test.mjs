@@ -106,14 +106,16 @@ test('changed: nothing was ever published for this plan (another plan\'s result 
   }
 });
 
-test('refused before any request: no admin key, a gateway other than the frozen one, a scenarios dir changed after the freeze; and nothing on stdout', async (t) => {
+// ANY-1516: without an admin key release-check reads the test key's routes (tests/kitTestKey.test.mjs);
+// with neither credential it refuses test_key_missing.
+test('refused before any request: no admin key and no test key, a gateway other than the frozen one, a scenarios dir changed after the freeze; and nothing on stdout', async (t) => {
   const gateway = await gatewayFor();
   const other = await gatewayFor();
   const s = await frozen(t, gateway);
   const noKey = { ...s.env };
   delete noKey.ANYRAY_ADMIN_KEY;
   const cases = [
-    ['no admin key', (args) => check(t, s, gateway, args, noKey), 'admin_key_missing', 2, {}],
+    ['no admin key and no test key', (args) => check(t, s, gateway, args, noKey), 'test_key_missing', 2, {}],
     ['another gateway', (args) => check(t, s, other, args), 'plan_pin_mismatch', 3, { pin: 'gatewayHost', expected: s.lock.pins.gatewayHost, found: new URL(other.url).host }],
   ];
   for (const [what, call, code, status, fields] of cases) {
