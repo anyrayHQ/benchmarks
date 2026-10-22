@@ -303,6 +303,19 @@ test('every kit command SKILL.md runs is a kit npm script, run silently from the
   for (const script of KIT_SCRIPTS) assert.ok(runs.some((r) => r.script === script), `the flow never runs ${script}`);
 });
 
+test('SKILL.md tells the agent to report the quality line with the cost: how many pairs each arm passed, and any pair only direct passed', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /Anyray passed X of N, direct Y of N/, 'the skill names the quality clause');
+  assert.match(body, /passed only direct/i);
+  assert.match(body, /never offer a cost saving without its quality line/i, 'a cost win is never presented without its quality line');
+});
+
+test('SKILL.md makes the report page with the kit (report --redact --html), never by hand', () => {
+  const skill = readSkill();
+  assert.match(skill, /run -s report -- --scenarios-dir anyray-test --redact --html --json/, 'the page comes from the kit renderer');
+  assert.doesNotMatch(skill.replace(/\s+/g, ' '), /Create `anyray-test\/report\.html` locally from that validated body/, 'the agent no longer hand-writes the page');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');

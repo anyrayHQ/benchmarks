@@ -204,6 +204,7 @@ a losing pair or select pairs to improve the result.
 ```bash
 npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s verdict -- --scenarios-dir anyray-test --json
 npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s report -- --scenarios-dir anyray-test --redact --json
+npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s report -- --scenarios-dir anyray-test --redact --html --json
 ```
 
 Copy each verdict and the pooled Rule 0 word exactly, including case:
@@ -213,12 +214,19 @@ into a percentage saving or soften a verdict. Include exclusions and predicted
 versus actual results without cherry-picking. For a requested two-line summary,
 use the kit's verdict words and numbers, with no extra workflow or paid command.
 
+Quality travels with cost. Each scenario line carries the kit's clause "Anyray
+passed X of N, direct Y of N" (the client's own check, run on both arms), and
+"K pairs passed only direct" when Anyray failed a pair direct passed. Copy it
+beside the ratio. Never offer a cost saving without its quality line, and never
+read a cheaper run that failed the check as a win.
+
 The report JSON is the validated, redacted body, with no command wrapper. If the
-kit returns a refusal, stop and name the fix. It does not create an HTML file.
-Create `anyray-test/report.html` locally from that validated body only, escaping
-all text and using no external assets, scripts or analytics, then open the local
-shareable HTML. Include versions, plan hash, source labels, predictions, counts,
-costs, intervals and verdicts. Never read raw transcripts to enrich the report.
+kit returns a refusal, stop and name the fix. The `--html` command writes
+`anyray-test/report.html` itself and prints its path: open that file for the
+user. Never write or edit the page by hand, and never read raw transcripts to
+enrich it. The page is offline and content-free: headline verdict and dollars per
+session, every scenario's tail, the savings-by-session-length chart, and every
+pair with its checks and any exclusion reason.
 
 ## Publish and next release
 

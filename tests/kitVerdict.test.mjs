@@ -24,7 +24,17 @@ function expected(lock, id, rounds = []) {
   const s = rule0(valid);
   const { prediction, shapeId } = lock.predictions.find((p) => p.id === id);
   const band = prediction.status === 'band' ? prediction : null;
+  // Every round that ran cleanly is graded, solved or not (a pair only one arm solved counts).
+  const graded = rounds.filter((r) => exclusionReasons(r).every((x) => x === 'not solved'));
+  const parity = graded.length ? {
+    n: graded.length,
+    passDirect: graded.filter((r) => r.quality.a).length,
+    passAnyray: graded.filter((r) => r.quality.b).length,
+    anyrayWorse: graded.filter((r) => r.quality.a && !r.quality.b).length,
+    anyrayBetter: graded.filter((r) => !r.quality.a && r.quality.b).length,
+  } : undefined;
   return {
+    ...(parity ? { parity } : {}),
     id,
     source: lock.scenarios.find((x) => x.id === id).source,
     shapeId,

@@ -604,7 +604,7 @@ export const citationsScenario = (origin) => ({
  * in the records (as an old or hand-edited record would carry them). Returns the copy, the dir,
  * the lock and the rounds written per scenario.
  */
-export async function syntheticPlan(root, { gatewayUrl = 'https://gw.example.test', env, marked = false, records = true, gatewayVersion = GATEWAY_VERSION } = {}) {
+export async function syntheticPlan(root, { gatewayUrl = 'https://gw.example.test', env, marked = false, records = true, gatewayVersion = GATEWAY_VERSION, lostPair = false } = {}) {
   const origin = { git: `https://git.example.test/acme/${MARK.repo}.git`, ref: '0123456789abcdef0123456789abcdef01234567', patchText: `--- a/lib.js\n+++ b/lib.js\n@@ -1 +1,2 @@\n export const one = 1;\n+export const two = '${MARK.patch}';\n` };
   const copy = kitRunCopy(join(root, 'kit'));
   const dir = writeDir(root, {
@@ -615,6 +615,8 @@ export async function syntheticPlan(root, { gatewayUrl = 'https://gw.example.tes
   });
   const lock = await freezeWith(copy.root, dir, gatewayUrl, env);
   const rounds = records ? syntheticRounds({ content: marked }) : {};
+  // Only the direct arm solved this pair: a quality loss to Anyray, whatever it cost.
+  if (lostPair && rounds.facts) rounds.facts.push(pairRound(3, 1, 0.9, { solved: [true, false] }));
   const extra = marked ? { scenarioText: { task: MARK.task, repo: origin.git, check: MARK.checkCmd, pastes: MARK.paste, followups: [MARK.followup], patch: `${MARK.patchName}.patch` } } : {};
   for (const [id, rs] of Object.entries(rounds)) writeRecord(dir, lock, id, rs, { gatewayVersion, extra });
   return { copy, dir, lock, rounds };
@@ -645,10 +647,16 @@ const predictedBand = z.union([
   z.object({ kind: z.literal('none') }).strict(),
 ]);
 const interval = z.object({ lower: ratio, upper: ratio }).strict().refine((ci) => ci.lower <= ci.upper);
+const pairCount = z.number().int().min(0).max(10000);
+const parity = z.object({
+  n: pairCount, passDirect: pairCount, passAnyray: pairCount, anyrayWorse: pairCount, anyrayBetter: pairCount,
+}).strict().refine((p) => p.passDirect <= p.n && p.passAnyray <= p.n && p.anyrayWorse + p.anyrayBetter <= p.n
+  && p.passAnyray === p.passDirect - p.anyrayWorse + p.anyrayBetter);
 const scenario = z.object({
   shapeId: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   source: z.enum(['client', 'proposed']),
   predictedBand,
+  parity: parity.optional(),
   n: z.number().int().min(0).max(10000),
   excluded: z.number().int().min(0).max(10000),
   winRate: z.number().finite().min(0).max(1).nullable(),

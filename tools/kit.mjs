@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { renderReportHtml } from '../lib/reportHtml.mjs';
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
 import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
-import { readKitRecords, kitVerdict, formatKitVerdict } from '../lib/kitResults.mjs';
+import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { sessionGateState } from '../lib/traces.mjs';
@@ -28,6 +31,7 @@ function parseArgs() {
     const flag = argv[i];
     if (flag === '--json') continue;
     if (flag === '--redact' && command === 'report') { options.redact = true; continue; }
+    if (flag === '--html' && command === 'report') { options.html = true; continue; }
     if (flag === '--replace' && command === 'freeze') { options.replace = true; continue; }
     if (!flag.startsWith('--') || !values.includes(flag.slice(2))) usage();
     const value = argv[++i];
@@ -73,6 +77,7 @@ try {
   const dir = ['calibrate', 'twins', 'doctor'].includes(command) ? null : resolveScenariosDir(options['scenarios-dir']);
   let answer;
   let catalog;
+  let noisePairs = null;
   if (command === 'doctor') {
     answer = await doctor();
     if (!answer.ok) process.exitCode = 2;
@@ -133,6 +138,11 @@ try {
       executionGate(lock, compare);
       const claude = frozenClaude(lock, options['claude-bin']);
       answer = await executePlan(command, dir, lock, options, claude);
+      if (command === 'noise' && options['budget-usd'] !== undefined) {
+        // Pairs the rest of the budget still buys, at the control rounds' own mean cost.
+        const { spentUsd, meanRoundUsd } = kitSpend(dir, lock);
+        if (meanRoundUsd > 0) noisePairs = Math.max(0, Math.floor((options['budget-usd'] - spentUsd) / meanRoundUsd));
+      }
     } else {
       if (command === 'publish-result') {
         releaseGateway(options, lock);
@@ -143,20 +153,26 @@ try {
       if (command === 'verdict') answer = verdict;
       else {
         const body = clientTestBody(lock, records, kitVersion(), { scenarios: validatedScenarios(dir) });
-        if (command === 'report') {
+        if (command === 'report' && options.html) {
+          const file = join(dir, 'report.html');
+          writeFileSync(file, renderReportHtml({ body, verdict, records, lock }));
+          process.stdout.write(json ? JSON.stringify({ ok: true, command, file }) + '\n' : `${file}\n`);
+        } else if (command === 'report') {
           process.stdout.write(json ? JSON.stringify(body) + '\n' : formatKitReport(verdict, body));
         } else {
           const id = await publishResult(releaseGateway(options, lock), body);
           process.stdout.write(json ? JSON.stringify({ ok: true, command, id }) + '\n' : id + '\n');
+          if (!json) process.stderr.write('Published. It shows under Measurement on the Optimizer page of your console.\n');
         }
       }
     }
   }
   if (['report', 'publish-result'].includes(command)) { /* Already printed the validated body or id. */ }
+  else if (['noise', 'run'].includes(command) && !json && answer.stopped === 'budget_reached') process.stdout.write(formatStopped(answer));
   else if (command === 'doctor' && !json) process.stdout.write(formatDoctor(answer));
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
-  else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
+  else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(formatNoise(answer, { pairsPlanned: noisePairs }));
   else if (command === 'verdict' && !json) process.stdout.write(formatKitVerdict(answer));
   else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog) + (answer.tenant.evaluationCohort ? `${answer.tenant.kindsEvaluated} kinds will be evaluated on test sessions only.\n` : ''));
   else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');

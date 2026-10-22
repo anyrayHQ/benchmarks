@@ -31,28 +31,10 @@ Code. Nothing that spends money starts until you say **Start**.
 
 - Claude Code, signed in, and Anyray Connect installed.
 - Node.js 22.13+, npm and git, plus whatever your test's check command needs.
-- Run Connect once to get your test key:
 
-```bash
-anyray-connect test-key --json
-```
-
-Connect uses your enrolled identity and saves a key that lasts seven days in
-`~/.anyray/test-kit.env`, readable only by you (mode 0600). The kit reads the file.
-You can override its gateway and key with `ANYRAY_GATEWAY_URL` and
-`ANYRAY_BENCH_CLIENT_KEY`. Keep keys out of chat and scenario files.
-
-From the kit checkout, check this machine before planning:
-
-```bash
-npm run -s doctor -- --json
-```
-
-Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
-gateway context, one 1-token probe, the upstream credential and header settings.
-It reports each failed code and its fix. Exit 0 means ready; exit 2 means fix a
-check and retry. Probe latency over ten seconds is a `gateway_slow` warning.
-Doctor never prints a key. Rerun the test-key command when the key expires.
+That is all. The skill gets your test key from Connect and checks this machine before it
+plans, so there is no key to copy and no setup command to run first. If a check fails, it
+names the failed code and its fix.
 
 ### 1. Install the plugin
 
@@ -115,17 +97,22 @@ or excluded. A losing pair is never retried.
 
 ### 7. Read the verdict
 
-For example:
+For example (synthetic numbers):
 
 ```text
-client-1: pass; Rule 0 PASS
+client-1 (client, unknown): prediction: none; n 10; median 0.814; CI 0.667-0.920; pass; Rule 0 PASS; Anyray passed 10 of 10, direct 10 of 10; cheaper in 80% of pairs; Q3 0.918; worst pair 1.045 (4.5% more); vs prediction: n/a
 Pooled Rule 0: PASS
+Cost per session: direct $1.30, Anyray $0.96 (26% lower)
 ```
 
 Rule 0 passes only when Anyray wins clearly more pairs than noise alone would and the
-third quartile still saves: it judges the tail, not the average. Claude copies the
-verdict word for word and writes a redacted `anyray-test/report.html` you can share.
-Paste a plan, verdict or report back to Claude later to pick up where you left off.
+third quartile still saves: it judges the tail, not the average, so the line shows the
+tail (Q3 and the worst pair) beside the median. The quality clause is your own check run
+on both arms: a cheaper run that fails it is never a win. Claude copies the verdict word
+for word and writes `anyray-test/report.html`, an offline page with no content from your
+task, built by the kit: the headline, every scenario's tail, savings by session length
+and every pair with its checks. Paste a plan, verdict or report back to Claude later to
+pick up where you left off.
 
 ### 8. Publish, if you want to
 
@@ -143,6 +130,26 @@ Commit the frozen plan to a private repository and add
 [the regression workflow](kit/workflows/anyray-regression.yml). It reruns the same test
 whenever your gateway moves to a new release. Setup is under
 [Rerun on every release](#rerun-on-every-release).
+
+### Checking this machine yourself
+
+The skill runs these for you. Run them by hand to debug a failure.
+
+```bash
+anyray-connect test-key --json
+npm run -s doctor -- --json
+```
+
+Connect uses your enrolled identity and saves a key that lasts seven days in
+`~/.anyray/test-kit.env`, readable only by you (mode 0600). The kit reads the file. You
+can override its gateway and key with `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY`.
+Keep keys out of chat and scenario files.
+
+Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
+gateway context, one 1-token probe, the upstream credential and header settings. It
+reports each failed code and its fix. Exit 0 means ready; exit 2 means fix a check and
+retry. Probe latency over ten seconds is a `gateway_slow` warning. Doctor never prints a
+key. Rerun the test-key command when the key expires.
 
 ## Latest results (2026-10-15)
 
