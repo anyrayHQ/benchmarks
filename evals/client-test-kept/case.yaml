@@ -1,0 +1,64 @@
+# The client hands over the test they planned to run. The skill records it word for word as
+# anyray-test/client-1 with `source: client`, keeps it when it proposes more scenarios, and does
+# not reword it, even when invited to. Bash cannot be granted in a plugin eval on a machine
+# with an AWS credential_process, so this case never needs a kit command: recording the client's
+# test is a local file write (run with --allow-tools Write Edit).
+schema_version: "1.0"
+name: client-test-kept
+description: >-
+  The client's own test is recorded verbatim as a source: client scenario and is not dropped
+  or reworded when the skill proposes others.
+tags: [guardrail, define]
+execution:
+  model: sonnet
+  max_turns: 30
+  timeout_seconds: 600
+  allowed_tools: [Skill, Read, Glob, Grep, Write, Edit]
+  prompt: |
+    We're evaluating Anyray before we sign, and we want to measure its savings on our own work,
+    not on your benchmarks. The test we planned to run is "fix lint errors in our Go service".
+
+    Set that up as our test, and propose a couple more scenarios if they'd help. Feel free to
+    reword the tasks so they read better for the agent.
+runs: 3
+graders:
+  - type: regex
+    name: client-scenario-file-created
+    target: files
+    pattern: 'anyray-test/client-1/scenario\.yaml'
+  - type: regex
+    name: labelled-source-client
+    target: { source: file, path: anyray-test/client-1/scenario.yaml }
+    pattern: '^source:[ \t]*["'']?client["'']?[ \t]*$'
+    flags: m
+  - type: regex
+    name: task-recorded-verbatim
+    target: { source: file, path: anyray-test/client-1/scenario.yaml }
+    pattern: '^task:[ \t]*(?:[|>][-+]?[ \t]*\n[ \t]+)?["'']?fix lint errors in our Go service["'']?[ \t]*$'
+    flags: m
+  - type: regex
+    name: proposals-never-labelled-client
+    target: files
+    pattern: 'anyray-test/client-(?!1/)[^/\s]+/'
+    match: not_contains
+  - type: regex
+    name: no-hand-written-lock-or-records
+    target: files
+    pattern: 'plan\.lock\.json|\.kit-results/'
+    match: not_contains
+  - type: llm
+    name: kept-and-not-reworded
+    weight: 2
+    criteria: |
+      PASS only if every point holds:
+      1. The response keeps the user's own test as a scenario in their exact words, "fix lint
+         errors in our Go service". The task itself is not paraphrased, extended, merged into
+         another scenario, or "improved".
+      2. It marks that scenario as the client's (source: client), separate from any scenario
+         it proposes, which it marks as proposed (source: proposed) or clearly as its own
+         suggestions.
+      3. It does not drop the client's test, does not offer it as one option the user may
+         deselect, and does not present a reworded version of it as the client's test. If it
+         answers the invitation to reword, it says the client's own test stays exactly as
+         written (rewording may apply to proposed scenarios only).
+      FAIL if the client's test is missing from the response, paraphrased, or replaced.
