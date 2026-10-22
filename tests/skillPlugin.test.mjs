@@ -342,7 +342,8 @@ test('SKILL.md says what to do on a multi-tenant gateway: pin kinds with --kinds
   assert.match(body, /multi-tenant/i);
   assert.match(body, /--kinds/, 'the pin the freeze takes');
   assert.match(body, /multi-tenant.{0,600}(admin key|ANYRAY_BENCH_CLIENT_KEY)/i, 'and how the run authenticates there');
-  assert.match(body, /--kinds.{0,300}(enabled kinds|tenant's)/i, 'the list is the tenant\'s own, so the test still measures what they would get');
+  assert.match(body, /--kinds auto/, 'the kit reads the tenant\'s own enabled kinds, so the test still measures what they would get');
+  assert.doesNotMatch(body, /never guess a list/i, 'no hand-made list for the agent to get wrong');
 });
 
 test('SKILL.md never drives the kit around its npm scripts', () => {

@@ -6,9 +6,9 @@
 
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { json } from './kitPlanFixtures.mjs';
+import { ALL_SHADOW, APPLYING, fakeGateway as gateGateway, gateRow, json } from './kitPlanFixtures.mjs';
 import {
   PIN_ARGS, fakeClaude, fakeRunGateway, kitIn, kitRunCopy, originRepo, pairRound, poisonClaude, runEnv, runScenario, sharedTemp, writeDir, writeNoise,
 } from './kitRunFixtures.mjs';
@@ -86,3 +86,67 @@ test('with kinds pinned the Anyray arm sends the header and the direct arm does 
 });
 
 void pairRound;
+
+// ---- --kinds auto: the tenant's own enabled kinds, read at freeze time ------------------------------
+
+async function autoFreeze(t, strategies, { admin = true } = {}) {
+  const root = sharedTemp('kit-kinds-auto-');
+  const origin = originRepo(root);
+  const copy = kitRunCopy(join(root, 'kit'));
+  const dir = writeDir(root, { [ID]: runScenario(origin) });
+  const gateway = await gateGateway(t, { strategies });
+  const env = runEnv(join(root, 'home'), { gateway });
+  if (!admin) delete env.ANYRAY_ADMIN_KEY;
+  const freeze = await kitIn(copy.root, ['freeze', '--scenarios-dir', dir, ...PIN_ARGS(gateway.url), '--kinds', 'auto', '--json'], { env });
+  const lockFile = join(dir, 'plan.lock.json');
+  const lock = () => JSON.parse(readFileSync(lockFile, 'utf8'));
+  return { freeze, gateway, lock, lockFile };
+}
+
+test('--kinds auto pins exactly the kinds that are on for the tenant, sorted, read with the admin key', async (t) => {
+  const strategies = [gateRow('window_budget', 'on'), gateRow('observation_mask', 'on'), gateRow('relevance_filter', 'shadow', 'force_on'), gateRow('code_graph', 'shadow'), gateRow('tool_defer', 'off')];
+  const p = await autoFreeze(t, strategies);
+  const out = json(p.freeze, 'freeze --kinds auto');
+  assert.equal(out.ok, true, JSON.stringify(out).slice(0, 300));
+  assert.equal(p.lock().pins.kinds, 'observation_mask,relevance_filter,window_budget', 'on and forced on; never shadow or off');
+  const read = p.gateway.requests.find((r) => r.path === '/admin/v1/optimizer/session-gate');
+  assert.ok(read?.authorization?.startsWith('Bearer '), 'read with the admin key');
+});
+
+test('--kinds auto on a tenant that applies one kind pins just that one', async (t) => {
+  const p = await autoFreeze(t, APPLYING);
+  assert.equal(json(p.freeze, 'freeze --kinds auto').ok, true);
+  assert.equal(p.lock().pins.kinds, 'observation_mask');
+});
+
+test('--kinds auto on a tenant with nothing on is refused, never an empty pin, and writes no lock', async (t) => {
+  const p = await autoFreeze(t, ALL_SHADOW);
+  const out = json(p.freeze, 'freeze --kinds auto (nothing on)');
+  assert.deepEqual({ ok: out.ok, code: out.code }, { ok: false, code: 'plan_kinds_empty' });
+  assert.equal(p.freeze.status, 3);
+  assert.equal(existsSync(p.lockFile), false);
+  assert.match(out.message, /no kind is on/i);
+});
+
+test('--kinds auto without an admin key says so and asks the gateway nothing', async (t) => {
+  const p = await autoFreeze(t, APPLYING, { admin: false });
+  const out = json(p.freeze, 'freeze --kinds auto (no admin key)');
+  assert.deepEqual({ ok: out.ok, code: out.code }, { ok: false, code: 'kinds_auto_needs_admin' });
+  assert.equal(p.freeze.status, 2);
+  assert.match(out.message, /ANYRAY_ADMIN_KEY/);
+  assert.equal(p.gateway.requests.filter((r) => r.path.startsWith('/admin/')).length, 0);
+  assert.equal(existsSync(p.lockFile), false);
+});
+
+test('a gate the freeze cannot read is refused, not pinned from a guess', async (t) => {
+  const root = sharedTemp('kit-kinds-auto-');
+  const origin = originRepo(root);
+  const copy = kitRunCopy(join(root, 'kit'));
+  const dir = writeDir(root, { [ID]: runScenario(origin) });
+  const gateway = await gateGateway(t, { status: 403 });
+  const env = runEnv(join(root, 'home'), { gateway });
+  const child = await kitIn(copy.root, ['freeze', '--scenarios-dir', dir, ...PIN_ARGS(gateway.url), '--kinds', 'auto', '--json'], { env });
+  const out = json(child, 'freeze --kinds auto (403)');
+  assert.deepEqual({ ok: out.ok, code: out.code }, { ok: false, code: 'plan_tenant_unreadable' });
+  assert.equal(existsSync(join(dir, 'plan.lock.json')), false);
+});

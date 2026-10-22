@@ -148,12 +148,14 @@ gateway, use your normal key as `ANYRAY_BENCH_CLIENT_KEY` with a tenant-bound ad
 as `ANYRAY_ADMIN_KEY`, and pin the kinds to evaluate when you freeze:
 
 ```bash
-npm run freeze -- --scenarios-dir ./anyray-test --kinds code_graph,observation_mask ...
+npm run freeze -- --scenarios-dir ./anyray-test --kinds auto ...
 ```
 
-The list is sorted, deduplicated and part of the plan hash. It is sent as
-`x-anyray-optimization-kinds` on the Anyray arm only, so use your tenant's own enabled
-kinds or the test measures something you will not get. Without `--kinds` nothing changes.
+`auto` reads the kinds that are on for your tenant with the admin key and pins them: sorted,
+deduplicated and part of the plan hash, so the test measures what you would get. They are sent
+as `x-anyray-optimization-kinds` on the Anyray arm only. A tenant with no kind on is refused
+(`plan_kinds_empty`). You can also name kinds yourself (`--kinds code_graph,observation_mask`),
+but then the test measures that list, not your tenant's. Without `--kinds` nothing changes.
 
 ### Checking this machine yourself
 

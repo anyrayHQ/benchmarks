@@ -64,10 +64,12 @@ const fetchGate = (strategies, extra = {}) => sessionGateState(gateway, { env,
   fetchImpl: async () => ({ ok: true, json: async () => ({ tenant: 'acme', strategies }) }), ...extra });
 
 test('session gate refuses only all-shadow, counts effective states and permits an empty list', async () => {
-  assert.deepEqual(await fetchGate([{ state: 'shadow' }, { state: 'shadow' }]), { tenant: 'acme', kinds: { on: 0, shadow: 2, off: 0 }, allShadow: true });
+  assert.deepEqual(await fetchGate([{ state: 'shadow' }, { state: 'shadow' }]), { tenant: 'acme', kinds: { on: 0, shadow: 2, off: 0 }, kindsOn: [], allShadow: true });
   const mixed = await fetchGate([{ state: 'shadow', effectiveState: 'on' }, { state: 'shadow' }, { state: 'off' }]);
-  assert.deepEqual(mixed, { tenant: 'acme', kinds: { on: 1, shadow: 1, off: 1 }, allShadow: false });
-  assert.deepEqual(await fetchGate([]), { tenant: 'acme', kinds: { on: 0, shadow: 0, off: 0 }, allShadow: false });
+  assert.deepEqual(mixed, { tenant: 'acme', kinds: { on: 1, shadow: 1, off: 1 }, kindsOn: [], allShadow: false }, 'rows with no kind name add nothing to kindsOn');
+  const named = await fetchGate([{ kind: 'window_budget', state: 'on' }, { kind: 'observation_mask', state: 'shadow', effectiveState: 'on' }, { kind: 'code_graph', state: 'shadow' }, { kind: 'tool_defer', state: 'off' }]);
+  assert.deepEqual(named.kindsOn, ['observation_mask', 'window_budget'], 'the kinds applying in production, sorted: on, or forced on');
+  assert.deepEqual(await fetchGate([]), { tenant: 'acme', kinds: { on: 0, shadow: 0, off: 0 }, kindsOn: [], allShadow: false });
 });
 
 test('session gate sends a bounded authenticated GET, selects the token in priority order and forwards only an explicit tenant', async () => {

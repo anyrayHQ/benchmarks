@@ -73,10 +73,11 @@ Write or Edit when available.
   An Anyray-hosted multi-tenant gateway cannot mint self-serve test keys, and
   Connect may report only a generic refusal. There, ask the user for their own
   `ANYRAY_BENCH_CLIENT_KEY` (their normal key) and a tenant-bound admin key, and
-  freeze with `--kinds` set to the tenant's enabled kinds (read them from the
-  console's optimizer settings; never guess a list). The kit pins the list in the
-  plan and sends it as `x-anyray-optimization-kinds` on the Anyray arm only, so
-  the test still measures what the tenant would get. Never add `--kinds` on a
+  freeze with `--kinds auto`. The kit reads the kinds that are on for the tenant
+  with the admin key and pins that list in the plan, then sends it as
+  `x-anyray-optimization-kinds` on the Anyray arm only, so the test still measures
+  what the tenant would get. If it says no kind is on (`plan_kinds_empty`), report
+  that and stop: there is nothing to measure. Never add `--kinds` on a
   gateway that mints test keys: it changes what the plan measures.
 - Doctor: after the test key is ready, run:
 
