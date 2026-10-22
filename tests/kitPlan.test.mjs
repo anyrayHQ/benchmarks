@@ -18,6 +18,8 @@ import {
 } from './kitPlanFixtures.mjs';
 
 const BUDGET = ['--budget-usd', '500', '--session-cost-usd', '0.15'];
+/** The noise command's default (and minimum) rounds: two direct sessions per scenario each. */
+const NOISE_ROUNDS = 6;
 const shape = (id) => TEST_SHAPES.find((s) => s.id === id);
 
 /** Every budget field follows from the answer's own bands and the formula (contract section 6). */
@@ -26,7 +28,9 @@ function assertBudgetMath(out, { budget, cost }) {
   assert.equal(out.budgetUsd, budget);
   assert.equal(out.sessionCostUsd, cost);
   assert.ok(Math.abs(out.pairCostUsd - 2 * cost) < 1e-12, `a pair is two sessions: ${out.pairCostUsd}`);
-  assert.equal(out.pairsAffordable, Math.floor(budget / n / (2 * cost)), 'the budget is split evenly across the scenarios');
+  assert.equal(out.noiseRounds, NOISE_ROUNDS, 'the plan assumes the noise command\'s default rounds');
+  assert.ok(Math.abs(out.noiseCostUsd - NOISE_ROUNDS * n * 2 * cost) < 1e-9, `a noise round is two direct sessions per scenario: ${out.noiseCostUsd}`);
+  assert.equal(out.pairsAffordable, Math.floor((budget - out.noiseCostUsd) / n / (2 * cost)), 'noise comes off the budget first, the rest is split evenly across the scenarios');
   const detectable = formulaDetectable(out.pairsAffordable);
   if (detectable === null) assert.equal(out.detectableRatio, null, 'fewer than two pairs detect nothing');
   else assert.ok(Math.abs(out.detectableRatio - detectable) < 1e-9, `detectableRatio ${out.detectableRatio} != ${detectable}`);
@@ -45,7 +49,7 @@ function assertBudgetMath(out, { budget, cost }) {
     }
     planned += s.pairsPlanned;
   }
-  assert.ok(Math.abs(out.spendCeilingUsd - planned * out.pairCostUsd) < 1e-6, `spendCeilingUsd ${out.spendCeilingUsd} != ${planned} pairs x ${out.pairCostUsd}`);
+  assert.ok(Math.abs(out.spendCeilingUsd - (out.noiseCostUsd + planned * out.pairCostUsd)) < 1e-6, `spendCeilingUsd ${out.spendCeilingUsd} != noise ${out.noiseCostUsd} + ${planned} pairs x ${out.pairCostUsd}`);
   assert.ok(out.spendCeilingUsd <= budget + 1e-9, 'the ceiling never exceeds the budget');
   assert.equal(out.resolvable, bands.length > 0 && bands.every((s) => s.resolvable === true), 'the plan resolves only when every band does');
 }
@@ -153,28 +157,34 @@ test('the budget: pairs affordable per scenario, the effect it can detect, the s
     `plan --budget-usd ${budget} --session-cost-usd ${cost}`,
   );
 
-  // $500 at $0.15 a session: 416 pairs per scenario; 135 resolves the 0.8 band, 604 for 0.9 does not.
+  // $500 at $0.15 a session: $7.20 of noise (6 rounds x 4 scenarios x $0.30) first, then 410 pairs
+  // per scenario; 135 resolves the 0.8 band, 604 for 0.9 does not.
   const a = await plan(500, 0.15);
   assertBudgetMath(a, { budget: 500, cost: 0.15 });
-  assert.equal(a.pairsAffordable, 416);
+  assert.equal(a.pairsAffordable, 410);
   assert.deepEqual(Object.fromEntries(a.scenarios.map((s) => [s.id, s.resolvable])), { 'check-long': true, 'short-task': false, docs: null, facts: null });
   assert.equal(a.resolvable, false, 'a budget that cannot resolve a predicted band is reported as such');
-  assert.ok(Math.abs(a.spendCeilingUsd - 414.9) < 1e-6, `135 + 3 x 416 pairs at $0.30: ${a.spendCeilingUsd}`);
+  assert.ok(Math.abs(a.spendCeilingUsd - 416.7) < 1e-6, `$7.20 of noise + 135 + 3 x 410 pairs at $0.30: ${a.spendCeilingUsd}`);
 
-  // The boundary: exactly 604 pairs resolves the 0.9 band, 603 does not.
-  const b = await plan(724.9, 0.15);
-  assertBudgetMath(b, { budget: 724.9, cost: 0.15 });
+  // The human plan shows the split, so the ceiling a client says Start to names what it covers.
+  const human = await planRun(t, dir, gateway, ['--budget-usd', '500', '--session-cost-usd', '0.15'], { kitRoot: copy.root });
+  assert.equal(human.status, 0, `human plan failed: ${human.stderr.slice(-400)}`);
+  assert.ok(human.stdout.split('\n').includes('Spend ceiling: $416.70 (noise: 6 rounds, $7.20; paired runs: 1365 pairs, $409.50)'), `human plan: ${human.stdout}`);
+
+  // The boundary: exactly 604 pairs after noise resolves the 0.9 band, 603 does not.
+  const b = await plan(732.1, 0.15);
+  assertBudgetMath(b, { budget: 732.1, cost: 0.15 });
   assert.equal(b.pairsAffordable, 604);
   assert.equal(b.resolvable, true, 'every band resolvable');
-  const c = await plan(724.7, 0.15);
-  assertBudgetMath(c, { budget: 724.7, cost: 0.15 });
+  const c = await plan(731.9, 0.15);
+  assertBudgetMath(c, { budget: 731.9, cost: 0.15 });
   assert.equal(c.pairsAffordable, 603);
   assert.equal(c.resolvable, false);
 
-  // One pair detects nothing.
+  // One pair after noise ($1.80 + $0.30) detects nothing.
   const one = writeScenariosDir(tempDir(t), { 'check-long': all['check-long'] });
-  const d = await plan(0.5, 0.15, one);
-  assertBudgetMath(d, { budget: 0.5, cost: 0.15 });
+  const d = await plan(2.2, 0.15, one);
+  assertBudgetMath(d, { budget: 2.2, cost: 0.15 });
   assert.equal(d.pairsAffordable, 1);
   assert.equal(d.detectableRatio, null);
 
@@ -183,6 +193,31 @@ test('the budget: pairs affordable per scenario, the effect it can detect, the s
   const e = await plan(10000, 0.15, none);
   assertBudgetMath(e, { budget: 10000, cost: 0.15 });
   assert.equal(e.resolvable, false);
+});
+
+test('a budget that cannot pay for the noise rounds plus one pair per scenario is refused before the gateway: plan_budget_too_small, exit 3, with the minimum, and no plan', async (t) => {
+  const all = shapedScenarios();
+  const dir = writeScenariosDir(tempDir(t), { 'check-long': all['check-long'], docs: all.docs });
+  const gateway = await fakeGateway(t);
+  // Two scenarios at $0.15: $3.60 of noise (6 x 2 x $0.30) plus a $0.30 pair each is $4.20.
+  const child = await planRun(t, dir, gateway, ['--budget-usd', '4.1', '--session-cost-usd', '0.15', '--json']);
+  const out = json(child, 'plan --json (budget below noise + one pair)');
+  assert.deepEqual({ ok: out.ok, command: out.command, code: out.code }, { ok: false, command: 'plan', code: 'plan_budget_too_small' });
+  assert.equal(child.status, 3);
+  assert.equal(out.budgetUsd, 4.1);
+  assert.ok(Math.abs(out.noiseCostUsd - 3.6) < 1e-9, `noise cost ${out.noiseCostUsd}`);
+  assert.ok(Math.abs(out.minimumBudgetUsd - 4.2) < 1e-9, `minimum ${out.minimumBudgetUsd}`);
+  assert.ok(typeof out.message === 'string' && out.message.length > 0, 'the refusal says why');
+  assert.ok(!Object.hasOwn(out, 'scenarios'), 'a refused plan prints no plan');
+  assert.deepEqual(gateway.requests, [], 'a budget refusal needs no gateway read');
+
+  const human = await planRun(t, dir, gateway, ['--budget-usd', '4.1', '--session-cost-usd', '0.15']);
+  assert.equal(human.status, 3, `exit ${human.status}`);
+
+  // The control: $4.30 covers noise and one pair each, so it plans.
+  const ok = planOk(await planRun(t, dir, gateway, ['--budget-usd', '4.3', '--session-cost-usd', '0.15', '--json']), 'plan at $4.30');
+  assertBudgetMath(ok, { budget: 4.3, cost: 0.15 });
+  assert.equal(ok.pairsAffordable, 1);
 });
 
 // ---- the real catalog ---------------------------------------------------------------------------
