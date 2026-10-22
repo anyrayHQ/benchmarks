@@ -52,7 +52,7 @@ test('verdict --json carries nextStep per scenario and the human lines print it'
   assert.equal(by.docs.nextStep, null, 'never run');
 
   const human = (await kitIn(copy.root, ['verdict', '--scenarios-dir', dir], { env })).stdout;
-  assert.match(human, /facts: .*\n\s*Next: Run 6 more pairs \(about \$12\.00\) to reach the minimum of 8\./);
+  assert.match(human, /facts: .*\n(\s*Note: .*\n)?\s*Next: Run 6 more pairs \(about \$12\.00\) to reach the minimum of 8\./);
   assert.doesNotMatch(human, /check-long: .*\n\s*Next:/);
 
   const report = (await kitIn(copy.root, ['report', '--scenarios-dir', dir, '--redact'], { env })).stdout;

@@ -331,6 +331,12 @@ test('SKILL.md offers a starter test, as source: proposed, when the user has non
   assert.match(body, /starter.{0,400}(only|never).{0,80}(yes|confirm|approv)/i, 'nothing is recorded without their yes');
 });
 
+test('SKILL.md carries the kit\'s tie note beside a verdict whose interval includes 1, and never softens the Rule 0 word', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /`tieNote`/, 'the kit\'s own words for a result inside the noise of parity');
+  assert.match(body, /`tieNote`.{0,300}never (soften|reword|replace)/i, 'the tie note sits beside the Rule 0 word and does not replace it');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');

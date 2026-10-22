@@ -119,7 +119,9 @@ pick up where you left off.
 
 If a verdict cannot decide yet (too few pairs, or too noisy), it ends with a line such as
 `Next: Run 6 more pairs (about $12.00) to reach the minimum of 8.`, priced at your own pair
-cost. Running them is a new paid run with its own Start.
+cost. Running them is a new paid run with its own Start. When the interval includes 1 a
+`Note:` says there is no clear difference from direct, because Rule 0 judges the tail and
+can read FAIL on a tie; the Rule 0 word itself is never softened.
 
 ### 8. Publish, if you want to
 

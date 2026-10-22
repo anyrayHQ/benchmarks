@@ -231,7 +231,10 @@ An undecided verdict (`inconclusive`, `INCONCLUSIVE` or `INSUFFICIENT`) carries 
 cost. Copy it exactly beside that scenario and never replace it with your own
 count or price. Running those pairs is a new paid run: it needs its own plan
 check and its own Start. A verdict that can decide has no `nextStep`; do not
-suggest more pairs for it.
+suggest more pairs for it. When the interval includes 1 the kit also gives a
+`tieNote` ("No clear difference from direct"): copy it beside the Rule 0 word,
+because Rule 0 judges the tail and can read FAIL on a tie. Never soften, reword or
+replace the Rule 0 word with it.
 
 Quality travels with cost. Each scenario line carries the kit's clause "Anyray
 passed X of N, direct Y of N" (the client's own check, run on both arms), and
