@@ -134,6 +134,19 @@ npm run agent:report     # → results/agent/report.html
   so an interrupted run keeps them.
 - `npm test` uses stubs and makes no model requests.
 
+### Install the Claude Code plugin
+
+In Claude Code, add the marketplace and install the skill:
+
+```text
+/plugin marketplace add anyrayHQ/benchmarks
+/plugin install anyray-test@anyray-benchmarks
+```
+
+Ask to measure Anyray savings on your own test. The `anyray-test` skill records
+your words, prepares a frozen plan and asks for an explicit Start before paid
+runs. You can also bring back the kit's plan, verdict or report to continue.
+
 ### Plan before spending
 
 For client scenarios, set `source: client` (or `proposed` for a task we proposed)

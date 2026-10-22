@@ -1,0 +1,16 @@
+{
+  "name": "anyray-benchmarks",
+  "owner": {
+    "name": "Anyray"
+  },
+  "metadata": {
+    "description": "Measure Anyray savings on your own work with the benchmark kit."
+  },
+  "plugins": [
+    {
+      "name": "anyray-test",
+      "source": "./",
+      "version": "0.1.0"
+    }
+  ]
+}
