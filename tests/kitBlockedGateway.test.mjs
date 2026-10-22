@@ -34,8 +34,8 @@ function assertBlocked(child, command, gateway) {
 
 test('the committed config does not block our hosted gateway', () => {
   const run = yaml.load(readFileSync(join(KIT_ROOT, 'config.yaml'), 'utf8')).run ?? {};
-  const blocked = (run.blocked_gateways ?? []).map((u) => String(u).replace(/\/$/, ''));
-  assert.ok(!blocked.includes('https://gateway.anyray.ai'), `blocked: ${JSON.stringify(blocked)}`);
+  const hosts = (run.blocked_gateways ?? []).map((u) => new URL(u).hostname);
+  assert.equal(hosts.some((h) => h === 'gateway.anyray.ai'), false, `blocked: ${JSON.stringify(hosts)}`);
 });
 
 test('plan refuses a blocked gateway before it reads the session gate, with or without a trailing slash in the block list', async (t) => {
