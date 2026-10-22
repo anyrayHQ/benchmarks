@@ -1,0 +1,8 @@
+{
+  "name": "anyray-test",
+  "version": "0.1.0",
+  "author": {
+    "name": "Anyray"
+  },
+  "description": "Measure Anyray savings on your own scenarios with a frozen plan, an explicit spend gate and the kit's verdict."
+}
