@@ -14,6 +14,8 @@
     "run": "node tools/kit.mjs run",
     "verdict": "node tools/kit.mjs verdict",
     "report": "node tools/kit.mjs report",
+    "release-check": "node tools/kit.mjs release-check",
+    "twins": "node tools/kit.mjs twins",
     "publish-result": "node tools/kit.mjs publish-result",
     "agent:report": "node report_agent.mjs",
     "bench-rule": "node tools/bench-rule.mjs",

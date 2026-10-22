@@ -231,6 +231,47 @@ sends that same body to the frozen gateway and prints only the result id.
 For legacy `results/agent/` records, `npm run agent:report -- --redact` creates
 an HTML page from an allowlist too.
 
+### Rerun on every release
+
+Copy [kit/workflows/anyray-regression.yml](kit/workflows/anyray-regression.yml)
+into your private scenarios repository as `.github/workflows/anyray-regression.yml`.
+Commit the scenarios and `plan.lock.json` at its root after measuring noise.
+Set the repository variable `ANYRAY_GATEWAY_URL` and secrets `ANYRAY_ADMIN_KEY`,
+`ANYRAY_BENCH_CLIENT_KEY`, and `ANYRAY_UPSTREAM_TOKEN` (provider API credentials for
+CI). The admin key needs `settings:read`, `client-tests:read`, `client-tests:write`,
+`optimizer:read`, `traces:read`, and `spend:read`.
+
+The daily check runs `release-check`: it compares the gateway version with the
+newest published result of this plan. Only a changed version starts paid rounds;
+a manual dispatch also runs them. The kit commit and Claude Code version come
+from the lock, and CI keeps the frozen plan and noise floor. An unreadable gateway
+fails the check. To check locally:
+
+```bash
+npm run -s release-check -- --scenarios-dir ./client-scenarios --json
+```
+
+`ANYRAY_TEST_RUNNER` optionally selects the runner, defaulting to `ubuntu-latest`.
+For a Bedrock plan, select a self-hosted runner whose instance role reaches Bedrock.
+If you add OIDC, add `id-token: write` to your workflow copy. The template supports
+Claude Code plans.
+
+Our public [twins/](twins/) describe task shapes on public repositories. Their ids
+and titles describe the task; client scenarios stay private. Optional `twinOf`
+links a proposed scenario to a client's frozen plan hash (64 lowercase hex, never
+all zeros). Leave it absent until a client plan exists. Publishing that field
+requires the gateway's ANY-1491 schema update; the seed twin omits it.
+
+```bash
+npm run twins -- --release v1.10.520 --gateway https://your-gateway.example --rounds 8 --json
+```
+
+Twins use the same benchmark and admin credentials, freeze a fresh temporary copy,
+measure six noise rounds, run paired rounds (eight by default), and publish with
+the supplied release tag. The gateway version is recorded separately. The committed
+twins remain unchanged, and the temporary copy is removed on exit.
+
+
 ## How a round works
 
 Each **round** runs the same task on a real open-source repo in two arms **at the same

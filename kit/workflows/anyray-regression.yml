@@ -1,0 +1,127 @@
+# Copy to .github/workflows/anyray-regression.yml in your PRIVATE scenarios repository.
+# Commit the frozen plan.lock.json, including its measured noise block, at the repo root.
+# Set variables ANYRAY_GATEWAY_URL and optionally ANYRAY_TEST_RUNNER (default ubuntu-latest).
+# Set secrets ANYRAY_ADMIN_KEY, ANYRAY_BENCH_CLIENT_KEY, ANYRAY_UPSTREAM_TOKEN.
+# The admin key needs settings:read, client-tests:read, client-tests:write, plus
+# run's reads: optimizer:read, traces:read and spend:read.
+# For Bedrock, point ANYRAY_TEST_RUNNER at a self-hosted runner whose instance role
+# reaches Bedrock. If adding OIDC authentication, add id-token: write in your copy.
+# Claude Code is installed at the plan's pinned version; Codex plans are refused.
+name: anyray-regression
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: anyray-regression
+  cancel-in-progress: false
+env:
+  ANYRAY_GATEWAY_URL: ${{ vars.ANYRAY_GATEWAY_URL }}
+  SCENARIOS_DIR: ${{ github.workspace }}/scenarios
+jobs:
+  check:
+    runs-on: ${{ vars.ANYRAY_TEST_RUNNER || 'ubuntu-latest' }}
+    outputs:
+      changed: ${{ steps.release.outputs.changed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: scenarios
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - id: lock
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          let lock;
+          try {
+            lock = JSON.parse(readFileSync(join(process.env.SCENARIOS_DIR, 'plan.lock.json'), 'utf8'));
+          } catch {
+            console.error('plan_lock_invalid');
+            process.exit(1);
+          }
+          if (typeof lock?.benchmarksCommit !== 'string' || !/^[0-9a-f]{40}$/.test(lock.benchmarksCommit) ||
+              lock?.pins?.client !== 'claude-code' || typeof lock.pins.clientVersion !== 'string' ||
+              !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(lock.pins.clientVersion)) {
+            console.error('plan_lock_invalid');
+            process.exit(1);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `commit=${lock.benchmarksCommit}\nclaude=${lock.pins.clientVersion}\n`);
+          NODE
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: anyrayHQ/benchmarks
+          ref: ${{ steps.lock.outputs.commit }}
+          path: anyray-kit
+          persist-credentials: false
+      - run: npm ci
+        working-directory: anyray-kit
+      - id: release
+        working-directory: anyray-kit
+        env:
+          ANYRAY_ADMIN_KEY: ${{ secrets.ANYRAY_ADMIN_KEY }}
+        run: npm run -s release-check -- --scenarios-dir "$SCENARIOS_DIR" >> "$GITHUB_OUTPUT"
+  regression:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || needs.check.outputs.changed == 'true'
+    runs-on: ${{ vars.ANYRAY_TEST_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: scenarios
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - id: lock
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          let lock;
+          try {
+            lock = JSON.parse(readFileSync(join(process.env.SCENARIOS_DIR, 'plan.lock.json'), 'utf8'));
+          } catch {
+            console.error('plan_lock_invalid');
+            process.exit(1);
+          }
+          if (typeof lock?.benchmarksCommit !== 'string' || !/^[0-9a-f]{40}$/.test(lock.benchmarksCommit) ||
+              lock?.pins?.client !== 'claude-code' || typeof lock.pins.clientVersion !== 'string' ||
+              !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(lock.pins.clientVersion)) {
+            console.error('plan_lock_invalid');
+            process.exit(1);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `commit=${lock.benchmarksCommit}\nclaude=${lock.pins.clientVersion}\n`);
+          NODE
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: anyrayHQ/benchmarks
+          ref: ${{ steps.lock.outputs.commit }}
+          path: anyray-kit
+          persist-credentials: false
+      - run: npm ci
+        working-directory: anyray-kit
+      - name: Install pinned Claude Code
+        env:
+          CLAUDE_VERSION: ${{ steps.lock.outputs.claude }}
+        run: npm install -g "@anthropic-ai/claude-code@$CLAUDE_VERSION"
+      - run: npm run -s verify -- --scenarios-dir "$SCENARIOS_DIR" --json
+        working-directory: anyray-kit
+      - run: npm run -s run -- --scenarios-dir "$SCENARIOS_DIR" --json
+        working-directory: anyray-kit
+        env:
+          ANYRAY_ADMIN_KEY: ${{ secrets.ANYRAY_ADMIN_KEY }}
+          ANYRAY_BENCH_CLIENT_KEY: ${{ secrets.ANYRAY_BENCH_CLIENT_KEY }}
+          ANYRAY_UPSTREAM_TOKEN: ${{ secrets.ANYRAY_UPSTREAM_TOKEN }}
+      - run: npm run -s report -- --scenarios-dir "$SCENARIOS_DIR" --redact --json
+        working-directory: anyray-kit
+      - run: npm run -s publish-result -- --scenarios-dir "$SCENARIOS_DIR" --json
+        working-directory: anyray-kit
+        env:
+          ANYRAY_ADMIN_KEY: ${{ secrets.ANYRAY_ADMIN_KEY }}

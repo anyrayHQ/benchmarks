@@ -1,0 +1,36 @@
+diff --git a/context.go b/context.go
+--- a/context.go
++++ b/context.go
+@@ -306,7 +306,7 @@
+ 	if value, exists := c.Get(key); exists {
+ 		return value
+ 	}
+-	panic(fmt.Sprintf("key %v does not exist", key))
++	panic(fmt.Sprintf("key %v does not exist"))
+ }
+ 
+ func getTyped[T any](c *Context, key any) (res T) {
+diff --git a/gin.go b/gin.go
+--- a/gin.go
++++ b/gin.go
+@@ -641,7 +641,7 @@
+ 			"Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.")
+ 	}
+ 
+-	f := os.NewFile(uintptr(fd), fmt.Sprintf("fd@%d", fd))
++	f := os.NewFile(uintptr(fd), fmt.Sprintf("fd@%s", fd))
+ 	defer f.Close()
+ 	listener, err := net.FileListener(f)
+ 	if err != nil {
+diff --git a/binding/form_mapping.go b/binding/form_mapping.go
+--- a/binding/form_mapping.go
++++ b/binding/form_mapping.go
+@@ -227,7 +227,7 @@
+ 	case "pipes":
+ 		sep = "|"
+ 	default:
+-		return vs, fmt.Errorf("%s is not supported in the collection_format. (multi, csv, ssv, tsv, pipes)", cfTag)
++		return vs, fmt.Errorf("%d is not supported in the collection_format. (multi, csv, ssv, tsv, pipes)", cfTag)
+ 	}
+ 
+ 	totalLength := 0
