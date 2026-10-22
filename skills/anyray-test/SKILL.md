@@ -38,10 +38,10 @@ Write or Edit when available.
   `anyray-test--v<version>`. For this release the setup is:
 
   ```bash
-  git clone --branch anyray-test--v0.1.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
+  git clone --branch anyray-test--v0.2.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
   npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" ci
   git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse HEAD
-  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.1.0^{commit}'
+  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.2.0^{commit}'
   ```
 
   The two commits must match. Check the kit's scripts, lockfile and dependencies.
