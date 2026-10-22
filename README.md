@@ -186,6 +186,11 @@ Verify retains the frozen predictions even if the catalog changes. Use
 `freeze --replace` to write a new plan with a fresh nonce and current catalog.
 The lock contains ids, hashes and predictions; task and file contents stay local.
 
+Each release refreshes the catalog from vendor-admin's content-free calibration document:
+run `npm run calibrate -- --from <file>`, review and commit `predictions.yaml`.
+Calibration keeps every miss and publishes a band's hit rate after eight client test
+rounds. Plans show how often the band was right; reports read the current catalog.
+
 ### Measure, run and share a client plan
 
 Use Claude Code for kit execution. Set `ANYRAY_GATEWAY_URL` to the frozen gateway,

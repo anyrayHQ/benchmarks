@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
 import { PlanError, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
-import { loadCatalog, classify, budgetPlan, formatPlan } from '../lib/planner.mjs';
+import { loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
+import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
 import { readKitRecords, kitVerdict } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
@@ -15,9 +16,9 @@ const command = argv[0] ?? 'freeze';
 const usage = () => { throw new PlanError('usage', {}, 'Expected a kit command, --scenarios-dir <path> and valid flags'); };
 
 function parseArgs() {
-  if (!['plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins'].includes(command)) usage();
+  if (!['calibrate', 'plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins'].includes(command)) usage();
   const options = {};
-  const values = command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
+  const values = command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
     ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
     : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
@@ -33,6 +34,8 @@ function parseArgs() {
   }
   if (command === 'twins') {
     if (!/^[A-Za-z0-9][\w.:-]{0,63}$/.test(options.release ?? '')) usage();
+  } else if (command === 'calibrate') {
+    if (!options.from) usage();
   } else if (!options['scenarios-dir']) usage();
   if (options.provider && !['anthropic', 'bedrock'].includes(options.provider)) usage();
   if (options.client && !['claude-code', 'codex'].includes(options.client)) usage();
@@ -57,18 +60,24 @@ function parseArgs() {
 
 try {
   const options = parseArgs();
-  const dir = command === 'twins' ? null : resolveScenariosDir(options['scenarios-dir']);
+  const dir = ['calibrate', 'twins'].includes(command) ? null : resolveScenariosDir(options['scenarios-dir']);
   let answer;
-  if (command === 'twins') answer = await runTwins(options);
+  let catalog;
+  if (command === 'calibrate') answer = calibrate(options.from);
+  else if (command === 'twins') answer = await runTwins(options);
   else if (command === 'release-check') answer = await releaseCheck(dir, options);
   else if (command === 'verify') answer = planAnswer(command, verifyPlan(dir));
   else if (command === 'plan') {
     const gateway = options.gateway || runDefaults().gateway;
     if (!gatewayHost(gateway)) throw new PlanError('pin_missing', { pin: 'gatewayHost' });
     const bundles = validatedScenarios(dir);
-    const catalog = loadCatalog();
+    catalog = loadCatalog();
     const client = options.client || 'claude-code';
-    const scenarios = bundles.map(({ id, source, scenario }) => ({ id, source, ...classify(scenario, client, catalog) }));
+    const scenarios = bundles.map(({ id, source, scenario }) => {
+      const classified = classify(scenario, client, catalog);
+      const shape = catalog.shapes.find((s) => s.id === classified.shapeId);
+      return { id, source, ...classified, predictedHitRate: predictedHitRate(shape, classified.prediction) };
+    });
     const commit = benchmarksCommit();
     const gate = await sessionGateState(gateway, { tenant: options.tenant });
     if (gate.reason) throw new PlanError('plan_tenant_unreadable', { reason: gate.reason, ...(gate.status === undefined ? {} : { status: gate.status }) }, 'Unable to read the tenant session gate');
@@ -126,7 +135,8 @@ try {
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
   else if (command === 'noise' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
   else if (command === 'verdict' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: ${s.verdict}; Rule 0 ${s.rule0}`).join('\n') + `\nPooled Rule 0: ${answer.rule0Verdict}\n`);
-  else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer));
+  else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog));
+  else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');
   else printPlanAnswer(answer, json);
 } catch (error) {
   if (error instanceof PlanError) {
