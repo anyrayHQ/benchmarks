@@ -348,7 +348,9 @@ test('plan validates the scenarios as freeze does, plus mcpTools, and refuses be
   assert.deepEqual(gateway.requests, [], 'a plan refused on its scenarios made a request');
 });
 
-test('plan usage errors: --budget-usd and --session-cost-usd are required positive numbers, --client and --tenant are checked; one JSON value, exit 2, no request', async (t) => {
+// --session-cost-usd is optional since ANY-1515 (a budget-only plan: kitPlanBudgetOnly.test.mjs);
+// when given it must still be a positive number.
+test('plan usage errors: --budget-usd is a required positive number, --session-cost-usd a positive number when given, --client and --tenant are checked; one JSON value, exit 2, no request', async (t) => {
   const dir = writeScenariosDir(tempDir(t), shapedScenarios());
   const gateway = await fakeGateway(t);
   const ok = { '--budget-usd': '50', '--session-cost-usd': '0.15' };
@@ -361,8 +363,8 @@ test('plan usage errors: --budget-usd and --session-cost-usd are required positi
     ['--budget-usd 0', { ...ok, '--budget-usd': '0' }],
     ['--budget-usd -5', { ...ok, '--budget-usd': '-5' }],
     ['--budget-usd abc', { ...ok, '--budget-usd': 'abc' }],
-    ['no --session-cost-usd', { '--budget-usd': '50' }],
     ['--session-cost-usd 0', { ...ok, '--session-cost-usd': '0' }],
+    ['--session-cost-usd abc', { ...ok, '--session-cost-usd': 'abc' }],
     ['--client sdk', { ...ok, '--client': 'sdk' }],
     ['--tenant with a slash', { ...ok, '--tenant': 'acme/eu' }],
     ['an unknown flag', { ...ok, '--no-such-flag': 'x' }],
