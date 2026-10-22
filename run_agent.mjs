@@ -121,9 +121,10 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { basename, isAbsolute, join, normalize } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { load as parseYaml } from 'js-yaml';
 import { loadConfig } from './lib/loadConfig.mjs';
+import { prepareKitResults, redactedRecord } from './lib/kitResults.mjs';
 import { fillPastes } from './lib/scenarioPastes.mjs';
 import { PlanError, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, assertPlanPin, planAnswer, printPlanAnswer } from './lib/planLock.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome, sharedOutsideWrites } from './lib/agentRun.mjs';
@@ -203,10 +204,10 @@ function parseRedraw(v) {
  * `startPair(redraw)` returns `{ settled, … }`; the result is the last attempt's, plus the
  * draws that were thrown away. With `maxRedraws` 0 nothing is watched.
  */
-export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => {}) {
+export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => {}, watchAlways = false) {
   const redraws = [];
   for (;;) {
-    const controller = maxRedraws ? new AbortController() : null;
+    const controller = maxRedraws || watchAlways ? new AbortController() : null;
     const drawn = {};
     const report = (slot) => (held) => {
       drawn[slot] = held;
@@ -218,7 +219,7 @@ export async function runPairWithRedraw(startPair, maxRedraws, onRedraw = () => 
       onRedraw(drawn, redraws.length);
       continue;
     }
-    return { ...result, redraws };
+    return { ...result, redraws, ...(controller?.signal.aborted ? { holdoutDrawn: drawn } : {}) };
   }
 }
 
@@ -339,7 +340,7 @@ export function parseArgs(argv, env = process.env) {
   }
   if (a.json && !a.scenariosDir) throw new Error('--json needs --scenarios-dir');
   if (!a.scenario) throw new Error('--scenario <name> is required');
-  if (APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
+  if (!a.scenariosDir && APP_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs with run_sdk_app.mjs, not this harness`);
   a.client ??= 'claude-code';
   if (!['claude-code', 'codex'].includes(a.client)) throw new Error('--client claude-code|codex');
   if (a.client !== 'codex' && (a.codexModel !== undefined || a.codexEffort !== undefined || a.keepCodexThreads || a.codexConfigB || a.codexHooksB)) throw new Error('--codex-model, --codex-effort, --codex-config-b, --codex-hooks-b and --keep-codex-threads need --client codex');
@@ -356,7 +357,7 @@ export function parseArgs(argv, env = process.env) {
   if (claudeBinFlag === '') throw new Error('--claude-bin takes an absolute path to a claude executable (or a directory holding one)');
   a.claudeBin = claudeBinRequest({ flag: claudeBinFlag, env });
   if (a.claudeBin.path && !isAbsolute(a.claudeBin.path)) throw new Error(`${a.claudeBin.source} takes an absolute path to a claude executable (or a directory holding one), got ${JSON.stringify(a.claudeBin.path)}`);
-  if (SDK_SCENARIOS.includes(a.scenario)) {
+  if (!a.scenariosDir && SDK_SCENARIOS.includes(a.scenario)) {
     if (a.provider !== 'bedrock' || a.compare !== 'anyray') throw new Error(`${a.scenario} needs --provider bedrock and --compare anyray`);
     if (a.withControl || a.bare || a.warmUp || pinsHooks || a.integrationLevel || a.clientToolPolicies || a.clientToolPoliciesB || a.armEnv.length || a.strategy || a.experiment || a.experimentB || a.redrawHoldout || a.noSubagents || a.mcpCatalog || a.persistSession !== undefined || claudeBinFlag) throw new Error(`${a.scenario} supports the paired SDK comparison, --kinds, --max-turns, --inter-turn-delay-sec and --retry-invalid`);
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
@@ -420,7 +421,7 @@ export function parseArgs(argv, env = process.env) {
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
   if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
   if (a.client === 'codex') assertCodexArgs(a, { claudeBinFlag, pinsHooks });
-  if (gateway && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
+  if (gateway && !a.scenariosDir && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
     throw new Error(`--compare ${a.compare} needs --kinds <k1,k2> (or --strategy <kind>): the Anyray arm requests its strategies explicitly, never the gateway defaults`);
   }
   a.label ??= a.strategy;
@@ -588,6 +589,7 @@ export const slotOptions = (args, arms, slot) => ({
   ...(arms[slot] === 'anyray' && args.connectBinB ? { connectBinPinned: true } : {}),
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
   bare: !!args.bare && arms[slot] === 'anyray',
+  ...(args.scenariosDir && arms[slot] === 'anyray' && !args.kinds ? { tenantDefaults: true } : {}),
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
   ...(args.persistSession === false ? { persistSession: false } : {}), // --no-persist-session: both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
@@ -743,7 +745,9 @@ export function heldOutRecord(tallies) {
 
 /** One round's x-anyray-metadata tag. */
 export function roundTag(args, round, now = Date.now()) {
-  const tag = { sessionId: `anyray-bench-${args.scenario}-${args.compare}-r${round}-${now}`, tool: 'anyray-bench', intent: args.scenario };
+  const identity = args.scenariosDir ? args.planLock.scenarios.find((s) => s.id === args.scenario).hash.slice(0, 16) : args.scenario;
+  const attempt = args.scenariosDir ? `${now}-${randomUUID()}` : now;
+  const tag = { sessionId: `anyray-bench-${identity}-${args.compare}-r${round}-${attempt}`, tool: 'anyray-bench', intent: identity };
   const experiment = args.strategy ?? args.experiment;
   if (experiment) tag.experiment = experiment;
   return tag;
@@ -1065,9 +1069,9 @@ export function insertRound(rounds, r) {
  * then, queued behind the previous one, so concurrent rounds never land a stale snapshot
  * over a newer one.
  */
-function recordSaver(file, record, write) {
+function recordSaver(file, record, write, args) {
   let queue = Promise.resolve();
-  return () => (queue = queue.then(() => write(file, JSON.stringify(record, null, 2) + '\n')));
+  return () => (queue = queue.then(() => write(file, JSON.stringify(args?.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n')));
 }
 
 /**
@@ -1132,6 +1136,7 @@ async function main(args) {
     const version = claudeVersion(claude.bin);
     assertPlanPin(lock, 'clientVersion', version);
     args.claude = { ...claude, version };
+    args.planLock = lock;
   }
   const cfg = loadConfig();
   const level = args.integrationLevel ? createBenchLevel({ gatewayUrl: cfg.run.gatewayUrl, adminKey: process.env.ANYRAY_ADMIN_KEY, clientKey: resolveBenchKey(process.env, () => {}).key, agent: process.env.ANYRAY_BENCH_AGENT_ID, user: process.env.ANYRAY_BENCH_USER_ID }) : null;
@@ -1144,7 +1149,7 @@ async function main(args) {
   if (controlRecord) {
     record.control = { file: resultFileName(controlArgs(args)) };
     record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
-    writeFileSync(file, JSON.stringify(record, null, 2) + '\n');
+    writeFileSync(file, JSON.stringify(args.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n');
   }
   console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, ...verdictOptions(args) })}\n${formatVerdictBlock(record.verdict)}`);
   for (const slot of viaGateway) {
@@ -1202,14 +1207,14 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
     if (scenario.maxTurns < 8 || scenario.maxTurns > 30) throw new Error('sdk-docs maxTurns must be 8–30');
     if (scenario.minTurns < 8 || scenario.minTurns > scenario.maxTurns) throw new Error('sdk-docs minTurns must be at least 8 and no more than maxTurns');
   } else if (scenario.maxTurns < 2 || scenario.maxTurns > 80) throw new Error(`${name} maxTurns must be 2–80: one turn to research, the last to answer`);
-  const out = join(cfg.root, 'results', 'agent');
+  const out = args.scenariosDir ? prepareKitResults(args.scenariosDir, args.planLock.planHash) : join(cfg.root, 'results', 'agent');
   const workParent = join(out, 'sdk-work');
   const cacheDir = join(out, 'sdk-repo-cache');
   mkdirSync(workParent, { recursive: true });
   const repoOptions = { workParent, cacheDir };
   const file = join(out, resultFileName(args));
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
-  const save = recordSaver(file, record, write);
+  const save = recordSaver(file, record, write, args);
   const probe = checkout(scenario, dir, repoOptions);
   try { record.scenario = { name, ...scenarioFile, repoInfo: describe(probe, scenario) }; }
   finally { rmSync(probe, { recursive: true, force: true }); }
@@ -1330,11 +1335,11 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
   const dir = join(args.scenariosDir ?? join(cfg.root, 'scenarios'), args.scenario);
   const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args);
-  const out = join(cfg.root, 'results', 'agent');
+  const out = args.scenariosDir ? prepareKitResults(args.scenariosDir, args.planLock.planHash) : join(cfg.root, 'results', 'agent');
   mkdirSync(out, { recursive: true });
   const file = join(out, resultFileName(args));
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
-  const save = recordSaver(file, record, d.write);
+  const save = recordSaver(file, record, d.write, args);
   const probe = d.prepareRepo(scenario, dir);
   try { record.scenario = { name: args.scenario, ...scenarioFile, repoInfo: d.describeRepo(probe, scenario) }; }
   finally { rmSync(probe, { recursive: true, force: true }); }
@@ -1456,6 +1461,7 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
       round, runTag: tags.b, ...(args.compare === 'gateway' ? { runTags: tags } : {}), startedAt, endedAt, sessions,
       ...roundRatio(sessions.a, sessions.b),
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
+      ...(args.scenariosDir && viaGateway.length ? { kindsObserved: sessions.b.kindsObserved ?? [] } : {}),
       compactions,
       ...(tallies.b ? { optimization: tallies.b } : {}),
       ...(tallies.a && args.compare === 'gateway' ? { optimizationA: tallies.a } : {}),
@@ -1519,10 +1525,10 @@ export async function runCodexComparison(args, cfg, { prefix = '', schedule = cr
  * pool with the control); each is saved as it finishes, in round order.
  */
 export async function runComparison(args, cfg, { prefix = '', schedule = createPool(args.parallel ?? 1).lane(), deps } = {}) {
-  if (SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
+  if (!args.scenariosDir && SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
   if (args.client === 'codex') return runCodexComparison(args, cfg, { prefix, schedule, deps });
   const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig, resolveClaudeBin, claudeVersion } = { ...LIVE, ...deps };
-  const log = (msg) => print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
+  const log = (msg) => args.scenariosDir ? print(`${args.scenario}: kit round progress`) : print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
   const arms = armsFor(args.compare);
   // The Claude Code binary both arms spawn (--claude-bin / ANYRAY_CLAUDE_BIN, else PATH),
   // checked now so a bad path fails before any session, and read once for the header.
@@ -1542,12 +1548,13 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const dir = join(args.scenariosDir ?? join(cfg.root, 'scenarios'), args.scenario);
   const scenarioFile = readScenarioFile(dir);
   const scenario = effectiveScenario(scenarioFile, args); // what both arms run (--max-turns)
+  if (args.scenariosDir) args.mcpCatalog = scenario.mcpTools ?? 0;
 
-  const out = join(cfg.root, 'results', 'agent');
+  const out = args.scenariosDir ? prepareKitResults(args.scenariosDir, args.planLock.planHash) : join(cfg.root, 'results', 'agent');
   mkdirSync(out, { recursive: true });
   const file = join(out, resultFileName(args));
   const record = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { rounds: [] };
-  const save = recordSaver(file, record, write);
+  const save = recordSaver(file, record, write, args);
 
   // Static context: the repo, both arms' setup, what Anyray has turned on.
   const probe = prepareRepo(scenario, dir);
@@ -1613,14 +1620,21 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       const settled = await Promise.allSettled([run1('a'), run1('b')]);
       return { settled, runTags, replicasBefore, ruleBefore, startedAt };
     };
-    const { settled: [sa, sb], runTags, replicasBefore, ruleBefore, startedAt, redraws } = await runPairWithRedraw(
+    const { settled: [sa, sb], runTags, replicasBefore, ruleBefore, startedAt, redraws, holdoutDrawn } = await runPairWithRedraw(
       startPair,
       viaGateway.length ? args.redrawHoldout ?? 0 : 0,
-      (drawn, n) => log(`  round ${round}: the gateway's session gate held out ${Object.entries(drawn).map(([slot, k]) => `${k.join(', ')} on ${slot.toUpperCase()}`).join('; ')}; starting the pair again (redraw ${n}/${args.redrawHoldout})`)
+      (drawn, n) => log(`  round ${round}: the gateway's session gate held out ${Object.entries(drawn).map(([slot, k]) => `${k.join(', ')} on ${slot.toUpperCase()}`).join('; ')}; starting the pair again (redraw ${n}/${args.redrawHoldout})`),
+      !!args.scenariosDir && viaGateway.length > 0
     );
     const endedAt = new Date().toISOString();
+    if (holdoutDrawn) {
+      const drawn = { round, holdoutDrawn, redraws, startedAt, endedAt };
+      insertRound(record.rounds, drawn);
+      await save();
+      return drawn;
+    }
     if (sa.status === 'rejected' || sb.status === 'rejected') {
-      const err = (sa.reason ?? sb.reason)?.message;
+      const err = args.scenariosDir ? (sa.reason ?? sb.reason)?.name ?? 'unknown' : (sa.reason ?? sb.reason)?.message;
       log(`  round ${round} failed: ${err}`);
       const failed = { round, error: err };
       insertRound(record.rounds, failed);
@@ -1661,6 +1675,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       sessions,
       ...roundRatio(sessions.a, sessions.b),
       quality: { a: solved(scenario, sessions.a), b: solved(scenario, sessions.b) },
+      ...(args.scenariosDir && viaGateway.length ? { kindsObserved: sessions.b.kindsObserved ?? [] } : {}),
       gatewaySpend,
       ...(shared.length ? { sharedOutsideWrites: shared } : {}),
     };
