@@ -140,6 +140,21 @@ Commit the frozen plan to a private repository and add
 whenever your gateway moves to a new release. Setup is under
 [Rerun on every release](#rerun-on-every-release).
 
+### Multi-tenant gateways
+
+A gateway running in Anyray-hosted multi-tenant (fleet) mode cannot mint the self-serve
+test key, because a key minted by the gateway cannot authenticate there. On such a
+gateway, use your normal key as `ANYRAY_BENCH_CLIENT_KEY` with a tenant-bound admin key
+as `ANYRAY_ADMIN_KEY`, and pin the kinds to evaluate when you freeze:
+
+```bash
+npm run freeze -- --scenarios-dir ./anyray-test --kinds code_graph,observation_mask ...
+```
+
+The list is sorted, deduplicated and part of the plan hash. It is sent as
+`x-anyray-optimization-kinds` on the Anyray arm only, so use your tenant's own enabled
+kinds or the test measures something you will not get. Without `--kinds` nothing changes.
+
 ### Checking this machine yourself
 
 The skill runs these for you. Run them by hand to debug a failure.

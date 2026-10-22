@@ -69,6 +69,15 @@ Write or Edit when available.
   Connect uses your enrolled identity and writes the gateway, test key and expiry
   to `~/.anyray/test-kit.env` with mode 0600. The kit reads it itself. Never read
   the file into the transcript. Environment values can override the file.
+
+  An Anyray-hosted multi-tenant gateway cannot mint self-serve test keys, and
+  Connect may report only a generic refusal. There, ask the user for their own
+  `ANYRAY_BENCH_CLIENT_KEY` (their normal key) and a tenant-bound admin key, and
+  freeze with `--kinds` set to the tenant's enabled kinds (read them from the
+  console's optimizer settings; never guess a list). The kit pins the list in the
+  plan and sends it as `x-anyray-optimization-kinds` on the Anyray arm only, so
+  the test still measures what the tenant would get. Never add `--kinds` on a
+  gateway that mints test keys: it changes what the plan measures.
 - Doctor: after the test key is ready, run:
 
   ```bash

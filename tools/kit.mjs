@@ -24,7 +24,7 @@ function parseArgs() {
   if (!['calibrate', 'plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins', 'doctor'].includes(command)) usage();
   const options = {};
   const values = command === 'doctor' ? [] : command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
-    ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
+    ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin', 'kinds']
     : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'budget-usd', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
   for (let i = 1; i < argv.length; i++) {
@@ -43,6 +43,12 @@ function parseArgs() {
   } else if (command === 'calibrate') {
     if (!options.from) usage();
   } else if (command !== 'doctor' && !options['scenarios-dir']) usage();
+  if (options.kinds !== undefined) {
+    // Kind ids are catalogue names; the registry itself is the gateway's, so only the shape is checked here.
+    const ids = [...new Set(options.kinds.split(','))].sort();
+    if (ids.length > 32 || !ids.every((id) => /^[a-z][a-z0-9_]{0,63}$/.test(id))) usage();
+    options.kinds = ids.join(',');
+  }
   if (options.provider && !['anthropic', 'bedrock'].includes(options.provider)) usage();
   if (options.client && !['claude-code', 'codex'].includes(options.client)) usage();
   if (command === 'plan') {
@@ -126,6 +132,7 @@ try {
       client: options.client || 'claude-code',
       clientVersion: version,
       gatewayHost: gatewayHost(options.gateway || defaults.gateway),
+      ...(options.kinds ? { kinds: options.kinds } : {}),
     };
     for (const [pin, value] of Object.entries(pins)) {
       if (typeof value !== 'string' || !value.trim()) throw new PlanError('pin_missing', { pin });

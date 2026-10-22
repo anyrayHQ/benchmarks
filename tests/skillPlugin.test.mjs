@@ -337,6 +337,14 @@ test('SKILL.md carries the kit\'s tie note beside a verdict whose interval inclu
   assert.match(body, /`tieNote`.{0,300}never (soften|reword|replace)/i, 'the tie note sits beside the Rule 0 word and does not replace it');
 });
 
+test('SKILL.md says what to do on a multi-tenant gateway: pin kinds with --kinds and use the admin route', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /multi-tenant/i);
+  assert.match(body, /--kinds/, 'the pin the freeze takes');
+  assert.match(body, /multi-tenant.{0,600}(admin key|ANYRAY_BENCH_CLIENT_KEY)/i, 'and how the run authenticates there');
+  assert.match(body, /--kinds.{0,300}(enabled kinds|tenant's)/i, 'the list is the tenant\'s own, so the test still measures what they would get');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');
