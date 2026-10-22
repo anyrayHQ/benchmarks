@@ -1,0 +1,19 @@
+title: "Lint fix in gin-gonic/gin"
+source: proposed
+# No client plan yet. Add twinOf: <that plan's planHash> once a client's frozen
+# plan has this shape. Never use a placeholder.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+# lint.patch plants go vet printf findings in library code.
+# fixed-ports-lock.patch serializes gin tests that bind fixed ports across both arms.
+patch: [lint.patch, fixed-ports-lock.patch]
+hidePatch: true
+task: >-
+  The lint step is red. Run `go vet ./...` and fix every finding in the library
+  code without changing behavior. Make sure `go vet ./...` and `go test ./...` pass.
+check: "go vet ./... && go test ./..."
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 6
