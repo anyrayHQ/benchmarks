@@ -176,11 +176,16 @@ const take = () => {
 const ordinal = take();
 const costs = cfg.costs[kind];
 const cost = costs[ordinal % costs.length];
+const behaviour = ((cfg.behave || {})[kind] || {})[ordinal] || 'ok';
 const sessionId = crypto.randomUUID();
 const model = opt('--model') || 'claude-sonnet-5';
 const streamed = argv.includes('--input-format');
-log({ session: true, kind, ordinal, cost, sessionId, bin: __filename, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
+log({ session: true, kind, ordinal, cost, behaviour, sessionId, bin: __filename, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
+// The session is over without a further turn: stop reading stdin, so the process ends on its
+// own once stdout has drained (process.exit could cut a pipe write short on macOS).
+let ended = false;
+const end = (code) => { ended = true; process.exitCode = code; try { process.stdin.destroy(); } catch {} };
 const post = (text) => new Promise((resolve, reject) => {
   const u = new URL(base.replace(/\/$/, '') + '/v1/messages');
   const headers = { 'content-type': 'application/json', 'x-claude-code-session-id': sessionId, 'user-agent': 'claude-cli/' + cfg.version + ' (external, cli)' };
@@ -194,7 +199,7 @@ const post = (text) => new Promise((resolve, reject) => {
   const body = JSON.stringify({ model, max_tokens: 64, messages: [{ role: 'user', content: text }] });
   const req = http.request({ hostname: u.hostname, port: u.port, path: u.pathname, method: 'POST', headers }, (res) => {
     res.resume();
-    res.on('end', resolve);
+    res.on('end', () => resolve(res.statusCode));
   });
   req.on('error', reject);
   req.end(body);
@@ -204,6 +209,11 @@ let edited = false;
 async function turn(text) {
   n++;
   out({ type: 'system', subtype: 'init', session_id: sessionId, model, tools: ['Bash'], mcp_servers: [], apiKeySource: 'none' });
+  if (behaviour === 'hang') {
+    // Never answers: only the harness's session timeout ends it.
+    setInterval(() => {}, 60000);
+    return new Promise(() => {});
+  }
   const msgs = [
     [{ type: 'tool_use', id: 'tu_' + n, name: 'Bash', input: { command: 'echo ' + cfg.toolInput } }],
     [{ type: 'text', text: cfg.answer }],
@@ -211,7 +221,13 @@ async function turn(text) {
   for (let i = 0; i < msgs.length; i++) {
     const id = 'msg_' + n + '_' + i;
     out({ type: 'stream_event', event: { type: 'message_start', message: { id } }, parent_tool_use_id: null, session_id: sessionId });
-    if (base) await post(text);
+    const status = base ? await post(text) : 200;
+    if (status >= 400) {
+      // As Claude Code ends a turn the API refused (after its own retries): an error result
+      // that bills nothing, then exit 1.
+      out({ type: 'result', subtype: 'success', is_error: true, result: 'API Error: ' + status, num_turns: 1, total_cost_usd: 0, duration_ms: 5, usage: { input_tokens: 0, output_tokens: 0 }, modelUsage: {} });
+      return end(1);
+    }
     out({ type: 'assistant', message: { id, model, role: 'assistant', usage: { input_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 1 }, content: msgs[i] }, parent_tool_use_id: null, session_id: sessionId });
     out({ type: 'stream_event', event: { type: 'message_delta', delta: { stop_reason: i === 0 ? 'tool_use' : 'end_turn' }, usage: { output_tokens: 10 } }, api_message_id: id, parent_tool_use_id: null, session_id: sessionId });
     if (i === 0) out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_' + n, content: cfg.toolOutput }] }, parent_tool_use_id: null, session_id: sessionId });
@@ -220,6 +236,8 @@ async function turn(text) {
     fs.appendFileSync(path.join(process.cwd(), 'app.js'), '// ' + cfg.diff + '\n');
     edited = true;
   }
+  // Ends without a result event (as a crashed or cut-off client does): no cost is ever reported.
+  if (behaviour === 'noresult') return end(0);
   out({ type: 'result', subtype: 'success', result: cfg.answer, num_turns: 2, total_cost_usd: cost, duration_ms: 50, usage: { input_tokens: 200, output_tokens: 20 }, modelUsage: { [model]: { inputTokens: 200, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: cost } } });
 }
 (async () => {
@@ -230,6 +248,7 @@ async function turn(text) {
     let text = '';
     try { text = JSON.parse(line).message.content; } catch {}
     await turn(String(text));
+    if (ended) break;
   }
 })().catch(() => { process.exitCode = 1; });
 `;
@@ -244,15 +263,21 @@ async function turn(text) {
  * app.js, so the checkout has a diff. The answer is "done ..." (solves a `keyFacts: [done]`).
  * `sessions()` lists every session it started (`bin`: the script's real path), `versions()` every
  * --version call; `realBin` is the real path of `bin` (a temp dir under /var is /private/var on macOS).
+ *
+ * `behave` picks how chosen sessions end, by arm kind and that kind's session ordinal (0-based, the
+ * same counter as `costs`): `{ direct: { 1: 'hang' }, anyray: { 3: 'noresult' } }`. 'hang' prints
+ * its init and never answers (only the harness's session timeout ends it); 'noresult' runs its
+ * turn and exits 0 without a result event. Every session also reacts to an HTTP error from the
+ * gateway as Claude Code does: an error result that bills nothing (total_cost_usd 0), then exit 1.
  */
-export function fakeClaude(dir, { version = PINS.clientVersion, costs = { direct: [1], anyray: [0.5] }, marked = true } = {}) {
+export function fakeClaude(dir, { version = PINS.clientVersion, costs = { direct: [1], anyray: [0.5] }, marked = true, behave = {} } = {}) {
   mkdirSync(dir, { recursive: true });
   const counterDir = join(dir, 'counter');
   mkdirSync(counterDir, { recursive: true });
   const log = join(dir, 'invocations.jsonl');
   const config = join(dir, 'config.json');
   writeFileSync(config, JSON.stringify({
-    log, counterDir, version, costs,
+    log, counterDir, version, costs, behave,
     answer: marked ? `done ${MARK.answer}` : 'done',
     toolInput: marked ? MARK.toolIn : 'hello',
     toolOutput: marked ? MARK.toolOut : 'hello',
@@ -298,12 +323,16 @@ const parseJson = (s) => {
  * the headers the tests read, and inference metadata) in `requests`. `holdout`: 'none', 'first'
  * (the first Anyray session it sees, by x-anyray-metadata sessionId, is drawn into a holdout of
  * observation_mask, every later one is not) or 'all'. `publishStatus`: what the client-tests
- * route answers (201 with `result.id`, or that error status). The server is unref'd, so it never
- * keeps the test process alive.
+ * route answers (201 with `result.id`, or that error status). `inferenceStatus`: what inference
+ * answers instead of 200, for every session (a number, e.g. 401) or for chosen ones (an object
+ * keyed by the session's index, 0-based, in the order the gateway first saw its sessionId); an
+ * error answer carries no optimization-result header. The server is unref'd, so it never keeps
+ * the test process alive.
  */
-export async function fakeRunGateway({ holdout = 'none', publishStatus = 201 } = {}) {
+export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, inferenceStatus = null } = {}) {
   const requests = [];
   const held = new Set();
+  const seen = [];
   let first = null;
   const server = createServer((req, res) => {
     let raw = '';
@@ -330,6 +359,11 @@ export async function fakeRunGateway({ holdout = 'none', publishStatus = 201 } =
       const admin = req.headers.authorization === `Bearer ${ADMIN_KEY}`;
       if (req.method === 'POST' && /^\/(v1\/)?messages$/.test(url.pathname)) {
         const session = meta?.sessionId ?? null;
+        if (session && !seen.includes(session)) seen.push(session);
+        const status = typeof inferenceStatus === 'number' ? inferenceStatus : inferenceStatus?.[seen.indexOf(session)] ?? 200;
+        if (status !== 200) {
+          return send(status, { type: 'error', error: { type: status === 401 ? 'authentication_error' : status === 403 ? 'permission_error' : 'api_error', message: 'synthetic gateway error' } });
+        }
         if (first === null && session) first = session;
         const drawn = holdout === 'all' || (holdout === 'first' && session !== null && session === first);
         if (drawn) held.add(session);
@@ -489,19 +523,22 @@ export function pairRound(round, a, b, { solved = [true, true], ...extra } = {})
 /** A round whose Anyray session drew a holdout on its last allowed attempt: excluded, never scored. */
 export const heldRound = (round) => ({ round, holdoutDrawn: { b: [HELD_KIND] }, redraws: [{ b: [HELD_KIND] }] });
 
-/** Write a kit run record (the paired `anyray` compare) for one scenario of a frozen plan. */
-export function writeRecord(dir, lock, id, rounds, { gatewayVersion = GATEWAY_VERSION, extra = {} } = {}) {
+/**
+ * Write a kit run record for one scenario of a frozen plan: the paired `anyray` compare, or with
+ * `compare: 'control'` the direct-vs-direct record `noise` keeps (no gateway version, no kinds).
+ */
+export function writeRecord(dir, lock, id, rounds, { gatewayVersion = GATEWAY_VERSION, extra = {}, compare = 'anyray' } = {}) {
   const s = lock.scenarios.find((x) => x.id === id);
   assert.ok(s, `${id} is not in the plan`);
-  const file = recordFile(dir, lock.planHash, id, 'anyray');
+  const file = recordFile(dir, lock.planHash, id, compare);
   mkdirSync(resultsDir(dir, lock.planHash), { recursive: true });
   writeFileSync(file, `${JSON.stringify({
     planHash: lock.planHash,
     scenario: { id, source: s.source, hash: s.hash },
-    compare: 'anyray',
-    gatewayVersion,
+    compare,
+    ...(compare === 'control' ? {} : { gatewayVersion }),
     claudeVersion: PINS.clientVersion,
-    kindsObserved: OBSERVED_KINDS,
+    ...(compare === 'control' ? {} : { kindsObserved: OBSERVED_KINDS }),
     rounds,
     ...extra,
   }, null, 2)}\n`);

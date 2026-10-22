@@ -4,7 +4,7 @@ import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenari
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
-import { readKitRecords, kitVerdict } from '../lib/kitResults.mjs';
+import { readKitRecords, kitVerdict, formatKitVerdict } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { sessionGateState } from '../lib/traces.mjs';
@@ -20,7 +20,7 @@ function parseArgs() {
   const options = {};
   const values = command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
     ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
-    : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
+    : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'budget-usd', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
   for (let i = 1; i < argv.length; i++) {
     const flag = argv[i];
@@ -40,16 +40,21 @@ function parseArgs() {
   if (options.provider && !['anthropic', 'bedrock'].includes(options.provider)) usage();
   if (options.client && !['claude-code', 'codex'].includes(options.client)) usage();
   if (command === 'plan') {
-    for (const key of ['budget-usd', 'session-cost-usd']) {
+    if (options['budget-usd'] === undefined) usage();
+    if (options.tenant !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(options.tenant)) usage();
+  }
+  if (['plan', 'noise', 'run'].includes(command)) {
+    for (const key of ['budget-usd', ...(command === 'plan' ? ['session-cost-usd'] : [])]) {
+      if (options[key] === undefined) continue;
       const n = Number(options[key]);
       if (!Number.isFinite(n) || n <= 0) usage();
       options[key] = n;
     }
-    if (options.tenant !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(options.tenant)) usage();
   }
   if (command === 'report' && !options.redact) usage();
   if (['noise', 'run', 'twins'].includes(command)) {
     for (const [key, fallback, min] of [['rounds', command === 'noise' ? NOISE_ROUNDS : DEFAULT_MIN_ROUNDS, command === 'noise' ? NOISE_ROUNDS : 1], ...(command === 'run' ? [['redraw-holdout', 2, 0]] : [])]) {
+      if (command === 'run' && key === 'rounds' && options.rounds === undefined && options['budget-usd'] !== undefined) continue;
       const value = options[key] ?? String(fallback);
       if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < min) usage();
       options[key] = Number(value);
@@ -80,7 +85,7 @@ try {
       return { id, source, ...classified, predictedHitRate: predictedHitRate(shape, classified.prediction) };
     });
     const budget = budgetPlan(scenarios, { budgetUsd: options['budget-usd'], sessionCostUsd: options['session-cost-usd'] });
-    if (budget.pairsAffordable < 1) {
+    if (budget.pairsAffordable !== null && budget.pairsAffordable < 1) {
       throw new PlanError('plan_budget_too_small', { budgetUsd: budget.budgetUsd, noiseCostUsd: budget.noiseCostUsd, minimumBudgetUsd: budget.minimumBudgetUsd },
         'The budget does not cover the noise rounds plus one pair per scenario');
     }
@@ -139,8 +144,8 @@ try {
   if (['report', 'publish-result'].includes(command)) { /* Already printed the validated body or id. */ }
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
-  else if (command === 'noise' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
-  else if (command === 'verdict' && !json) process.stdout.write(answer.scenarios.map((s) => `${s.id}: ${s.verdict}; Rule 0 ${s.rule0}`).join('\n') + `\nPooled Rule 0: ${answer.rule0Verdict}\n`);
+  else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
+  else if (command === 'verdict' && !json) process.stdout.write(formatKitVerdict(answer));
   else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog));
   else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');
   else printPlanAnswer(answer, json);
