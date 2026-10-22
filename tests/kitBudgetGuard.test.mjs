@@ -1,9 +1,12 @@
-// `npm run noise|run -- --budget-usd B` (ANY-1515): the runtime spend guard. Spent is every session
-// cost already recorded for the plan (control and anyray records). Before each round after the
-// first of a command, the kit stops when spent plus the most expensive round recorded so far would
-// cross B, and answers { ok: true, command, stopped: 'budget_reached', spentUsd, budgetUsd, rounds }
-// (exit 0); a refused round never starts. `run --budget-usd B` without --rounds sizes itself:
-// floor((B - spent) / mean recorded pair cost), capped at the band's pairs needed, at least 1.
+// `npm run noise|run -- --budget-usd B` (ANY-1515): the runtime spend guard. The budget is a HARD
+// cap. Spent is every session cost already recorded for the plan (control and anyray records).
+// Before EVERY round, a command's first included, the kit stops when spent plus the most expensive
+// round the plan has recorded would cross B, and answers { ok: true, command, stopped:
+// 'budget_reached', spentUsd, budgetUsd, rounds } (exit 0); a refused round never starts. Only the
+// very first round of a plan with no recorded round at all runs without an estimate. A plan that
+// has already spent B starts no round (rounds: 0). Landing exactly on B is not over it.
+// `run --budget-usd B` without --rounds sizes itself: floor((B - spent) / mean recorded pair cost),
+// capped at the band's pairs needed; when that is 0 it answers budget_reached with rounds 0.
 // Every finished round prints one content-free progress line on stderr:
 //   <id> round k/N: direct $a, anyray $b, ratio r · spent $s of $B · ~m min left
 //
@@ -110,8 +113,9 @@ function assertProgress(stderr, record, { ran, planned, spentBefore, budget, wha
 // ---- the guard -----------------------------------------------------------------------------------
 
 test('noise --budget-usd stops before a round that would cross the budget: budget_reached with spent, budget and rounds, exit 0, and no refused round ever started', async () => {
-  // Every noise round costs $2 (two direct sessions; the per-session costs vary so the pair ratio
-  // does). $7: rounds 1-3 spend $6; round 4 would reach $8, so it never starts.
+  // A fresh plan: nothing recorded, so round 1 runs without an estimate. Every noise round costs
+  // $2 (two direct sessions; the per-session costs vary so the pair ratio does). $7: rounds 1-3
+  // spend $6; round 4 would reach $8, so it never starts.
   const s = await setup({ costs: { direct: [1, 1, 1.5, 0.5], anyray: [0.5] }, sd: null });
   const child = await cli(s, 'noise', ['--budget-usd', '7', '--json']);
   const out = answered(child, 'noise --budget-usd 7 --json');
@@ -128,9 +132,10 @@ test('noise --budget-usd stops before a round that would cross the budget: budge
 
 test('run --budget-usd counts every session already recorded for the plan (control and earlier anyray records) and stops before the round that would cross it', async () => {
   // Spent before: $6 of noise (six control rounds at $0.50 + $0.50) and one earlier paired round
-  // ($1 + $0.50) = $7.50. At $12 each paired round adds $1.50: $9, $10.50, then $12 (not over),
-  // and the fourth would reach $13.50: three rounds run. Counting only this command's rounds
-  // would run eight; forgetting either earlier record runs more than three.
+  // ($1 + $0.50) = $7.50; the most expensive recorded round is $1.50. At $12 each paired round adds
+  // $1.50: $9, $10.50, then $12 (landing exactly on the budget is not over it), and the fourth
+  // would reach $13.50: three rounds run. Counting only this command's rounds would run eight;
+  // forgetting either earlier record runs more than three.
   const s = await setup({ control: controlRounds(6, 0.5, 0.5) });
   answered(await cli(s, 'run', ['--rounds', '1', '--json']), 'the earlier run --rounds 1');
   assert.equal(sessionsOf(s, 'anyray'), 1);
@@ -165,11 +170,48 @@ test('budget-sized rounds are capped at the band\'s pairs needed at the measured
   assert.deepEqual({ direct: sessionsOf(s, 'direct'), anyray: sessionsOf(s, 'anyray') }, { direct: needed, anyray: needed }, 'no more pairs than the band needs');
 });
 
-test('budget-sized rounds are at least one, even when the budget left buys less than a pair', async () => {
-  // (13 - 12) / 2 rounds down to 0; the run still runs one round.
+test('when the budget left buys no pair, run --budget-usd without --rounds answers budget_reached with rounds 0 and starts no session', async () => {
+  // (13 - 12) / 2 rounds down to 0: no round, not "at least one".
   const s = await setup({ control: controlRounds(6, 1, 1) });
   const out = answered(await cli(s, 'run', ['--budget-usd', '13', '--json']), 'run --budget-usd 13 --json');
-  assert.equal(out.stopped, undefined, JSON.stringify(out));
+  assert.deepEqual(stopFields(out), { ok: true, command: 'run', stopped: 'budget_reached', spentUsd: 12, budgetUsd: 13, rounds: 0 });
+  assert.deepEqual(s.claude.sessions(), [], 'no session started');
+  assert.deepEqual(s.gateway.inference(), [], 'no inference request reached the gateway');
+});
+
+test('the budget is a hard cap: a plan that has already spent the budget starts no round of noise or run (rounds 0, exit 0)', async () => {
+  // $12 recorded (six control rounds at $1 + $1). A budget equal to the spend, or below it.
+  const s = await setup({ control: controlRounds(6, 1, 1) });
+  const cases = [
+    ['noise', ['--budget-usd', '12'], 12],
+    ['noise', ['--budget-usd', '5'], 5],
+    ['run', ['--rounds', '3', '--budget-usd', '12'], 12],
+    ['run', ['--rounds', '3', '--budget-usd', '5'], 5],
+    ['run', ['--budget-usd', '5'], 5], // sized by the budget: floor((5 - 12) / 2) is below zero
+  ];
+  for (const [command, args, budget] of cases) {
+    const what = `${command} ${args.join(' ')}`;
+    const out = answered(await cli(s, command, [...args, '--json']), what);
+    assert.deepEqual(stopFields(out), { ok: true, command, stopped: 'budget_reached', spentUsd: 12, budgetUsd: budget, rounds: 0 }, what);
+  }
+  assert.deepEqual(s.claude.sessions(), [], 'not one session started');
+  assert.deepEqual(s.gateway.inference(), [], 'no inference request reached the gateway');
+  assert.equal(readRecord(s.dir, s.lock.planHash, ID, 'control').rounds.length, 6, 'the recorded noise is untouched');
+});
+
+test('the guard runs before a command\'s first round too, estimating from the most expensive round the plan recorded, not the mean', async () => {
+  // Recorded: five control rounds at $1 and one at $3 = $8 spent, mean $1.33, most expensive $3.
+  // At $10: $8 + $3 > $10, so neither noise nor run starts a round (by the mean, $9.33, it would).
+  const s = await setup({ control: [...controlRounds(5, 0.5, 0.5), pairRound(6, 1.5, 1.5)] });
+  for (const [command, args] of [['noise', []], ['run', ['--rounds', '5']]]) {
+    const what = `${command} ${[...args, '--budget-usd', '10'].join(' ')}`;
+    const out = answered(await cli(s, command, [...args, '--budget-usd', '10', '--json']), what);
+    assert.deepEqual(stopFields(out), { ok: true, command, stopped: 'budget_reached', spentUsd: 8, budgetUsd: 10, rounds: 0 }, what);
+  }
+  assert.deepEqual(s.claude.sessions(), [], 'the first round of each command was refused before any session');
+
+  // The control: $11 leaves room for the $3 estimate, so the same plan runs a round.
+  answered(await cli(s, 'run', ['--rounds', '1', '--budget-usd', '11', '--json']), 'run --rounds 1 --budget-usd 11');
   assert.deepEqual({ direct: sessionsOf(s, 'direct'), anyray: sessionsOf(s, 'anyray') }, { direct: 1, anyray: 1 });
 });
 
