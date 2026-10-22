@@ -103,3 +103,22 @@ test('an inconclusive verdict says why and what it would take; a pass or fail st
   const clearText = await kitIn(clear.copy.root, ['verdict', '--scenarios-dir', clear.dir], { env: clear.env });
   assert.match(clearText.stdout, /^acme-fix: pass; Rule 0 PASS$/m);
 });
+
+test('--max-spend-usd stops between rounds before the next one would cross the cap, and keeps the rounds so far', async () => {
+  const s = await setup(); // a paired round costs $1.50 then $1.80 in the stand-in
+  const child = await run(s, 5, ['--max-spend-usd', '4']);
+  assert.notEqual(child.status, 0);
+  assert.match(child.stderr, /run_spend_cap_reached: Stopped at \$3\.30 of the \$4 cap after 2 round\(s\)/);
+  assert.equal(s.claude.sessions().length, 4, 'two paired rounds ran, the third never started');
+  assert.equal(readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray').rounds.length, 2, 'the finished rounds are kept');
+  const resumed = await run(s, 3, ['--max-spend-usd', '10']);
+  assert.equal(resumed.status, 0, 'a higher cap continues from the kept rounds');
+  assert.equal(s.claude.sessions().length, 6);
+});
+
+test('a cap that is not a positive number is a usage error and nothing runs', async () => {
+  const s = await setup();
+  for (const bad of ['0', '-1', 'abc']) assert.notEqual((await run(s, 2, ['--max-spend-usd', bad])).status, 0, bad);
+  assert.equal(s.claude.sessions().length, 0);
+  assert.equal((await run(s, 1, ['--max-spend-usd', '50'])).status, 0, 'a cap above the spend changes nothing');
+});

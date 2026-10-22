@@ -20,7 +20,7 @@ function parseArgs() {
   const options = {};
   const values = command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
     ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
-    : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
+    : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'claude-bin', 'max-spend-usd', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
   for (let i = 1; i < argv.length; i++) {
     const flag = argv[i];
@@ -48,6 +48,11 @@ function parseArgs() {
     if (options.tenant !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(options.tenant)) usage();
   }
   if (command === 'report' && !options.redact) usage();
+  if (options['max-spend-usd'] !== undefined) {
+    const cap = Number(options['max-spend-usd']);
+    if (!Number.isFinite(cap) || cap <= 0) usage();
+    options['max-spend-usd'] = cap;
+  }
   if (['noise', 'run', 'twins'].includes(command)) {
     for (const [key, fallback, min] of [['rounds', command === 'noise' ? NOISE_ROUNDS : DEFAULT_MIN_ROUNDS, command === 'noise' ? NOISE_ROUNDS : 1], ...(command === 'run' ? [['redraw-holdout', 2, 0]] : [])]) {
       const value = options[key] ?? String(fallback);
