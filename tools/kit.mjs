@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
 import { PlanError, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
-import { loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
+import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
 import { readKitRecords, kitVerdict } from '../lib/kitResults.mjs';
@@ -49,7 +49,7 @@ function parseArgs() {
   }
   if (command === 'report' && !options.redact) usage();
   if (['noise', 'run', 'twins'].includes(command)) {
-    for (const [key, fallback, min] of [['rounds', command === 'noise' ? 6 : DEFAULT_MIN_ROUNDS, command === 'noise' ? 6 : 1], ...(command === 'run' ? [['redraw-holdout', 2, 0]] : [])]) {
+    for (const [key, fallback, min] of [['rounds', command === 'noise' ? NOISE_ROUNDS : DEFAULT_MIN_ROUNDS, command === 'noise' ? NOISE_ROUNDS : 1], ...(command === 'run' ? [['redraw-holdout', 2, 0]] : [])]) {
       const value = options[key] ?? String(fallback);
       if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < min) usage();
       options[key] = Number(value);
@@ -78,12 +78,16 @@ try {
       const shape = catalog.shapes.find((s) => s.id === classified.shapeId);
       return { id, source, ...classified, predictedHitRate: predictedHitRate(shape, classified.prediction) };
     });
+    const budget = budgetPlan(scenarios, { budgetUsd: options['budget-usd'], sessionCostUsd: options['session-cost-usd'] });
+    if (budget.pairsAffordable < 1) {
+      throw new PlanError('plan_budget_too_small', { budgetUsd: budget.budgetUsd, noiseCostUsd: budget.noiseCostUsd, minimumBudgetUsd: budget.minimumBudgetUsd },
+        'The budget does not cover the noise rounds plus one pair per scenario');
+    }
     const commit = benchmarksCommit();
     const gate = await sessionGateState(gateway, { tenant: options.tenant });
     if (gate.reason) throw new PlanError('plan_tenant_unreadable', { reason: gate.reason, ...(gate.status === undefined ? {} : { status: gate.status }) }, 'Unable to read the tenant session gate');
     if (gate.allShadow) throw new PlanError('plan_tenant_shadow', { tenant: gate.tenant, kinds: gate.kinds }, 'This tenant applies nothing yet; the test would measure pass-through');
-    answer = { ok: true, command, benchmarksCommit: commit, client, tenant: { id: gate.tenant, kinds: gate.kinds },
-      ...budgetPlan(scenarios, { budgetUsd: options['budget-usd'], sessionCostUsd: options['session-cost-usd'] }) };
+    answer = { ok: true, command, benchmarksCommit: commit, client, tenant: { id: gate.tenant, kinds: gate.kinds }, ...budget };
   }
   else if (command === 'freeze') {
     const defaults = runDefaults();

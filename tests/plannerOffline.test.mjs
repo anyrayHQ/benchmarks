@@ -32,19 +32,26 @@ test('offline predictions use the first match and preserve the round floor, unkn
   assert.ok(catalog.shapes.every((s) => s.rounds < 8), 'published seeds do not invent attributable rounds');
 });
 
-test('offline budget reports underpowered bands, exact affordability boundaries and spend ceilings', () => {
+test('offline budget takes the noise rounds off first, then reports underpowered bands, exact affordability boundaries and spend ceilings', () => {
   const all = shapedScenarios();
   const scenarios = ['check-long', 'short-task', 'docs', 'facts'].map((id) => ({ id, ...classify(all[id].doc, 'claude-code', { shapes: TEST_SHAPES }) }));
   const plan = (budgetUsd, rows = scenarios) => budgetPlan(rows, { budgetUsd, sessionCostUsd: 0.15 });
   const p = plan(500);
+  assert.equal(p.noiseRounds, 6, 'the noise command\'s default rounds');
+  assert.ok(Math.abs(p.noiseCostUsd - 7.2) < 1e-9, '6 noise rounds x 4 scenarios x a $0.30 pair');
   assert.deepEqual(p.scenarios.map((s) => s.pairsNeeded), [135, 604, null, null]);
   assert.deepEqual(p.scenarios.map((s) => s.resolvable), [true, false, null, null]);
-  assert.equal(p.pairsAffordable, 416);
-  assert.ok(Math.abs(p.spendCeilingUsd - 414.9) < 1e-9);
+  assert.equal(p.pairsAffordable, 410);
+  assert.ok(Math.abs(p.spendCeilingUsd - 416.7) < 1e-9, `$7.20 noise + 1365 pairs x $0.30: ${p.spendCeilingUsd}`);
   assert.equal(p.resolvable, false);
-  assert.equal(plan(724.9).resolvable, true);
-  assert.equal(plan(724.7).resolvable, false);
-  assert.equal(plan(0.5, scenarios.slice(0, 1)).detectableRatio, null);
+  assert.equal(plan(732.1).resolvable, true);
+  assert.equal(plan(731.9).resolvable, false);
+  const one = scenarios.slice(0, 1);
+  assert.equal(plan(2.2, one).pairsAffordable, 1, '$1.80 of noise, then one pair');
+  assert.equal(plan(2.2, one).detectableRatio, null);
+  assert.equal(plan(2, one).pairsAffordable, 0, 'noise paid for, no pair left');
+  assert.equal(plan(1, one).pairsAffordable, 0, 'never negative when the budget cannot pay for noise');
+  assert.ok(Math.abs(plan(1, one).minimumBudgetUsd - 2.1) < 1e-9, 'noise plus one pair per scenario');
   assert.equal(plan(10000, scenarios.slice(2)).resolvable, false);
   const parity = [{ id: 'parity', ...classify(all.facts.doc, 'codex', { shapes: TEST_SHAPES }) }];
   assert.equal(plan(500, parity).scenarios[0].pairsNeeded, null);
