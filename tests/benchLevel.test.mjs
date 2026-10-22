@@ -100,6 +100,10 @@ test('explicit ids avoid secret reads and restore an existing assignment', async
   await level.clear(change);
   assert.equal(stub.state.integrationLevel.agents['agent-1'], 'gateway_hooks_mcp');
   assert.throws(() => createBenchLevel({ gatewayUrl: 'https://blocked.test.invalid', adminKey: ADMIN, clientKey: KEY, root }), /blocked/);
+  // Our hosted gateway takes benchmark traffic but never a benchmark config change, whatever config.yaml lists.
+  for (const url of ['https://gateway.anyray.ai', 'https://gateway.anyray.ai/']) {
+    assert.throws(() => createBenchLevel({ gatewayUrl: url, adminKey: ADMIN, clientKey: KEY, root }), /benchmark changes/);
+  }
 });
 
 test('a lost set response is cleaned up using the saved prior assignment', async () => {
