@@ -645,7 +645,7 @@ export function roundRatio(a, b) {
 }
 
 /** The rounds Rule 0 scores: not failed, and no gateway restart under them. */
-export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.gatewayRestarted && !x.hookLeak);
+export const scoredRounds = (rounds) => rounds.filter((x) => !x.error && !x.failure && !x.gatewayRestarted && !x.hookLeak);
 
 /** `--treatment a|b`: the arm the Rule 0 verdict is for. B by construction (`--experiment-b`,
  * `--kinds-b` change B alone); `a` when the default is under test and B carries the switch-off. */
@@ -1528,7 +1528,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   if (!args.scenariosDir && SDK_SCENARIOS.includes(args.scenario)) return runSdkComparison(args, cfg, { prefix, schedule, deps });
   if (args.client === 'codex') return runCodexComparison(args, cfg, { prefix, schedule, deps });
   const { runAgent, prepareRepo, describeRepo, write, log: print, resolveBedrock, readOptimizerConfig, resolveClaudeBin, claudeVersion } = { ...LIVE, ...deps };
-  const log = (msg) => args.scenariosDir ? print(`${args.scenario}: kit round progress`) : print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg);
+  const log = (msg) => { if (!args.scenariosDir) print(prefix ? msg.split('\n').map((l) => (l ? prefix + l : l)).join('\n') : msg); };
   const arms = armsFor(args.compare);
   // The Claude Code binary both arms spawn (--claude-bin / ANYRAY_CLAUDE_BIN, else PATH),
   // checked now so a bad path fails before any session, and read once for the header.
@@ -1636,7 +1636,10 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
     if (sa.status === 'rejected' || sb.status === 'rejected') {
       const err = args.scenariosDir ? (sa.reason ?? sb.reason)?.name ?? 'unknown' : (sa.reason ?? sb.reason)?.message;
       log(`  round ${round} failed: ${err}`);
-      const failed = { round, error: err };
+      const failed = args.scenariosDir ? {
+        round, error: 'crash', failure: 'crash',
+        sessions: Object.fromEntries([['a', sa], ['b', sb]].filter(([, s]) => s.status === 'fulfilled').map(([slot, s]) => [slot, { ...s.value, totals: summarize(s.value, pricing) }])),
+      } : { round, error: err };
       insertRound(record.rounds, failed);
       await save();
       return failed;
@@ -1679,6 +1682,11 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       gatewaySpend,
       ...(shared.length ? { sharedOutsideWrites: shared } : {}),
     };
+    if (args.scenariosDir) {
+      const failures = Object.values(sessions).map((s) => s.failure);
+      const failure = ['auth_error', 'gateway_error', 'timeout', 'crash', 'no_result'].find((f) => failures.includes(f)) ?? (r.error ? 'no_result' : null);
+      if (failure) Object.assign(r, { failure, error: failure, ratio: null });
+    }
     // A doc the session wrote to a file instead of its answer: reported, never solved.
     for (const slot of ['a', 'b']) {
       const via = answeredViaFile(scenario, sessions[slot]);

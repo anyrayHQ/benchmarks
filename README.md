@@ -236,10 +236,13 @@ For client scenarios, set `source: client` (or `proposed` for a task we proposed
 and pin `repo.ref` to a 40-character commit. Keep the directory locally. Then:
 
 ```bash
-npm run -s plan -- --scenarios-dir ./client-scenarios --budget-usd 500 --session-cost-usd 0.15 --gateway https://your-gateway.example --json
+npm run -s plan -- --scenarios-dir ./client-scenarios --budget-usd 500 --gateway https://your-gateway.example --json
 ```
 
-`--session-cost-usd` is your typical cost of one direct session. The plan takes the
+With a budget alone, the plan sets `pairsPlanned: null` and the spend ceiling to
+your budget. Pairs are set after noise measures your session cost.
+
+Optional `--session-cost-usd 0.15` supplies your typical direct session cost. The plan takes the
 six noise rounds (two direct sessions per scenario each) off the budget first, splits
 the rest evenly across scenarios, and reports pairs needed, the saving detectable at
 that budget, and a spend ceiling that includes the noise rounds. A budget that cannot
@@ -286,8 +289,8 @@ the environment. Both arms use the one resolved `--claude-bin` build, checked
 against the version in the lock.
 
 ```bash
-npm run -s noise -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 6 --json
-npm run -s run -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 8 --redraw-holdout 2 --json
+npm run -s noise -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 6 --budget-usd 500 --json
+npm run -s run -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --budget-usd 500 --redraw-holdout 2 --json
 npm run -s verdict -- --scenarios-dir ./client-scenarios --json
 npm run -s report -- --scenarios-dir ./client-scenarios --redact
 npm run -s report -- --scenarios-dir ./client-scenarios --redact --json
@@ -298,6 +301,21 @@ Noise comes first: at least six interleaved direct-vs-direct pairs per scenario
 measure the pooled within-scenario log-ratio SD. A signed `noise` block records
 that floor without changing the plan hash, and the command reprints pairs needed
 at the measured SD. Repeating `noise` or `run` adds rounds to that plan.
+
+Pass the same positive `--budget-usd` to noise and run. Before every round, the
+guard counts all recorded session costs for the plan, including earlier noise
+and failed rounds. It stops if spend has reached the budget or adding the most
+expensive recorded round would exceed it. Only a plan's first round has no cost
+estimate. `budget_reached` exits successfully and reports spend, budget and rounds
+run by this command, possibly zero. Without `--rounds`, a budgeted run uses the
+remaining budget divided by mean recorded pair cost, rounded down and capped at
+the band's pairs needed. Use `--rounds` to request a specific count.
+
+Each finished round prints its id, costs, ratio, total spend and estimated time
+left on stderr. Failed rounds are saved and excluded from scoring. One failure
+allows the run to continue. Two consecutive failures stop with `run_failed`;
+`auth_error` stops at once. Other failure labels are `timeout`, `no_result`,
+`crash` and `gateway_error`. Failure stops exit 1.
 
 Paired runs use the tenant's defaults without a kinds selection header. They
 record `kindsObserved`, use `tool: anyray-bench` on every gateway request, and use
@@ -316,6 +334,7 @@ plan starts a separate results directory. The lock's nonce stays local.
 Verdict uses both existing verdict libraries and compares actual medians with
 the frozen bands. Report requires `--redact`; its human form includes scenario
 ids, while JSON contains aggregate shapes and statistics only. The JSON body
+keeps full precision; human ratios and confidence bounds use three decimals. It
 is validated against the gateway client-tests schema before it is printed or
 published. A missing or mixed gateway version prevents sharing. Publishing
 sends that same body to the frozen gateway and prints only the result id.
