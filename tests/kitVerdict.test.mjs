@@ -15,6 +15,8 @@ import { KIT_ROOT, kitEnv, tempDir } from './kitFixtures.mjs';
 import { json, npmRunAsync } from './kitPlanFixtures.mjs';
 import { kitIn, syntheticPlan } from './kitRunFixtures.mjs';
 
+// nextStep (what to do when a verdict cannot decide) has its own suite, kitNextStep.test.mjs.
+const withoutNext = ({ nextStep: _next, ...rest }) => rest;
 const verdict = (copy, dir, env, args = ['--json']) => kitIn(copy.root, ['verdict', '--scenarios-dir', dir, ...args], { env });
 
 /** What the verdict must say for one scenario, computed with the libraries on the same rounds. */
@@ -24,7 +26,17 @@ function expected(lock, id, rounds = []) {
   const s = rule0(valid);
   const { prediction, shapeId } = lock.predictions.find((p) => p.id === id);
   const band = prediction.status === 'band' ? prediction : null;
+  // Every round that ran cleanly is graded, solved or not (a pair only one arm solved counts).
+  const graded = rounds.filter((r) => exclusionReasons(r).every((x) => x === 'not solved'));
+  const parity = graded.length ? {
+    n: graded.length,
+    passDirect: graded.filter((r) => r.quality.a).length,
+    passAnyray: graded.filter((r) => r.quality.b).length,
+    anyrayWorse: graded.filter((r) => r.quality.a && !r.quality.b).length,
+    anyrayBetter: graded.filter((r) => !r.quality.a && r.quality.b).length,
+  } : undefined;
   return {
+    ...(parity ? { parity } : {}),
     id,
     source: lock.scenarios.find((x) => x.id === id).source,
     shapeId,
@@ -53,7 +65,7 @@ test('the verdict words are benchVerdict\'s and Rule 0\'s exactly, per scenario 
 
   const ids = lock.scenarios.map((s) => s.id);
   assert.deepEqual(out.scenarios.map((s) => s.id), ids, 'every frozen scenario, in the lock\'s order');
-  for (const id of ids) assert.deepEqual(out.scenarios.find((s) => s.id === id), expected(lock, id, rounds[id]), id);
+  for (const id of ids) assert.deepEqual(withoutNext(out.scenarios.find((s) => s.id === id)), expected(lock, id, rounds[id]), id);
 
   const pooled = ids.flatMap((id) => rounds[id] ?? []).filter((r) => !r.gatewayRestarted);
   assert.equal(out.rule0Verdict, solvedPairVerdict(pooled).verdict, 'the pooled Rule 0 verdict over every scenario\'s rounds');
@@ -91,7 +103,7 @@ test('before any paired round there is no Rule 0 verdict: NO DATA, and every sce
   const out = json(await verdict(copy, dir, env), 'verdict --json');
   assert.equal(out.ok, true, JSON.stringify(out).slice(0, 400));
   assert.equal(out.rule0Verdict, 'NO DATA');
-  for (const s of out.scenarios) assert.deepEqual(s, expected(lock, s.id, []), s.id);
+  for (const s of out.scenarios) assert.deepEqual(withoutNext(s), expected(lock, s.id, []), s.id);
 });
 
 test('the run-side commands are npm scripts, and a relative --scenarios-dir resolves from where npm was run', async (t) => {

@@ -153,6 +153,22 @@ test('a probe whose first byte takes longer than 10 s warns gateway_slow with it
   noSecrets(child, 'doctor --json (slow gateway)');
 });
 
+test('a test key with under a day left warns test_key_expiring with the fix, and a warning does not fail the doctor', async (t) => {
+  const inHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+  const soon = await setup(tempDir(t, 'kit-doctor-'), { expiresAt: inHours(5) });
+  const { out, byId } = checksOf(await doctor(soon), 'doctor --json (key expiring)');
+  assert.equal(byId.test_key.ok, true, 'a key with hours left still works: a warning, not a failure');
+  assert.equal(byId.test_key.code, 'test_key_expiring', JSON.stringify(byId.test_key));
+  assert.match(byId.test_key.fix, MINT_FIX, 'the fix is to mint a fresh key');
+  assert.deepEqual(failing(byId), []);
+  assert.equal(out.ok, true);
+
+  const fresh = await setup(tempDir(t, 'kit-doctor-'), { expiresAt: inHours(24 * 6) });
+  const freshChecks = checksOf(await doctor(fresh), 'doctor --json (key fresh)').byId;
+  assert.equal(freshChecks.test_key.ok, true);
+  assert.equal(freshChecks.test_key.code, undefined, 'six days left is not a warning');
+});
+
 test('no test key anywhere: test_key fails with test_key_missing and the fix to mint one, exit 2, in both modes', async (t) => {
   const s = await setup(tempDir(t, 'kit-doctor-'), { file: false });
   const env = { ...s.env, ANYRAY_GATEWAY_URL: s.gateway.url };

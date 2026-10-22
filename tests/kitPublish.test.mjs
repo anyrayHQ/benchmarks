@@ -47,6 +47,19 @@ test('publish-result posts the report body to /admin/v1/client-tests with the ad
   assert.deepEqual(out, { ok: true, command: 'publish-result', id: PUBLISHED_ID });
 });
 
+test('publish-result says where the result shows up, on stderr only, and never in --json', async (t) => {
+  const root = tempDir(t, 'kit-publish-');
+  const gateway = await gatewayFor();
+  const env = publishEnv(root);
+  const { copy, dir } = await syntheticPlan(root, { gatewayUrl: gateway.url, env });
+  const child = await publish(copy, dir, gateway, env);
+  assert.equal(child.status, 0);
+  assert.equal(child.stdout, `${PUBLISHED_ID}\n`, 'stdout stays the bare id for programs');
+  assert.match(child.stderr, /Published\. It shows under Measurement on the Optimizer page of your console/);
+  const asJson = await publish(copy, dir, gateway, env, ['--json']);
+  assert.deepEqual(json(asJson, 'publish-result --json'), { ok: true, command: 'publish-result', id: PUBLISHED_ID });
+});
+
 test('publish-result refuses to send a body the gateway\'s schema would refuse (report_invalid), and makes no request', async (t) => {
   const root = tempDir(t, 'kit-publish-');
   const gateway = await gatewayFor();

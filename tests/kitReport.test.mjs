@@ -25,7 +25,18 @@ function expectedBody(copy, lock, rounds) {
     const v = benchVerdict(rs);
     const s = rule0(valid[id]);
     const { prediction, shapeId } = lock.predictions.find((p) => p.id === id);
+    // Graded pairs: every round that ran cleanly, whether or not both arms solved it. A pair only
+    // the direct arm solved is a loss to Anyray, so unlike the cost stats it is counted, not dropped.
+    const graded = rs.filter((r) => exclusionReasons(r).every((x) => x === 'not solved'));
+    const parity = graded.length ? {
+      n: graded.length,
+      passDirect: graded.filter((r) => r.quality.a).length,
+      passAnyray: graded.filter((r) => r.quality.b).length,
+      anyrayWorse: graded.filter((r) => r.quality.a && !r.quality.b).length,
+      anyrayBetter: graded.filter((r) => !r.quality.a && r.quality.b).length,
+    } : undefined;
     return {
+      ...(parity ? { parity } : {}),
       shapeId: shapeId ?? 'unknown',
       source: lock.scenarios.find((x) => x.id === id).source,
       predictedBand: prediction.status === 'band' ? { kind: 'band', low: prediction.lo, high: prediction.hi } : { kind: 'none' },
@@ -155,6 +166,34 @@ test('report refuses a scenarios dir that changed after the freeze (plan_hash_mi
   const out = json(child, 'report --json after a change');
   assert.deepEqual({ code: out.code, expected: out.expected, changed: out.changed }, { code: 'plan_hash_mismatch', expected: lock.planHash, changed: ['check-long'] });
   assert.equal(child.status, 3);
+});
+
+test('the human report rounds every ratio to three places and says how many pairs each arm passed', async (t) => {
+  const root = tempDir(t, 'kit-report-');
+  const env = kitEnv(join(root, 'home'));
+  const { copy, dir } = await syntheticPlan(root, { env });
+  const human = await report(copy, dir, env, ['--redact']);
+  assert.equal(human.status, 0, `report failed: ${human.stderr.slice(-400)}`);
+  assert.doesNotMatch(human.stdout, /\d+\.\d{4,}/, `a raw float in the report: ${human.stdout}`);
+  // short-task: five graded pairs, direct solved four, Anyray five (one pair only Anyray solved).
+  assert.match(human.stdout, /Anyray passed 5 of 5, direct 4 of 5/);
+  // check-long: eight clean pairs; the round drawn into a holdout is not graded.
+  assert.match(human.stdout, /Anyray passed 8 of 8, direct 8 of 8/);
+  // No pair only direct solved in this plan, so the loss clause is absent: a clause that
+  // read "passed only direct" here would be a lie.
+  assert.doesNotMatch(human.stdout, /only direct/);
+});
+
+test('a pair only the direct arm solved is counted in the body and named in the report, never dropped', async (t) => {
+  const root = tempDir(t, 'kit-report-');
+  const env = kitEnv(join(root, 'home'));
+  const { copy, dir } = await syntheticPlan(root, { env, lostPair: true });
+  const body = json(await report(copy, dir, env, ['--redact', '--json']), 'report --redact --json');
+  assertGatewayBody(body, 'report --json');
+  const worse = body.scenarios.reduce((sum, s) => sum + (s.parity?.anyrayWorse ?? 0), 0);
+  assert.ok(worse >= 1, 'the body counts the pair only direct solved');
+  const human = await report(copy, dir, env, ['--redact']);
+  assert.match(human.stdout, /\d+ pairs? passed only direct/);
 });
 
 test('"unknown" stands for no shape in a report, so the committed catalog never names a shape "unknown"', () => {
