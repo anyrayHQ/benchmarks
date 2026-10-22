@@ -94,6 +94,9 @@ First Claude runs your task direct twice per round, six rounds, to measure how m
 cost moves on its own. Then each paired round runs it once direct and once through your
 gateway, on your tenant's defaults. A round the gateway draws into its holdout is redrawn
 or excluded. A losing pair is never retried.
+When the noise rounds finish, Claude reports the measured spread against the plan's
+assumption, what the planned pairs can now detect, and how long they will take at the
+pace your own rounds ran.
 
 ### 7. Read the verdict
 
@@ -113,6 +116,10 @@ for word and writes `anyray-test/report.html`, an offline page with no content f
 task, built by the kit: the headline, every scenario's tail, savings by session length
 and every pair with its checks. Paste a plan, verdict or report back to Claude later to
 pick up where you left off.
+
+If a verdict cannot decide yet (too few pairs, or too noisy), it ends with a line such as
+`Next: Run 6 more pairs (about $12.00) to reach the minimum of 8.`, priced at your own pair
+cost. Running them is a new paid run with its own Start.
 
 ### 8. Publish, if you want to
 

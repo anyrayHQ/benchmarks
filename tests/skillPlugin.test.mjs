@@ -316,6 +316,21 @@ test('SKILL.md makes the report page with the kit (report --redact --html), neve
   assert.doesNotMatch(skill.replace(/\s+/g, ' '), /Create `anyray-test\/report\.html` locally from that validated body/, 'the agent no longer hand-writes the page');
 });
 
+test('SKILL.md carries the kit\'s words for what to do next, the pace of the run and an expiring key', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /`nextStep`/, 'an undecided verdict is followed by the kit\'s nextStep, not the agent\'s own count');
+  assert.match(body, /new paid run.{0,80}own Start/i, 'more pairs need their own Start');
+  assert.match(body, /`summary`/, 'noise\'s summary (SD and pace) is copied as printed');
+  assert.match(body, /`test_key_expiring`/, 'an expiring key is re-minted before Start');
+});
+
+test('SKILL.md offers a starter test, as source: proposed, when the user has none, and records it only on a yes', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /starter/i);
+  assert.match(body, /starter.{0,300}`source: proposed`/i, 'a starter is never labeled the client\'s own test');
+  assert.match(body, /starter.{0,400}(only|never).{0,80}(yes|confirm|approv)/i, 'nothing is recorded without their yes');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');

@@ -7,7 +7,7 @@ import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenari
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
-import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend } from '../lib/kitResults.mjs';
+import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend, meanRoundMs } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { sessionGateState } from '../lib/traces.mjs';
@@ -78,6 +78,7 @@ try {
   let answer;
   let catalog;
   let noisePairs = null;
+  let noiseRoundMs = null;
   if (command === 'doctor') {
     answer = await doctor();
     if (!answer.ok) process.exitCode = 2;
@@ -143,6 +144,7 @@ try {
         const { spentUsd, meanRoundUsd } = kitSpend(dir, lock);
         if (meanRoundUsd > 0) noisePairs = Math.max(0, Math.floor((options['budget-usd'] - spentUsd) / meanRoundUsd));
       }
+      if (command === 'noise') noiseRoundMs = meanRoundMs(readKitRecords(dir, lock, 'control').flatMap((r) => r?.rounds ?? []));
     } else {
       if (command === 'publish-result') {
         releaseGateway(options, lock);
@@ -167,12 +169,14 @@ try {
       }
     }
   }
+  // The words a person reads, carried in the JSON too so the skill can copy them as printed.
+  if (command === 'noise' && !answer.stopped) answer.summary = formatNoise(answer, { pairsPlanned: noisePairs, roundMs: noiseRoundMs });
   if (['report', 'publish-result'].includes(command)) { /* Already printed the validated body or id. */ }
   else if (['noise', 'run'].includes(command) && !json && answer.stopped === 'budget_reached') process.stdout.write(formatStopped(answer));
   else if (command === 'doctor' && !json) process.stdout.write(formatDoctor(answer));
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
-  else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(formatNoise(answer, { pairsPlanned: noisePairs }));
+  else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(answer.summary);
   else if (command === 'verdict' && !json) process.stdout.write(formatKitVerdict(answer));
   else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog) + (answer.tenant.evaluationCohort ? `${answer.tenant.kindsEvaluated} kinds will be evaluated on test sessions only.\n` : ''));
   else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');

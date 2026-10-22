@@ -78,7 +78,10 @@ Write or Edit when available.
   It checks Node, git, a clean kit, Claude Code, Connect, the test key, gateway
   context and probe latency, the upstream credential and refused header settings.
   Continue only when `ok` is true. For each failing check, show its `code` and
-  `fix`, apply the fix and rerun doctor. A passing `gateway_slow` is a warning.
+  `fix`, apply the fix and rerun doctor. A passing `gateway_slow` or
+  `test_key_expiring` is a warning: for `test_key_expiring`, rerun the test-key
+  command before Start, since a noise phase and the paired runs after it can
+  outlast a key with hours left.
   Keep the resolved Claude Code realpath and version for both arms.
 
   | Code | Fix |
@@ -88,7 +91,7 @@ Write or Edit when available.
   | `kit_dirty` | Use a clean kit at the pinned release. |
   | `claude_unavailable` | Install Claude Code and check its version. |
   | `connect_missing` | Install Connect or set its absolute binary path. |
-  | `test_key_missing`, `test_key_expired` | Rerun the test-key command above. |
+  | `test_key_missing`, `test_key_expired`, `test_key_expiring` | Rerun the test-key command above. |
   | `test_kit_env_mode` | Set the credential file's mode to 0600. |
   | `gateway_unreachable` | Check the gateway connection and credentials. |
   | `gateway_slow` | Check gateway latency before starting long rounds. |
@@ -106,6 +109,14 @@ with `source: client` and `task:` holding exactly their words. Use lossless YAML
 quoting, with no added sentence, trailing period or changed capitalisation. This
 initial file may be incomplete while preflight is blocked. If the task is absent,
 ask for the test they planned to run: a task, script or description.
+
+If they have no test in mind, offer a starter instead of leaving them stuck. Read
+only their repo's own check command (the `test` or `lint` script in
+`package.json`, `go vet`, `pytest`, `cargo test`) and propose one small task that
+makes that check pass, in their own repo. A starter is a proposal, so it is
+recorded as `anyray-test/proposed-1/scenario.yaml` with `source: proposed`, never
+as their test. Show it word for word and record it only after they confirm with a
+yes; without one, record nothing and keep asking for their test.
 
 Every `anyray-test/...` path is relative to the current working directory where
 Claude Code runs, normally the root of the user's repo. Never compute or guess
@@ -184,8 +195,9 @@ npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s noise -- --scenarios-dir anyray-
 ```
 
 Show the kit's progress lines on every wake, with phase, completed rounds,
-exclusions and costs when available. Read the returned measured SD and pairs
-needed. Stay within the approved work and budget; a larger scope or ceiling
+exclusions and costs when available. When noise finishes, copy its `summary`
+as printed: the measured SD against the plan's assumption, what the planned pairs
+can now detect, and how long they will take at the pace the noise rounds ran. Stay within the approved work and budget; a larger scope or ceiling
 requires a new plan and Start.
 
 ```bash
@@ -213,6 +225,13 @@ numbers as printed. A median ratio is not a savings claim. Never turn a median
 into a percentage saving or soften a verdict. Include exclusions and predicted
 versus actual results without cherry-picking. For a requested two-line summary,
 use the kit's verdict words and numbers, with no extra workflow or paid command.
+
+An undecided verdict (`inconclusive`, `INCONCLUSIVE` or `INSUFFICIENT`) carries a
+`nextStep` in the kit's verdict: how many more pairs would settle it and what they
+cost. Copy it exactly beside that scenario and never replace it with your own
+count or price. Running those pairs is a new paid run: it needs its own plan
+check and its own Start. A verdict that can decide has no `nextStep`; do not
+suggest more pairs for it.
 
 Quality travels with cost. Each scenario line carries the kit's clause "Anyray
 passed X of N, direct Y of N" (the client's own check, run on both arms), and
