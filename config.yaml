@@ -13,9 +13,9 @@ run:
   # Judges direct-vs-gateway answer equivalence; always called direct, so Anyray is
   # never in the scoring path. Override with $ANYRAY_JUDGE_MODEL.
   judge_model: "claude-opus-4-8"
-  # Gateways the harness refuses to call, whatever the env says.
-  blocked_gateways:
-    - "https://gateway.anyray.ai"
+  # Gateways the harness refuses to call, whatever the env says. The kit refuses them at
+  # plan and freeze too (plan_gateway_blocked).
+  blocked_gateways: []
   # The provider for the direct side. Override with $ANYRAY_DIRECT_URL.
   direct_url: "https://api.anthropic.com"
   # There is deliberately NO default gateway URL: set $ANYRAY_GATEWAY_URL (or

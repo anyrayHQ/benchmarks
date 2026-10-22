@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
-import { PlanError, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
+import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
@@ -70,6 +70,7 @@ try {
   else if (command === 'plan') {
     const gateway = options.gateway || runDefaults().gateway;
     if (!gatewayHost(gateway)) throw new PlanError('pin_missing', { pin: 'gatewayHost' });
+    assertGatewayAllowed(gateway);
     const bundles = validatedScenarios(dir);
     catalog = loadCatalog();
     const client = options.client || 'claude-code';
@@ -96,6 +97,7 @@ try {
       try { version = claudeVersion(resolveClaudeBin(claudeBinRequest({ flag: options['claude-bin'], env: process.env })).bin); }
       catch { version = null; }
     }
+    assertGatewayAllowed(options.gateway || defaults.gateway);
     const pins = {
       model: options.model || defaults.model,
       provider: options.provider || 'anthropic',
