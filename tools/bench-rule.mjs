@@ -37,6 +37,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { otherRulesChanged, paramsRuleLabel, removeParamsRule, restChanged, setParamsRule, unknownParams, validExperimentName } from '../lib/benchRule.mjs';
+import { refuseConfigChanges } from '../lib/loadConfig.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LABEL = 'anyray-bench: strategies on for benchmark traffic only';
@@ -45,7 +46,7 @@ const ours = (r) => r.label === LABEL || r.label?.startsWith('anyray-bench: ') &
 const gw = (process.env.ANYRAY_GATEWAY_URL || '').replace(/\/$/, '');
 const key = process.env.ANYRAY_ADMIN_KEY;
 if (!gw) throw new Error('set ANYRAY_GATEWAY_URL');
-if (gw === 'https://gateway.anyray.ai') throw new Error('gateway.anyray.ai is blocked for benchmark changes');
+refuseConfigChanges(gw);
 if (!key) throw new Error('set ANYRAY_ADMIN_KEY (aak_ key with optimizer:read + optimizer:write)');
 
 async function call(method, body) {

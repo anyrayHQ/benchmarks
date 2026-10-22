@@ -367,4 +367,4 @@ off. The optimizer config is one document that other people edit too, so `params
 `remove-params` re-read it right before writing, send the revision they read, and read it
 back to confirm every other rule is unchanged. `remove` and `per-experiment` do not touch
 these rules. Gateways in `config.yaml` `run.blocked_gateways` are refused by both the
-runner and this tool.
+runner and this tool, and this tool never changes our hosted gateway (gateway.anyray.ai).

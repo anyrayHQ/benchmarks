@@ -632,7 +632,9 @@ npm run bench-rule -- remove-params <experiment>                    # removes ex
 - The config before the change is saved to `results/optimizer-config.before.json`.
 - `params` writes are revision-checked: a concurrent edit is retried, never overwritten.
   Param names are checked against the deployed optimizer, since a misspelt one does nothing.
-- Gateways in `config.yaml` `run.blocked_gateways` are refused.
+- Gateways in `config.yaml` `run.blocked_gateways` are refused (the kit refuses them at plan
+  and freeze with `plan_gateway_blocked`). Benchmark config changes never touch our hosted
+  gateway, gateway.anyray.ai; benchmark traffic may run there.
 
 ### Pick a Claude Code integration level
 
