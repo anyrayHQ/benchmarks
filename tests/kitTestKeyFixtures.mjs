@@ -34,8 +34,11 @@ const parseJson = (s) => {
 /** The key a /connect/* request presents: x-anyray-api-key first, then a Bearer token (SPEC "Verified facts"). */
 export function keyOf(r) {
   if (typeof r.apiKey === 'string' && r.apiKey) return r.apiKey;
-  const m = /^Bearer\s+(.+)$/.exec(r.authorization ?? '');
-  return m ? m[1] : null;
+  // Linear string ops, not a regex: the header is request data (CodeQL js/polynomial-redos).
+  const header = r.authorization ?? '';
+  if (!header.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  return token || null;
 }
 
 /** ISO instants a week ahead and a day behind now (a fresh test key, an expired one). */
