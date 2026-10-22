@@ -173,6 +173,51 @@ Verify retains the frozen predictions even if the catalog changes. Use
 `freeze --replace` to write a new plan with a fresh nonce and current catalog.
 The lock contains ids, hashes and predictions; task and file contents stay local.
 
+### Measure, run and share a client plan
+
+Use Claude Code for kit execution. Set `ANYRAY_GATEWAY_URL` to the frozen gateway,
+`ANYRAY_BENCH_CLIENT_KEY` to a dedicated benchmark service key, and one admin token
+(`ANYRAY_TRACE_TOKEN`, `ANYRAY_TRACE_KEY` or `ANYRAY_ADMIN_KEY`). Keep credentials in
+the environment. Both arms use the one resolved `--claude-bin` build, checked
+against the version in the lock.
+
+```bash
+npm run -s noise -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 6 --json
+npm run -s run -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 8 --redraw-holdout 2 --json
+npm run -s verdict -- --scenarios-dir ./client-scenarios --json
+npm run -s report -- --scenarios-dir ./client-scenarios --redact
+npm run -s report -- --scenarios-dir ./client-scenarios --redact --json
+npm run -s publish-result -- --scenarios-dir ./client-scenarios --json
+```
+
+Noise comes first: at least six interleaved direct-vs-direct pairs per scenario
+measure the pooled within-scenario log-ratio SD. A signed `noise` block records
+that floor without changing the plan hash, and the command reprints pairs needed
+at the measured SD. Repeating `noise` or `run` adds rounds to that plan.
+
+Paired runs use the tenant's defaults without a kinds selection header. They
+record `kindsObserved`, use `tool: anyray-bench` on every gateway request, and use
+a hash prefix for attribution instead of the client's scenario name. Early
+holdouts of any kind trigger fresh pairs; the final draw is excluded as
+`holdout drawn`, even with `--redraw-holdout 0`. The default is two redraws.
+Header overrides from `ANYRAY_BENCH_EXTRA_HEADERS` or `ANYRAY_BENCH_SHARED_HEADERS`
+are refused.
+
+Records live in `<scenarios-dir>/.kit-results/<planHash>/`, with an ignoring
+`.gitignore`. They retain hashes, counts, costs, outcomes and versions, built
+from an allowlist after grading. Tasks, repositories, patches, transcripts,
+tool I/O, diffs and check output do not enter the records. Replacing a frozen
+plan starts a separate results directory. The lock's nonce stays local.
+
+Verdict uses both existing verdict libraries and compares actual medians with
+the frozen bands. Report requires `--redact`; its human form includes scenario
+ids, while JSON contains aggregate shapes and statistics only. The JSON body
+is validated against the gateway client-tests schema before it is printed or
+published. A missing or mixed gateway version prevents sharing. Publishing
+sends that same body to the frozen gateway and prints only the result id.
+For legacy `results/agent/` records, `npm run agent:report -- --redact` creates
+an HTML page from an allowlist too.
+
 ## How a round works
 
 Each **round** runs the same task on a real open-source repo in two arms **at the same

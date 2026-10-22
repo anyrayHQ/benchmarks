@@ -10,6 +10,7 @@
 //
 // Usage: node report_agent.mjs   (npm run agent:report)
 
+import { redactedPageRecord } from './lib/kitResults.mjs';
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,13 +19,15 @@ const STRATEGIES_JS = readFileSync(join(dirname(fileURLToPath(import.meta.url)),
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const dir = join(ROOT, 'results', 'agent');
+const redact = process.argv.includes('--redact');
 const records = readdirSync(dir)
   .filter((f) => f.endsWith('.json'))
   .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')))
+  .map((r) => redact ? redactedPageRecord(r) : r)
   .sort((a, b) => a.scenario.name.localeCompare(b.scenario.name) || (a.compare === 'control' ? -1 : 1));
 
 // Trim bulky fields the page never shows, then embed; `<` escaped for the script tag.
-for (const r of records) {
+if (!redact) for (const r of records) {
   delete r.scenario.repoInfo?.tree;
   for (const round of r.rounds) for (const s of Object.values(round.sessions ?? {})) s.diffPatch = (s.diffPatch ?? '').slice(0, 8000);
 }
@@ -164,7 +167,7 @@ const armName = (r, key) => r.compare === 'gateway'
   : r.arms[key] === 'anyray' ? 'Through Anyray' : 'Direct';
 const label = (r) => r.scenario.name + ({ control: ' · control', gateway: ' · gateway A/B' }[r.compare] ?? ' · Anyray') + (r.label ? ' · ' + r.label : '');
 const verdictChip = (v) => '<span class="chip ' + ({ PASS: 'good', FAIL: 'bad', INCONCLUSIVE: 'warn' }[v] || '') + '">' + esc(v) + '</span>';
-const okRounds = (r) => r.rounds.filter((x) => !x.error && !x.gatewayRestarted);
+const okRounds = (r) => r.rounds.filter((x) => !x.error && !x.gatewayRestarted && x.sessions?.a?.totals && x.sessions?.b?.totals);
 
 function svg(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
 function text(parent, x, y, s, attrs) { const t = svg('text', Object.assign({ x, y, 'font-size': 12 }, attrs || {}), parent); t.textContent = s; return t; }
@@ -218,7 +221,7 @@ function strategyPanel(r, round) {
   const opt = roundOpt(r, round);
   const haveTraces = !!round?.traces?.traces;
   if (!opt?.strategies && !haveTraces) {
-    return '<div class="notice">Which strategies were on, and what each one did, comes from the gateway admin API. Set <span class="mono">ANYRAY_ADMIN_KEY</span> (an aak_ key with optimizer:read and traces:read) and re-run to fill this in.' + (round ? ' This round\'s requests are in the console under session <span class="mono">' + esc(round.runTag.sessionId) + '</span>.' : '') + '</div>';
+    return '<div class="notice">Which strategies were on, and what each one did, comes from the gateway admin API. Set <span class="mono">ANYRAY_ADMIN_KEY</span> (an aak_ key with optimizer:read and traces:read) and re-run to fill this in.' + (round ? ' This round\'s requests are in the console under session <span class="mono">' + esc(round.runTag?.sessionId) + '</span>.' : '') + '</div>';
   }
   const rows = strategyTable(opt, round?.traces?.traces ?? []);
   return '<div class="tablewrap"><table><thead><tr><th>Strategy</th><th>On for this test</th><th class="r">Requests it acted on</th><th class="r">Saved on</th><th class="r">Tokens saved</th><th>Result</th><th>Why it stood down</th></tr></thead><tbody>' +
@@ -230,14 +233,14 @@ function strategyPanel(r, round) {
 }
 
 function setupCard(r, key) {
-  const s = r.setup[key];
+  const s = r.setup?.[key] ?? {};
   const hooks = Object.entries(s.hooks || {});
   const mcp = Object.entries(s.mcpServers || {});
   const headers = Object.entries(s.headers || {});
   const cls = key === 'b' && s.arm === 'anyray' ? 'b' : 'a';
   return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2></div><dl class="kv">' +
-    '<dt>Client</dt><dd>' + esc(s.client) + '</dd><dt>Model</dt><dd class="mono">' + esc(s.model) + '</dd>' +
-    '<dt>Endpoint</dt><dd class="mono">' + esc(s.endpoint) + '</dd><dt>Auth</dt><dd>' + esc(s.auth) + '</dd>' +
+    '<dt>Client</dt><dd>' + esc(s.client ?? 'n/a') + '</dd><dt>Model</dt><dd class="mono">' + esc(s.model ?? 'n/a') + '</dd>' +
+    '<dt>Endpoint</dt><dd class="mono">' + esc(s.endpoint ?? 'n/a') + '</dd><dt>Auth</dt><dd>' + esc(s.auth ?? 'n/a') + '</dd>' +
     '<dt>Headers</dt><dd>' + (headers.length ? headers.map(([k, v]) => '<div class="mono">' + esc(k) + ': ' + esc(typeof v === 'string' ? v : JSON.stringify(v)) + '</div>').join('') : '<span class="muted">none</span>') + '</dd>' +
     '<dt>Tools</dt><dd>' + esc(s.tools) + '</dd>' +
     '<dt>MCP servers</dt><dd>' + (mcp.length ? mcp.map(([k, v]) => '<span class="chip b">' + esc(k) + '</span> <span class="mono muted">' + esc(v.command || v.url) + '</span>').join('<br>') : '<span class="muted">none</span>') + '</dd>' +
@@ -249,7 +252,7 @@ function setupCard(r, key) {
 function anyrayCard(r, round) {
   const a = r.anyray || {};
   const pol = a.connectPolicy || {}, opt = a.optimizerConfig || {}, tr = round?.traces || {};
-  const trimmed = round ? round.sessions.b.requests.flatMap((q) => q.blocks).filter((b) => b.type === 'tool_use' && b.result?.trimmedByAnyrayHook) : [];
+  const trimmed = round ? (round.sessions.b.requests ?? []).flatMap((q) => q.blocks).filter((b) => b.type === 'tool_use' && b.result?.trimmedByAnyrayHook) : [];
   const on = '<div class="stack"><h3>Turned on</h3>' +
     '<div><b>Client hooks</b> <span class="muted">anyray-connect on this machine</span><div class="row" style="margin-top:4px"><span class="chip ' + (pol.hooks?.digest === 'on' ? 'good' : '') + '">tool-output digest: ' + esc(pol.hooks?.digest ?? '?') + '</span></div></div>' +
     '<div><b>MCP</b><div class="row" style="margin-top:4px"><span class="chip b">anyray: retrieve / recall</span></div></div>' +
@@ -261,7 +264,7 @@ function anyrayCard(r, round) {
     did += tr.traces.map((t, i) => '<div class="panel" style="padding:10px"><div class="row between"><b>Request ' + (i + 1) + '</b><span class="muted num">' + int(t.promptTokens) + ' in · saved ' + int(t.estimatedTokensSaved) + '</span></div><div class="stack" style="gap:6px;margin-top:6px">' +
       (t.decisions.length ? t.decisions.map((d, j) => '<div class="step"><span class="k">' + (j + 1) + '</span><div><b>' + esc(d.kind) + '</b>' + (d.router ? ' <span class="chip">' + esc(d.router) + '</span>' : '') + '<div class="muted">' + esc(d.summary || '') + '</div></div><span class="num ' + (d.estimatedTokensSaved > 0 ? 'good-t' : 'muted') + '">' + (d.estimatedTokensSaved > 0 ? '−' + int(d.estimatedTokensSaved) : '—') + '</span></div>').join('') : '<span class="muted">no decisions</span>') + '</div></div>').join('');
   } else {
-    did += '<div class="notice">Gateway pipeline not visible: ' + esc(tr.unavailable || 'no round selected') + '.' + (round ? ' Find it in the console under session <span class="mono">' + esc(round.runTag.sessionId) + '</span>.' : '') + '</div>';
+    did += '<div class="notice">Gateway pipeline not visible: ' + esc(tr.unavailable || 'no round selected') + '.' + (round ? ' Find it in the console under session <span class="mono">' + esc(round.runTag?.sessionId) + '</span>.' : '') + '</div>';
   }
   did += '</div>';
   return '<div class="panel stack"><div class="arm-h"><span class="dot b"></span><h2>Anyray optimizations</h2></div><div class="duo">' + on + did + '</div></div>';
@@ -269,8 +272,8 @@ function anyrayCard(r, round) {
 
 function requestsCard(r, round, key) {
   const s = round.sessions[key];
-  const max = Math.max(...['a', 'b'].flatMap((k) => round.sessions[k].requests.map((q) => q.inputTotal || 0)), 1);
-  const rows = s.requests.map((q, i) => {
+  const max = Math.max(...['a', 'b'].flatMap((k) => (round.sessions[k].requests ?? []).map((q) => q.inputTotal || 0)), 1);
+  const rows = (s.requests ?? []).map((q, i) => {
     const u = q.usage || {};
     const read = u.cache_read_input_tokens || 0, write = u.cache_creation_input_tokens || 0, fresh = u.input_tokens || 0;
     const w = (n) => (100 * n) / max + '%';
@@ -288,7 +291,7 @@ function requestsCard(r, round, key) {
   const t = s.totals;
   const cls = key === 'b' && r.arms.b === 'anyray' ? 'b' : 'a';
   return '<div class="panel"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2></div>' +
-    '<div class="muted num">' + t.turns + ' turns · ' + t.requests + ' model requests' + (t.subagentRequests != null ? ' (' + t.mainRequests + ' main, ' + t.subagentRequests + ' subagent)' : '') + ' · ' + t.subagents + ' subagents (' + Math.round(t.subagentInputShare * 100) + '% of input cost' + (t.requestsPerSubagent != null ? ', ' + perAgent(t) + ' req/agent' : '') + ') · ' + t.toolCalls + ' tool calls' + (t.hookTrimmed ? ' · ' + t.hookTrimmed + ' trimmed' : '') + (s.setup?.claudeVersion ? ' · Claude Code ' + esc(s.setup.claudeVersion) : '') + '</div>' + rows + '</div>';
+    '<div class="muted num">' + t.turns + ' turns · ' + t.requests + ' model requests' + (t.subagentRequests != null ? ' (' + t.mainRequests + ' main, ' + t.subagentRequests + ' subagent)' : '') + ' · ' + t.subagents + ' subagents (' + Math.round(t.subagentInputShare * 100) + '% of input cost' + (t.requestsPerSubagent != null ? ', ' + perAgent(t) + ' req/agent' : '') + ') · ' + t.toolCalls + ' tool calls' + (t.hookTrimmed ? ' · ' + t.hookTrimmed + ' trimmed' : '') + (s.setup?.claudeVersion ? ' · Claude Code ' + esc(s.setup.claudeVersion) : '') + '</div>' + (s.requests ? rows : '<div class="muted">n/a</div>') + '</div>';
 }
 
 function resultCard(r, round, key) {
@@ -298,9 +301,9 @@ function resultCard(r, round, key) {
   return '<div class="panel stack"><div class="arm-h"><span class="dot ' + cls + '"></span><h2>' + key.toUpperCase() + ' · ' + armName(r, key) + '</h2><span class="chip ' + (ok ? 'good' : 'bad') + '">' + (ok ? 'solved' : 'not solved') + '</span></div>' +
     (r.scenario.check ? '<div><h3>Check · <span class="mono">' + esc(r.scenario.check) + '</span></h3><pre class="scroll" style="max-height:140px">' + esc(s.check?.output || '') + '</pre></div>' : '') +
     (s.citations ? '<div><h3>Citations</h3><div class="num">' + s.citations.resolved + ' of ' + s.citations.total + ' path:line citations resolve to real lines' + (s.citations.unresolved.length ? '<div class="muted mono">unresolved: ' + esc(s.citations.unresolved.join(', ')) + '</div>' : '') + '</div></div>' : '') +
-    (s.diff ? '<div><h3>Changes it made</h3><pre class="scroll" style="max-height:220px">' + esc(s.diffPatch || s.diff) + '</pre></div>' : '<div class="muted">No file changes.</div>') +
-    '<div><h3>Final answer</h3><pre class="scroll">' + esc(s.result?.text) + '</pre></div>' +
-    '<div class="muted num">' + usd(s.totals.costUsd, 4) + ' · ' + int(s.totals.input) + ' in · ' + int(s.totals.output) + ' out · ' + secs(s.totals.wallMs) + ' · models: ' + esc(s.totals.models.join(', ')) + '</div></div>';
+    (s.diff ? '<div><h3>Changes it made</h3><pre class="scroll" style="max-height:220px">' + esc(s.diffPatch || s.diff) + '</pre></div>' : '<div class="muted">' + (s.diff === undefined ? 'n/a' : 'No file changes.') + '</div>') +
+    '<div><h3>Final answer</h3><pre class="scroll">' + esc(s.result?.text ?? 'n/a') + '</pre></div>' +
+    '<div class="muted num">' + usd(s.totals.costUsd, 4) + ' · ' + int(s.totals.input) + ' in · ' + int(s.totals.output) + ' out · ' + secs(s.totals.wallMs) + ' · models: ' + esc((s.totals.models ?? []).join(', ')) + '</div></div>';
 }
 
 function kpi(labelText, a, b, fmt, lowerIsBetter = true) {
@@ -318,11 +321,11 @@ function renderDetail() {
   const rounds = okRounds(r);
   const round = rounds[curRound] || rounds[0];
   const repo = r.scenario.repoInfo || {};
-  let h = '<section class="panel stack"><div class="row between"><div class="stack" style="gap:2px"><h2>' + esc(r.scenario.title) + '</h2><span class="muted mono">' + esc(repo.git) + ' @ ' + esc((repo.ref || '').slice(0, 10)) + [repo.patch ?? []].flat().map((p) => ' + ' + esc(p)).join('') + '</span></div>' +
+  let h = '<section class="panel stack"><div class="row between"><div class="stack" style="gap:2px"><h2>' + esc(r.scenario.title ?? r.scenario.name) + '</h2><span class="muted mono">' + esc(repo.git ?? 'n/a') + ' @ ' + esc((repo.ref || '').slice(0, 10)) + [repo.patch ?? []].flat().map((p) => ' + ' + esc(p)).join('') + '</span></div>' +
     (r.compare === 'control' ? '<span class="chip">noise reference</span>' : '<span class="row"><span class="verdict">Rule 0</span>' + verdictChip(r.stats?.verdict) + '</span>') + '</div>' +
     (r.stats?.reasons?.length && r.compare !== 'control' ? '<ul class="reasons">' + r.stats.reasons.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
-    '<div class="duo"><div class="stack"><h3>Task</h3><pre class="scroll">' + esc(r.scenario.task) + '</pre>' +
-      '<h3>How it is graded</h3><div>' + (r.scenario.check ? 'Solved when <span class="mono">' + esc(r.scenario.check) + '</span> passes in the session\'s checkout afterwards.' : r.scenario.citations ? 'Solved when the answer cites at least ' + r.scenario.citations.min + ' path:line locations and ' + Math.round((r.scenario.citations.resolveRate ?? 0.9) * 100) + '% of them resolve to real lines.' : 'Solved when the final answer contains every one of: ' + (r.scenario.keyFacts || []).map((f) => '<span class="chip mono">' + esc(f) + '</span>').join(' ')) + '</div></div>' +
+    '<div class="duo"><div class="stack"><h3>Task</h3><pre class="scroll">' + esc(r.scenario.task ?? 'n/a') + '</pre>' +
+      '<h3>How it is graded</h3><div>' + (!r.scenario.check && !r.scenario.citations && !r.scenario.keyFacts ? 'n/a' : r.scenario.check ? 'Solved when <span class="mono">' + esc(r.scenario.check) + '</span> passes in the session\'s checkout afterwards.' : r.scenario.citations ? 'Solved when the answer cites at least ' + r.scenario.citations.min + ' path:line locations and ' + Math.round((r.scenario.citations.resolveRate ?? 0.9) * 100) + '% of them resolve to real lines.' : 'Solved when the final answer contains every one of: ' + (r.scenario.keyFacts || []).map((f) => '<span class="chip mono">' + esc(f) + '</span>').join(' ')) + '</div></div>' +
     '<div class="stack"><h3>Files the agent can reach</h3><div class="muted num">' + int(repo.files) + ' files · ' + int(repo.lines) + ' lines, a fresh checkout per arm</div><div class="tablewrap"><table><thead><tr><th>Type</th><th class="r">Files</th><th class="r">Lines</th></tr></thead><tbody>' +
       (repo.byExt || []).map(([e, v]) => '<tr><td class="mono">' + esc(e) + '</td><td class="r">' + int(v.files) + '</td><td class="r">' + int(v.lines) + '</td></tr>').join('') + '</tbody></table></div></div></div></section>';
 
