@@ -27,9 +27,10 @@ verdict summary alone, answer from that output without starting a new test flow.
 
 ## Preflight
 
-Check each prerequisite without a model request or printing secrets. Name every
-failed check and its fix. If Bash is unavailable, say that preflight and kit
-execution are blocked; still complete Define with Write or Edit when available.
+Check prerequisites without printing secrets. Doctor sends one 1-token probe.
+Name every failed check by its code and show its fix. If Bash is unavailable,
+say that preflight and kit execution are blocked; still complete Define with
+Write or Edit when available.
 
 - Kit: Node.js 22.13+, npm and git must be available. Keep a real, clean checkout
   with dependencies at `${CLAUDE_PLUGIN_DATA}/kit`. Read the installed version in
@@ -37,10 +38,10 @@ execution are blocked; still complete Define with Write or Edit when available.
   `anyray-test--v<version>`. For this release the setup is:
 
   ```bash
-  git clone --branch anyray-test--v0.1.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
+  git clone --branch anyray-test--v0.2.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
   npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" ci
   git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse HEAD
-  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.1.0^{commit}'
+  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.2.0^{commit}'
   ```
 
   The two commits must match. Check the kit's scripts, lockfile and dependencies.
@@ -59,24 +60,43 @@ execution are blocked; still complete Define with Write or Edit when available.
   version for the plan's pins and both arms. The auto-updater re-points the
   `claude` symlink, so the unresolved path can change version under a frozen plan.
   If unavailable, install or sign in to Claude Code before proceeding.
-- Gateway: require `ANYRAY_GATEWAY_URL` and a dedicated benchmark service key in
-  `ANYRAY_BENCH_CLIENT_KEY`. Require an admin token via `ANYRAY_TRACE_TOKEN`,
-  `ANYRAY_TRACE_KEY` or `ANYRAY_ADMIN_KEY`, in that order, with session-gate and
-  spend read access. Use an authenticated GET to `/admin/v1/optimizer/session-gate`
-  with a ten-second timeout to check reachability and access. Suppress raw bodies,
-  headers and errors; report only status or a fixed failure label. A failure
-  needs the correct URL, network access or token permissions. Check the intended
-  tenant matches the benchmark key; pass `--tenant` to plan when needed. All-shadow
-  or unreadable tenant gates block planning; ask the operator to fix the tenant.
-- Direct credential: for Anthropic, check for `ANYRAY_UPSTREAM_TOKEN` or a valid
-  Claude Code subscription token accessible to the kit through the macOS keychain.
-  Check presence and expiry without displaying the value. If absent or too short
-  for the task's pauses, sign in or use `claude setup-token` and put the token in
-  the existing environment variable. For Bedrock, verify the configured AWS
-  profile and region without inference; fix AWS login or profile access if needed.
-- Refuse nonempty `ANYRAY_BENCH_EXTRA_HEADERS` or `ANYRAY_BENCH_SHARED_HEADERS`;
-  ask the user to clear them. Keep all credentials in the environment, never in
-  scenario files, command arguments, chat or reports.
+- Test key: when no test key exists, or the test key is missing or expired, run:
+
+  ```bash
+  anyray-connect test-key --json
+  ```
+
+  Connect uses your enrolled identity and writes the gateway, test key and expiry
+  to `~/.anyray/test-kit.env` with mode 0600. The kit reads it itself. Never read
+  the file into the transcript. Environment values can override the file.
+- Doctor: after the test key is ready, run:
+
+  ```bash
+  npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s doctor -- --json
+  ```
+
+  It checks Node, git, a clean kit, Claude Code, Connect, the test key, gateway
+  context and probe latency, the upstream credential and refused header settings.
+  Continue only when `ok` is true. For each failing check, show its `code` and
+  `fix`, apply the fix and rerun doctor. A passing `gateway_slow` is a warning.
+  Keep the resolved Claude Code realpath and version for both arms.
+
+  | Code | Fix |
+  | --- | --- |
+  | `node_version` | Install Node.js 22.13 or newer. |
+  | `git_missing` | Install git and put it on PATH. |
+  | `kit_dirty` | Use a clean kit at the pinned release. |
+  | `claude_unavailable` | Install Claude Code and check its version. |
+  | `connect_missing` | Install Connect or set its absolute binary path. |
+  | `test_key_missing`, `test_key_expired` | Rerun the test-key command above. |
+  | `test_kit_env_mode` | Set the credential file's mode to 0600. |
+  | `gateway_unreachable` | Check the gateway connection and credentials. |
+  | `gateway_slow` | Check gateway latency before starting long rounds. |
+  | `upstream_credential_missing` | Sign in to Claude Code or set `ANYRAY_UPSTREAM_TOKEN`. |
+  | `env_refused` | Unset `ANYRAY_BENCH_EXTRA_HEADERS` and `ANYRAY_BENCH_SHARED_HEADERS`. |
+
+  Keep credentials out of scenario files, command arguments, chat and reports.
+  For Bedrock, also verify the configured AWS profile and region without inference.
 
 ## Define
 
@@ -112,11 +132,11 @@ Keep scenario content local and ignored by git; do not commit or upload it.
 
 ## Plan
 
-Ask for the budget and typical cost of one direct session. Use their values,
-never costs inferred from our published tasks. From the current working directory, run:
+Ask for the budget only. Noise rounds measure the session cost.
+From the current working directory, run:
 
 ```bash
-npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s plan -- --scenarios-dir anyray-test --budget-usd <budget> --session-cost-usd <session-cost> --json
+npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s plan -- --scenarios-dir anyray-test --budget-usd <budget> --json
 ```
 
 Replace placeholders with confirmed values. Keep npm in that same working
@@ -160,15 +180,16 @@ the user to run one themselves. Do not claim any paid work has started.
 Only after Start, run noise rounds, then paired runs, in the background:
 
 ```bash
-npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s noise -- --scenarios-dir anyray-test --claude-bin <absolute-claude-path> --rounds 6 --json
+npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s noise -- --scenarios-dir anyray-test --claude-bin <absolute-claude-path> --rounds 6 --budget-usd <budget> --json
 ```
 
-Surface progress on every wake: phase, completed rounds, exclusions and costs
-when available. Read the returned measured SD and pairs needed. Stay within the
-approved work and budget; a larger scope or ceiling requires a new plan and Start.
+Show the kit's progress lines on every wake, with phase, completed rounds,
+exclusions and costs when available. Read the returned measured SD and pairs
+needed. Stay within the approved work and budget; a larger scope or ceiling
+requires a new plan and Start.
 
 ```bash
-npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s run -- --scenarios-dir anyray-test --claude-bin <absolute-claude-path> --rounds <approved-rounds> --json
+npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s run -- --scenarios-dir anyray-test --claude-bin <absolute-claude-path> --rounds <approved-rounds> --budget-usd <budget> --json
 ```
 
 Monitor the existing background task first. If interrupted, resume by re-running

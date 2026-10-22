@@ -182,9 +182,12 @@ test('run refuses a plan whose noise floor was not measured (plan_noise_missing)
   assert.deepEqual(s.gateway.requests, []);
 });
 
-test('run refuses without the kit\'s own key or an admin key, before any session or gateway request', async () => {
+// ANY-1516: an admin key is no longer required (without one the kit runs on the test key's
+// /connect/test/* routes, tests/kitTestKey.test.mjs); the kit's own key still is. With an admin
+// key present, a missing kit key stays bench_key_missing (the operator flow).
+test('run refuses without the kit\'s own key, before any session or gateway request', async () => {
   const s = await setup();
-  for (const [unset, code] of [['ANYRAY_BENCH_CLIENT_KEY', 'bench_key_missing'], ['ANYRAY_ADMIN_KEY', 'admin_key_missing']]) {
+  for (const [unset, code] of [['ANYRAY_BENCH_CLIENT_KEY', 'bench_key_missing']]) {
     const env = { ...s.env };
     delete env[unset];
     const child = await run(s, ['--rounds', '1', '--json'], env);

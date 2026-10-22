@@ -59,14 +59,16 @@ test('publish-result refuses to send a body the gateway\'s schema would refuse (
   assert.deepEqual(gateway.requests, [], 'nothing was sent');
 });
 
-test('the admin key comes from the environment only: none is admin_key_missing, a key flag is usage, and neither sends anything', async (t) => {
+// ANY-1516: without an admin key the kit publishes on the test key (tests/kitTestKey.test.mjs), so
+// the refusal for no credential at all is test_key_missing, the client flow's missing key.
+test('credentials come from the environment only: no admin key and no test key is test_key_missing, a key flag is usage, and neither sends anything', async (t) => {
   const root = tempDir(t, 'kit-publish-');
   const gateway = await gatewayFor();
   const { copy, dir } = await syntheticPlan(root, { gatewayUrl: gateway.url, env: publishEnv(root) });
 
   const noKey = await publish(copy, dir, gateway, kitEnv(join(root, 'home')), ['--json']);
-  const a = json(noKey, 'publish-result --json without an admin key');
-  assert.deepEqual({ ok: a.ok, code: a.code }, { ok: false, code: 'admin_key_missing' });
+  const a = json(noKey, 'publish-result --json without an admin key or a test key');
+  assert.deepEqual({ ok: a.ok, code: a.code }, { ok: false, code: 'test_key_missing' });
   assert.equal(noKey.status, 2);
 
   for (const flag of ['--admin-key', '--token']) {

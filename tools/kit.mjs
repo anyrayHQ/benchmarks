@@ -8,7 +8,9 @@ import { readKitRecords, kitVerdict, formatKitVerdict } from '../lib/kitResults.
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { sessionGateState } from '../lib/traces.mjs';
-import { kitVersion, releaseGateway, requireAdmin, releaseCheck, publishResult, runTwins } from '../lib/kitRelease.mjs';
+import { kitVersion, releaseGateway, releaseCheck, publishResult, runTwins } from '../lib/kitRelease.mjs';
+import { kitAccess, kitEnvironment } from '../lib/kitCredentials.mjs';
+import { doctor, formatDoctor } from '../lib/kitDoctor.mjs';
 
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');
@@ -16,9 +18,9 @@ const command = argv[0] ?? 'freeze';
 const usage = () => { throw new PlanError('usage', {}, 'Expected a kit command, --scenarios-dir <path> and valid flags'); };
 
 function parseArgs() {
-  if (!['calibrate', 'plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins'].includes(command)) usage();
+  if (!['calibrate', 'plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins', 'doctor'].includes(command)) usage();
   const options = {};
-  const values = command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
+  const values = command === 'doctor' ? [] : command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
     ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
     : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'budget-usd', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
@@ -36,7 +38,7 @@ function parseArgs() {
     if (!/^[A-Za-z0-9][\w.:-]{0,63}$/.test(options.release ?? '')) usage();
   } else if (command === 'calibrate') {
     if (!options.from) usage();
-  } else if (!options['scenarios-dir']) usage();
+  } else if (command !== 'doctor' && !options['scenarios-dir']) usage();
   if (options.provider && !['anthropic', 'bedrock'].includes(options.provider)) usage();
   if (options.client && !['claude-code', 'codex'].includes(options.client)) usage();
   if (command === 'plan') {
@@ -65,10 +67,17 @@ function parseArgs() {
 
 try {
   const options = parseArgs();
-  const dir = ['calibrate', 'twins'].includes(command) ? null : resolveScenariosDir(options['scenarios-dir']);
+  // The harness also reads process.env in its isolated arms. Give every layer the same
+  // Connect credentials, without printing or sourcing the credential file.
+  if (['plan', 'freeze', 'noise', 'run', 'publish-result', 'release-check'].includes(command)) Object.assign(process.env, kitEnvironment());
+  const dir = ['calibrate', 'twins', 'doctor'].includes(command) ? null : resolveScenariosDir(options['scenarios-dir']);
   let answer;
   let catalog;
-  if (command === 'calibrate') answer = calibrate(options.from);
+  if (command === 'doctor') {
+    answer = await doctor();
+    if (!answer.ok) process.exitCode = 2;
+  }
+  else if (command === 'calibrate') answer = calibrate(options.from);
   else if (command === 'twins') answer = await runTwins(options);
   else if (command === 'release-check') answer = await releaseCheck(dir, options);
   else if (command === 'verify') answer = planAnswer(command, verifyPlan(dir));
@@ -90,10 +99,12 @@ try {
         'The budget does not cover the noise rounds plus one pair per scenario');
     }
     const commit = benchmarksCommit();
+    kitAccess();
     const gate = await sessionGateState(gateway, { tenant: options.tenant });
     if (gate.reason) throw new PlanError('plan_tenant_unreadable', { reason: gate.reason, ...(gate.status === undefined ? {} : { status: gate.status }) }, 'Unable to read the tenant session gate');
     if (gate.allShadow) throw new PlanError('plan_tenant_shadow', { tenant: gate.tenant, kinds: gate.kinds }, 'This tenant applies nothing yet; the test would measure pass-through');
-    answer = { ok: true, command, benchmarksCommit: commit, client, tenant: { id: gate.tenant, kinds: gate.kinds }, ...budget };
+    answer = { ok: true, command, benchmarksCommit: commit, client, tenant: { id: gate.tenant, kinds: gate.kinds,
+      ...(gate.evaluationCohort === true ? { evaluationCohort: true, kindsEvaluated: gate.kindsEvaluated } : {}) }, ...budget };
   }
   else if (command === 'freeze') {
     const defaults = runDefaults();
@@ -125,7 +136,7 @@ try {
     } else {
       if (command === 'publish-result') {
         releaseGateway(options, lock);
-        requireAdmin();
+        kitAccess();
       }
       const records = readKitRecords(dir, lock);
       const verdict = kitVerdict(lock, records);
@@ -142,11 +153,12 @@ try {
     }
   }
   if (['report', 'publish-result'].includes(command)) { /* Already printed the validated body or id. */ }
+  else if (command === 'doctor' && !json) process.stdout.write(formatDoctor(answer));
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
   else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
   else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(answer.scenarios.map((s) => `${s.id}: pairs needed ${s.pairsNeeded ?? 'none'}`).join('\n') + `\nMeasured SD: ${answer.sd.value}\n`);
   else if (command === 'verdict' && !json) process.stdout.write(formatKitVerdict(answer));
-  else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog));
+  else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog) + (answer.tenant.evaluationCohort ? `${answer.tenant.kindsEvaluated} kinds will be evaluated on test sessions only.\n` : ''));
   else if (command === 'calibrate' && !json) process.stdout.write([...answer.updated.map((id) => `Updated ${id}`), ...answer.unknown.map((id) => `Unknown shape ${id}`)].join('\n') + '\n');
   else printPlanAnswer(answer, json);
 } catch (error) {

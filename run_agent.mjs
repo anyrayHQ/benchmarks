@@ -135,7 +135,7 @@ import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, differingNames, kindDifference, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
-import { addGatewayPings, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
+import { addGatewayPings, adminToken, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
 import { rmSync } from 'node:fs';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
@@ -1584,7 +1584,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   const tenant = viaGateway.length ? benchTenantSetup(resolveBenchKey()) : null;
   record.tenant = tenant;
   record.setup = armSetups(args, arms, run, scenario, { tenant });
-  if (viaGateway.length) {
+  if (viaGateway.length && (!args.scenariosDir || adminToken(process.env))) {
     record.anyray = { connectPolicy: await connectPolicy(run.gatewayUrl), optimizerConfig: await optimizerConfig(run.gatewayUrl) };
   }
   // --experiment-b is only a treatment if a gateway rule is keyed on the tag: say so before
@@ -1705,9 +1705,10 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
       if (r.gatewayRestarted) log(`  round ${round} WARNING: the gateway restarted during this round; drop it from the comparison`);
       // Config as it stood for this round (org strategies + the bench rule), and what
       // the gateway recorded doing on each request.
-      r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
+      const readAdmin = !args.scenariosDir || Boolean(adminToken(process.env));
+      if (readAdmin) r.optimizerConfig = await optimizerConfig(run.gatewayUrl);
       const traces = {};
-      for (const slot of viaGateway) traces[slot] = await sessionTraces(run.gatewayUrl, runTags[slot].sessionId, { waitMs: 30000 });
+      if (readAdmin) for (const slot of viaGateway) traces[slot] = await sessionTraces(run.gatewayUrl, runTags[slot].sessionId, { waitMs: 30000 });
       // r.traces / r.optimization / r.isolation stay B's (the arm under test); gateway adds A's.
       r.traces = traces.b ?? null;
       // What the gateway reported doing with the requested kinds, per request.
