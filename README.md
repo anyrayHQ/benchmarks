@@ -156,9 +156,12 @@ and pin `repo.ref` to a 40-character commit. Keep the directory locally. Then:
 npm run -s plan -- --scenarios-dir ./client-scenarios --budget-usd 500 --session-cost-usd 0.15 --gateway https://your-gateway.example --json
 ```
 
-`--session-cost-usd` is your typical cost of one direct session. The plan splits the
-budget evenly across scenarios and reports pairs needed, the saving detectable at
-that budget, and a spend ceiling. It uses the paired log-ratio SD prior of 0.924,
+`--session-cost-usd` is your typical cost of one direct session. The plan takes the
+six noise rounds (two direct sessions per scenario each) off the budget first, splits
+the rest evenly across scenarios, and reports pairs needed, the saving detectable at
+that budget, and a spend ceiling that includes the noise rounds. A budget that cannot
+cover noise plus one pair per scenario is refused with `plan_budget_too_small` and
+the minimum budget. It uses the paired log-ratio SD prior of 0.924,
 80% power and two-sided 95% confidence: 20%, 10% and 30% savings need 135, 604 and
 53 pairs respectively. An insufficient budget is reported with `resolvable: false`.
 
