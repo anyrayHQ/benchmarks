@@ -70,8 +70,13 @@ Write or Edit when available.
   to `~/.anyray/test-kit.env` with mode 0600. The kit reads it itself. Never read
   the file into the transcript. Environment values can override the file.
 
-  An Anyray-hosted multi-tenant gateway cannot mint self-serve test keys, and
-  Connect may report only a generic refusal. There, ask the user for their own
+  When `test-key --json` answers `gateway_refused` with `gatewayType`
+  `test_key_unavailable_multi_tenant`, the gateway is Anyray-hosted multi-tenant and
+  cannot mint self-serve test keys: use the path below. A `gatewayType` of
+  `sso_policy_unavailable` means the gateway has no control-plane lease yet: try
+  again shortly, do not switch modes. An older Connect reports only a generic
+  refusal; then ask the user whether their gateway is multi-tenant instead of
+  guessing. On the multi-tenant path, ask the user for their own
   `ANYRAY_BENCH_CLIENT_KEY` (their normal key) and a tenant-bound admin key, and
   freeze with `--kinds auto`. The kit reads the kinds that are on for the tenant
   with the admin key and pins that list in the plan, then sends it as

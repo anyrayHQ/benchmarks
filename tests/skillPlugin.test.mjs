@@ -346,6 +346,14 @@ test('SKILL.md says what to do on a multi-tenant gateway: pin kinds with --kinds
   assert.doesNotMatch(body, /never guess a list/i, 'no hand-made list for the agent to get wrong');
 });
 
+test('SKILL.md switches to the multi-tenant path on the gateway\'s own refusal type, and asks only when an older Connect hides it', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /`gatewayType`/, 'the field Connect now returns for 403, 409 and 503');
+  assert.match(body, /`test_key_unavailable_multi_tenant`.{0,900}--kinds auto/, 'that type is the signal to freeze with --kinds auto');
+  assert.match(body, /`sso_policy_unavailable`.{0,300}(retry|try again)/i, 'no lease is a retry, not a mode switch');
+  assert.match(body, /older Connect.{0,300}(ask|generic)/i, 'an older Connect that reports only a generic refusal gets a question, not a guess');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');
