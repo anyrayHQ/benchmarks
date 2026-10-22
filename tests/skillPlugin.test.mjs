@@ -397,3 +397,15 @@ test('the eval suite covers the client test kept, no spend before Start, verdict
   const noFire = cases.get('plain-coding-task-no-fire').graders.find((g) => g.type === 'tool_used' && g.tool === 'Skill');
   assert.ok(noFire && noFire.max === 0 && noFire.arm === 'both', 'the should-not-fire case scores a Skill call (arm: both, max 0)');
 });
+
+// Claude Code's auto-updater re-points the `claude` symlink. On the first live run (2026-10-22)
+// it moved 2.1.307 to 2.1.308 minutes after freeze, and noise refused the plan's pin. The real
+// versioned file stays put, so preflight resolves it once and every command reuses it.
+test('preflight pins Claude Code by its resolved real path, not the auto-updated symlink', () => {
+  const text = readSkill();
+  const start = text.indexOf('## Preflight');
+  const section = text.slice(start, text.indexOf('\n## ', start + 1));
+  assert.ok(start !== -1, 'SKILL.md has a Preflight section');
+  assert.ok(/realpath/.test(section), 'preflight resolves the Claude Code binary with realpath');
+  assert.ok(/auto-?update/i.test(section), 'preflight says why: the auto-updater moves the symlink');
+});

@@ -54,8 +54,10 @@ execution are blocked; still complete Define with Write or Edit when available.
   `~/.anyray/bin/anyray-connect`, as the kit expects. If missing, install Anyray
   Connect; if elsewhere, set the existing `ANYRAY_CONNECT_BIN` to its absolute
   path. Do not silently measure the harness fallback.
-- Claude Code: resolve one absolute binary and read its version without starting
-  a session. Use that same binary and version for the plan's pins and both arms.
+- Claude Code: resolve one absolute binary with `realpath "$(command -v claude)"`
+  and read its version without starting a session. Use that resolved path and
+  version for the plan's pins and both arms. The auto-updater re-points the
+  `claude` symlink, so the unresolved path can change version under a frozen plan.
   If unavailable, install or sign in to Claude Code before proceeding.
 - Gateway: require `ANYRAY_GATEWAY_URL` and a dedicated benchmark service key in
   `ANYRAY_BENCH_CLIENT_KEY`. Require an admin token via `ANYRAY_TRACE_TOKEN`,
