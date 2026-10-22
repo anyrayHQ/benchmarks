@@ -69,6 +69,21 @@ Write or Edit when available.
   Connect uses your enrolled identity and writes the gateway, test key and expiry
   to `~/.anyray/test-kit.env` with mode 0600. The kit reads it itself. Never read
   the file into the transcript. Environment values can override the file.
+
+  When `test-key --json` answers `gateway_refused` with `gatewayType`
+  `test_key_unavailable_multi_tenant`, the gateway is Anyray-hosted multi-tenant and
+  cannot mint self-serve test keys: use the path below. A `gatewayType` of
+  `sso_policy_unavailable` means the gateway has no control-plane lease yet: try
+  again shortly, do not switch modes. An older Connect reports only a generic
+  refusal; then ask the user whether their gateway is multi-tenant instead of
+  guessing. On the multi-tenant path, ask the user for their own
+  `ANYRAY_BENCH_CLIENT_KEY` (their normal key) and a tenant-bound admin key, and
+  freeze with `--kinds auto`. The kit reads the kinds that are on for the tenant
+  with the admin key and pins that list in the plan, then sends it as
+  `x-anyray-optimization-kinds` on the Anyray arm only, so the test still measures
+  what the tenant would get. If it says no kind is on (`plan_kinds_empty`), report
+  that and stop: there is nothing to measure. Never add `--kinds` on a
+  gateway that mints test keys: it changes what the plan measures.
 - Doctor: after the test key is ready, run:
 
   ```bash
@@ -231,7 +246,10 @@ An undecided verdict (`inconclusive`, `INCONCLUSIVE` or `INSUFFICIENT`) carries 
 cost. Copy it exactly beside that scenario and never replace it with your own
 count or price. Running those pairs is a new paid run: it needs its own plan
 check and its own Start. A verdict that can decide has no `nextStep`; do not
-suggest more pairs for it.
+suggest more pairs for it. When the interval includes 1 the kit also gives a
+`tieNote` ("No clear difference from direct"): copy it beside the Rule 0 word,
+because Rule 0 judges the tail and can read FAIL on a tie. Never soften, reword or
+replace the Rule 0 word with it.
 
 Quality travels with cost. Each scenario line carries the kit's clause "Anyray
 passed X of N, direct Y of N" (the client's own check, run on both arms), and

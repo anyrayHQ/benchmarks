@@ -3,14 +3,14 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderReportHtml } from '../lib/reportHtml.mjs';
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
-import { PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
+import { KINDS_PIN, PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
 import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend, meanRoundMs } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
-import { sessionGateState } from '../lib/traces.mjs';
+import { adminToken, sessionGateState } from '../lib/traces.mjs';
 import { kitVersion, releaseGateway, releaseCheck, publishResult, runTwins } from '../lib/kitRelease.mjs';
 import { kitAccess, kitEnvironment } from '../lib/kitCredentials.mjs';
 import { doctor, formatDoctor } from '../lib/kitDoctor.mjs';
@@ -24,7 +24,7 @@ function parseArgs() {
   if (!['calibrate', 'plan', 'freeze', 'verify', 'noise', 'run', 'verdict', 'report', 'publish-result', 'release-check', 'twins', 'doctor'].includes(command)) usage();
   const options = {};
   const values = command === 'doctor' ? [] : command === 'calibrate' ? ['from'] : command === 'twins' ? ['release', 'gateway', 'rounds', 'provider', 'claude-bin'] : command === 'freeze'
-    ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin']
+    ? ['scenarios-dir', 'model', 'provider', 'client', 'client-version', 'gateway', 'claude-bin', 'kinds']
     : command === 'plan' ? ['scenarios-dir', 'budget-usd', 'session-cost-usd', 'client', 'gateway', 'tenant'] : ['noise', 'run'].includes(command) ? ['scenarios-dir', 'rounds', 'budget-usd', 'claude-bin', ...(command === 'run' ? ['redraw-holdout'] : [])]
     : ['publish-result', 'release-check'].includes(command) ? ['scenarios-dir', 'gateway'] : ['scenarios-dir'];
   for (let i = 1; i < argv.length; i++) {
@@ -43,6 +43,12 @@ function parseArgs() {
   } else if (command === 'calibrate') {
     if (!options.from) usage();
   } else if (command !== 'doctor' && !options['scenarios-dir']) usage();
+  if (options.kinds !== undefined && options.kinds !== 'auto') {
+    // Kind ids are catalogue names; the registry itself is the gateway's, so only the shape is checked here.
+    const ids = [...new Set(options.kinds.split(','))].sort();
+    if (ids.length > 32 || !ids.every((id) => /^[a-z][a-z0-9_]{0,63}$/.test(id))) usage();
+    options.kinds = ids.join(',');
+  }
   if (options.provider && !['anthropic', 'bedrock'].includes(options.provider)) usage();
   if (options.client && !['claude-code', 'codex'].includes(options.client)) usage();
   if (command === 'plan') {
@@ -114,6 +120,18 @@ try {
   }
   else if (command === 'freeze') {
     const defaults = runDefaults();
+    if (options.kinds === 'auto') {
+      // The tenant's own applying kinds, read once and pinned: the plan then measures what they would get.
+      if (!adminToken(process.env)) throw new PlanError('kinds_auto_needs_admin', {}, "--kinds auto reads the tenant's enabled kinds with an admin key: set ANYRAY_ADMIN_KEY");
+      const freezeGateway = options.gateway || defaults.gateway;
+      if (!gatewayHost(freezeGateway)) throw new PlanError('pin_missing', { pin: 'gatewayHost' });
+      assertGatewayAllowed(freezeGateway);
+      const gate = await sessionGateState(freezeGateway, {});
+      if (gate.reason) throw new PlanError('plan_tenant_unreadable', { reason: gate.reason, ...(gate.status === undefined ? {} : { status: gate.status }) }, 'Unable to read the tenant session gate');
+      const joined = (gate.kindsOn ?? []).join(',');
+      if (!KINDS_PIN.test(joined)) throw new PlanError('plan_kinds_empty', { tenant: gate.tenant }, 'No kind is on for this tenant, so there is nothing to pin');
+      options.kinds = joined;
+    }
     let version = options['client-version'];
     if (!version) {
       try { version = claudeVersion(resolveClaudeBin(claudeBinRequest({ flag: options['claude-bin'], env: process.env })).bin); }
@@ -126,6 +144,7 @@ try {
       client: options.client || 'claude-code',
       clientVersion: version,
       gatewayHost: gatewayHost(options.gateway || defaults.gateway),
+      ...(options.kinds ? { kinds: options.kinds } : {}),
     };
     for (const [pin, value] of Object.entries(pins)) {
       if (typeof value !== 'string' || !value.trim()) throw new PlanError('pin_missing', { pin });
