@@ -38,10 +38,10 @@ Write or Edit when available.
   `anyray-test--v<version>`. For this release the setup is:
 
   ```bash
-  git clone --branch anyray-test--v0.2.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
+  git clone --branch anyray-test--v0.3.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
   npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" ci
   git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse HEAD
-  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.2.0^{commit}'
+  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.3.0^{commit}'
   ```
 
   The two commits must match. Check the kit's scripts, lockfile and dependencies.
@@ -73,6 +73,10 @@ Write or Edit when available.
   When `test-key --json` answers `gateway_refused` with `gatewayType`
   `test_key_unavailable_multi_tenant`, the gateway is Anyray-hosted multi-tenant and
   cannot mint self-serve test keys: use the path below. A `gatewayType` of
+  `sso_required` means the gateway requires SSO and this machine's Connect
+  enrollment is not an SSO one: tell the user to run `anyray-connect login`, then
+  rerun test-key. Never work around it with an admin key or another key, because
+  the policy is the gateway's. A `gatewayType` of
   `sso_policy_unavailable` means the gateway has no control-plane lease yet: try
   again shortly, do not switch modes. An older Connect reports only a generic
   refusal; then ask the user whether their gateway is multi-tenant instead of
