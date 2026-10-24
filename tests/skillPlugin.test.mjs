@@ -354,6 +354,22 @@ test('SKILL.md switches to the multi-tenant path on the gateway\'s own refusal t
   assert.match(body, /older Connect.{0,300}(ask|generic)/i, 'an older Connect that reports only a generic refusal gets a question, not a guess');
 });
 
+test('SKILL.md pins the kit at the tag of the plugin version it ships with, in both places it names it', () => {
+  const plugin = readJson(join(ROOT, '.claude-plugin', 'plugin.json'));
+  const tag = `anyray-test--v${plugin.version}`;
+  const skill = readSkill();
+  assert.ok(skill.includes(`git clone --branch ${tag} --single-branch`), `the clone pins ${tag}`);
+  assert.ok(skill.includes(`'${tag}^{commit}'`), `the commit check names ${tag}`);
+  const named = [...skill.matchAll(/anyray-test--v[0-9][0-9A-Za-z.+-]*/g)].map((m) => m[0]);
+  assert.ok(named.length >= 2 && named.every((t) => t === tag), `every tag the skill names is ${tag}: ${named.join(', ')}`);
+});
+
+test('SKILL.md tells a client whose gateway requires SSO to sign in with SSO, never to work around it', () => {
+  const body = readSkill().replace(/\s+/g, ' ');
+  assert.match(body, /`sso_required`.{0,400}anyray-connect login/, 'the refusal type names the fix');
+  assert.match(body, /`sso_required`.{0,500}(never|do not).{0,120}(admin|another key|work around)/i, 'and the agent does not route around the policy');
+});
+
 test('SKILL.md never drives the kit around its npm scripts', () => {
   const offenders = shellLines(readSkill()).filter((l) => /\b(?:tools\/kit|run_agent|report_agent)\.mjs\b/.test(l));
   assert.deepEqual(offenders, [], 'node tools/kit.mjs / run_agent.mjs directly skips the npm scripts the checks above pin');
