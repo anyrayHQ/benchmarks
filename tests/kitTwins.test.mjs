@@ -39,7 +39,9 @@ async function setup() {
   const root = sharedTemp('kit-twins-');
   const origin = originRepo(root);
   const copy = kitRunCopy(join(root, 'kit'));
-  const twinsDir = writeDir(copy.root, { 'lint-twin': twinScenario(origin) }, 'twins');
+  // The API-key lane's twin sits beside it: the release rerun is the seat lane, so it must not run or publish.
+  const seatTwin = twinScenario(origin);
+  const twinsDir = writeDir(copy.root, { 'lint-twin': seatTwin, 'key-twin': { ...seatTwin, doc: { ...seatTwin.doc, lane: 'api-key' } } }, 'twins');
   const gateway = await fakeRunGateway();
   gateways.push(gateway);
   const poison = poisonClaude(join(root, 'poison'));
@@ -82,7 +84,7 @@ test('twins publishes one result tagged with the release it was told, from a fre
   assert.equal(body.gatewayVersion, GATEWAY_VERSION, 'gatewayVersion is what the gateway answered');
   assert.equal(body.planHash, out.planHash);
   assert.deepEqual({ clientTool: body.clientTool, clientToolVersion: body.clientToolVersion, model: body.model }, { clientTool: 'claude-code', clientToolVersion: PINS.clientVersion, model: PINS.model });
-  assert.equal(body.scenarios.length, 1);
+  assert.equal(body.scenarios.length, 1, 'the seat twin only: the api-key lane twin is left out');
   assert.deepEqual({ source: body.scenarios[0].source, twinOf: body.scenarios[0].twinOf }, { source: 'proposed', twinOf: TWIN_OF });
   assert.ok(!`${s.child.stdout}${s.child.stderr}`.includes(ADMIN_KEY), 'the admin key is never printed');
 });

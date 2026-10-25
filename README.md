@@ -430,6 +430,9 @@ measure six noise rounds, run paired rounds (eight by default), and publish with
 the supplied release tag. The gateway version is recorded separately. The committed
 twins remain unchanged, and the temporary copy is removed on exit.
 
+A twin with `lane: api-key` in its `scenario.yaml` is left out of this rerun: it is for
+the parity check with `--upstream api-key`, and the rerun is the seat lane.
+
 
 ## Running the bench
 

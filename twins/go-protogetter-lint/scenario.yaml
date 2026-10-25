@@ -1,5 +1,7 @@
 title: "protogetter findings in hashicorp/go-plugin"
 source: proposed
+# The API-key lane: the release rerun (npm run twins) is the seat lane and skips this twin.
+lane: api-key
 # A short Claude Code session on an Anthropic API key (base URL only, no MCP): fix the
 # protogetter findings golangci-lint reports. Run it with --upstream api-key.
 # No client plan yet. Add twinOf: <that plan's planHash> once a client's frozen
