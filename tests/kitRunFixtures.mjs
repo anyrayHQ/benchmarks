@@ -651,6 +651,7 @@ const pairCount = z.number().int().min(0).max(10000);
 const parity = z.object({
   n: pairCount, passDirect: pairCount, passAnyray: pairCount, anyrayWorse: pairCount, anyrayBetter: pairCount,
 }).strict().refine((p) => p.passDirect <= p.n && p.passAnyray <= p.n && p.anyrayWorse + p.anyrayBetter <= p.n
+  && p.anyrayWorse <= p.passDirect && p.anyrayBetter <= p.n - p.passDirect
   && p.passAnyray === p.passDirect - p.anyrayWorse + p.anyrayBetter);
 const scenario = z.object({
   shapeId: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
