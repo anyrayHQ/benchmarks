@@ -225,7 +225,7 @@ test('the api tools run through the graph: search, select, then a paged call who
     ]);
     const scenario = { task: 'Total it', tools: 'api', system: 'You call an internal API.', maxTurns: 8, keyFacts: [expectedAnswer(buildCatalog())] };
     const session = await runFrameworkAgent({ arm: 'anyray', scenario, work: root, model: 'claude-sonnet-5', pricing, gatewayUrl: 'https://gateway.test.invalid', clientKey: 'fake-key', bedrock, sessionId: 's', fetchImpl, credentials });
-    assert.deepEqual(sent[0].body.tools.map((t) => t.name), ['searchApi', 'selectApi', 'apiCall']);
+    assert.deepEqual(sent[0].body.tools.map((t) => t.name), ['searchApi', 'selectApi', 'apiCall', 'calculate']);
     assert.match(JSON.stringify(sent[0].body.system), /internal API/);
     assert.match(JSON.stringify(sent[1].body.messages.at(-1)), /listLedgerEntriesArchived/);
     assert.match(JSON.stringify(sent[3].body.messages.at(-1)), /nextPage/);

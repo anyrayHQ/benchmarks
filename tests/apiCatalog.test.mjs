@@ -56,6 +56,19 @@ test('a decoy endpoint returns different data, and unknown names or params are r
   assert.match(executeApiTool(c, 'apiCall', { name: 'listLedgerEntries', params: { page: 1 } }), /building is required/);
 });
 
+test('calculate adds a list of numbers and counts them, and refuses anything else', () => {
+  const c = buildCatalog(API_SEED);
+  assert.deepEqual(JSON.parse(executeApiTool(c, 'calculate', { numbers: [100, 250.5, 3] })), { sum: 353.5, count: 3 });
+  assert.match(executeApiTool(c, 'calculate', { numbers: ['x'] }), /numbers must be a list of finite numbers/);
+  assert.match(executeApiTool(c, 'calculate', {}), /numbers must be a list of finite numbers/);
+  assert.match(executeApiTool(c, 'calculate', { numbers: Array(501).fill(1) }), /at most 500/);
+});
+
+test('the target ledger runs to ten pages or more, so the context grows through the session', () => {
+  const c = buildCatalog(API_SEED);
+  assert.ok(c.ledger.filter((e) => e.building === c.target).length >= 10 * 25);
+});
+
 test('writeCatalog leaves catalog.json for the tools to read', () => {
   const dir = fresh();
   try {
