@@ -233,3 +233,20 @@ test('the api tools run through the graph: search, select, then a paged call who
     assert.equal(solved(scenario, session), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('the direct arm authenticates with ANYRAY_BEDROCK_BEARER_TOKEN when it is set, and records no secret', async () => {
+  const root = fresh();
+  const had = process.env.ANYRAY_BEDROCK_BEARER_TOKEN;
+  process.env.ANYRAY_BEDROCK_BEARER_TOKEN = 'synthetic-bearer-token';
+  try {
+    writeFileSync(join(root, 'a.py'), 'first\n');
+    const { sent, fetchImpl } = wire([answer('done')]);
+    const session = await runFrameworkAgent({ arm: 'direct', scenario: { task: 'Explain', maxTurns: 2 }, work: root, model: 'claude-sonnet-5', pricing, gatewayUrl: 'https://gateway.test.invalid', clientKey: 'fake-key', bedrock, sessionId: 's', fetchImpl });
+    assert.equal(sent[0].url.host, 'bedrock-runtime.us-east-1.amazonaws.com');
+    assert.equal(sent[0].headers.get('authorization'), 'Bearer synthetic-bearer-token');
+    assert.equal(JSON.stringify(session).includes('synthetic-bearer-token'), false, 'the token is never in the session record');
+  } finally {
+    if (had === undefined) delete process.env.ANYRAY_BEDROCK_BEARER_TOKEN; else process.env.ANYRAY_BEDROCK_BEARER_TOKEN = had;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
