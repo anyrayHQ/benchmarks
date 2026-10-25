@@ -127,6 +127,7 @@ import { loadConfig } from './lib/loadConfig.mjs';
 import { prepareKitResults, redactedRecord } from './lib/kitResults.mjs';
 import { fillPastes } from './lib/scenarioPastes.mjs';
 import { PlanError, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, assertPlanPin, planAnswer, printPlanAnswer } from './lib/planLock.mjs';
+import { captureApiKey } from './lib/upstreamKey.mjs';
 import { runAgent, describeSetup, describeRepo, prepareRepo, benchExtraHeaders, benchSharedHeaders, binDigest, answerText, runCheck, checkCitations, sessionDirParent, armSeeds, seedArmHome, sharedOutsideWrites } from './lib/agentRun.mjs';
 import { runCodexAgent, configureCodexArmHome, deleteCodexThread, makeArmHome, removeArmHome, traceResults, codexHookSpec, realCodexHookKeys, wrappedCommandEnv, shellRunEnvFor } from './lib/codexAgent.mjs';
 import { checkConnectBinary } from './lib/connectChecks.mjs';
@@ -285,7 +286,7 @@ export const connectWorkMode = (name, scenario) =>
   SDK_SCENARIOS.includes(name) ? null : (scenario.maxTurns ?? 40) >= CONNECT_WORK_MODE_MIN_TURNS ? 'on' : 'off_turn_cap';
 
 export function parseArgs(argv, env = process.env) {
-  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, treatment: 'b', kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', integrationLevel: null, interTurnDelaySec: null };
+  const a = { scenario: null, rounds: 1, compare: 'anyray', label: null, strategy: null, readTrim: false, armEnv: [], kinds: null, kindsSource: null, noSubagents: false, experiment: null, experimentB: null, treatment: 'b', kindsB: null, readTrimB: false, hookPosture: {}, hookPostureB: {}, redrawHoldout: 0, maxTurns: null, withControl: false, parallel: 2, provider: 'anthropic', upstream: 'seat', integrationLevel: null, interTurnDelaySec: null };
   const pins = { all: [], b: [] }; // --hook-posture / --hook-posture-b, in order
   let claudeBinFlag = null;
   for (let i = 0; i < argv.length; i++) {
@@ -326,6 +327,8 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--with-control') a.withControl = true; // also run direct vs direct, in parallel: the noise band
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
+    else if (argv[i] === '--upstream') a.upstream = argv[++i]; // seat (default: the OAuth seat) | api-key (ANTHROPIC_API_KEY, base URL only)
+    else if (argv[i] === '--bare-a') a.bareA = true; // --compare gateway: arm A pass-through, arm B the Anyray arm (P vs B, with no kinds override)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
     else if (argv[i] === '--persist-session') a.persistSession = true; // the default: both arms keep their transcript, as Claude Code does outside the bench
     else if (argv[i] === '--no-persist-session') a.persistSession = false; // both arms run --no-session-persistence, as every run did before 2026-10-12
@@ -363,6 +366,8 @@ export function parseArgs(argv, env = process.env) {
   } else if (a.interTurnDelaySec !== null) throw new Error(`--inter-turn-delay-sec is for ${SDK_SCENARIOS.join(' and ')}`);
   if (!COMPARES.includes(a.compare)) throw new Error('--compare anyray|control|gateway');
   if (!['anthropic', 'bedrock'].includes(a.provider)) throw new Error('--provider anthropic|bedrock');
+  if (!['seat', 'api-key'].includes(a.upstream)) throw new Error('--upstream seat|api-key');
+  if (a.upstream === 'api-key' && a.provider === 'bedrock') throw new Error('--upstream api-key runs on an Anthropic key: it does not apply to Bedrock (--provider bedrock uses AWS credentials)');
   const gateway = a.compare !== 'control';
   for (const [flag, on] of [['--strategy', a.strategy], ['--read-trim', a.readTrim], ['--hook-posture', Object.keys(a.hookPosture).length], ['--kinds', a.kinds], ['--experiment', a.experiment], ['--integration-level', a.integrationLevel], ['--redraw-holdout', a.redrawHoldout]]) {
     if (on && !gateway) throw new Error(`${flag} needs --compare anyray or gateway`);
@@ -419,6 +424,10 @@ export function parseArgs(argv, env = process.env) {
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
+  if (a.bareA && a.compare !== 'gateway') throw new Error('--bare-a needs --compare gateway: it makes arm A of two gateway arms pass-through');
+  if (a.bareA && a.bare) throw new Error('--bare-a and --bare are different pairs: --bare makes both arms pass-through');
+  if (a.bareA && a.kindsB) throw new Error('--bare-a runs arm A without optimization, so --kinds-b has nothing to differ from: give arm B --kinds');
+  if (a.bareA && (a.readTrim || pinsHooks)) throw new Error('--bare-a runs arm A without anyray-connect, whose hooks --read-trim and --hook-posture set');
   if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
   if (a.client === 'codex') assertCodexArgs(a, { claudeBinFlag, pinsHooks });
   if (gateway && !a.scenariosDir && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
@@ -426,6 +435,8 @@ export function parseArgs(argv, env = process.env) {
   }
   a.label ??= a.strategy;
   if (a.provider === 'bedrock') a.label ??= 'bedrock'; // never mixed into a seat run's file
+  if (a.upstream === 'api-key') a.label = a.label ? `api-key-${a.label}` : 'api-key'; // never mixed into a seat run's file
+  if (a.bareA) a.label = a.label ? `bare-a-${a.label}` : 'bare-a'; // never mixed into a pair whose arm A runs connect
   if (a.bare) a.label = a.label ? `bare-${a.label}` : 'bare'; // never mixed into a connect-configured run's file
   if (a.client === 'codex') a.label = a.label ? `codex-${a.label}` : 'codex'; // never mixed into a Claude Code run's file
   a.env = parseArmEnv(a.armEnv);
@@ -563,13 +574,16 @@ export const verdictOptions = (args) => ({
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
  * --arm-env follows the SLOT (a/b): under --compare control both slots are 'direct'.
  */
+/** Whether the slot is a pass-through gateway arm: both under --bare, arm A under --bare-a. */
+const bareSlot = (args, arms, slot) => arms[slot] === 'anyray' && (!!args.bare || (!!args.bareA && slot === 'a'));
+
 export const slotOptions = (args, arms, slot) => ({
   arm: arms[slot],
   readTrim: armReadTrim(args, arms[slot], slot),
   ...postureOption(armHookPosture(args, arms[slot], slot)),
   env: args.env?.[slot] ?? {},
-  kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
-  kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
+  kinds: arms[slot] === 'anyray' && !bareSlot(args, arms, slot) ? slotKinds(args, slot)[0] : null,
+  kindsSource: arms[slot] === 'anyray' && !bareSlot(args, arms, slot) ? slotKinds(args, slot)[1] : null,
   // ANYRAY_BENCH_SHARED_HEADERS on every Anyray arm, then the treatment on B.
   extraHeaders: [
     ...(arms[slot] === 'anyray' ? args.sharedHeaders ?? [] : []),
@@ -580,6 +594,7 @@ export const slotOptions = (args, arms, slot) => ({
   noSubagents: !!args.noSubagents, // both slots, so the pair stays like for like
   ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // both slots: the same synthetic catalog on either arm
   provider: args.provider ?? 'anthropic',
+  ...(args.upstream === 'api-key' ? { upstream: 'api-key' } : {}), // both slots; a seat run's options are unchanged
   bedrock: args.bedrock ?? null,
   ...(arms[slot] === 'anyray' && args.integrationLevel ? { integrationLevel: args.integrationLevel } : {}),
   ...(arms[slot] === 'anyray' && slotClientToolPolicies(args, slot) ? { clientToolPolicies: slotClientToolPolicies(args, slot) } : {}),
@@ -588,8 +603,9 @@ export const slotOptions = (args, arms, slot) => ({
   // start from the same no-app profile and must run exactly their build.
   ...(arms[slot] === 'anyray' && args.connectBinB ? { connectBinPinned: true } : {}),
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
-  bare: !!args.bare && arms[slot] === 'anyray',
-  ...(args.scenariosDir && arms[slot] === 'anyray' && !args.kinds ? { tenantDefaults: true } : {}),
+  bare: bareSlot(args, arms, slot),
+  // A pass-through arm forwards as sent: the tenant's stored defaults are for the arm that optimizes.
+  ...(args.scenariosDir && arms[slot] === 'anyray' && !args.kinds && !bareSlot(args, arms, slot) ? { tenantDefaults: true } : {}),
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
   ...(args.persistSession === false ? { persistSession: false } : {}), // --no-persist-session: both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
@@ -601,6 +617,8 @@ export const requestRecord = (args) => ({
   ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), // the session cap both arms ran under
   ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // synthetic MCP tools both arms carried
   bare: !!args.bare,
+  ...(args.bareA ? { bareA: true } : {}), // arm A alone is pass-through
+  ...(args.upstream === 'api-key' ? { upstream: 'api-key' } : {}), // the lane, never the key
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
   ...(args.experimentB ? { experimentB: args.experimentB } : {}), // arm B's own tag
@@ -1120,6 +1138,8 @@ export async function withIntegrationLevel(requested, work, { level, signal = pr
 }
 
 async function main(args) {
+  // Before anything spawns: graders, git and helpers inherit this process's env, the arms get the key explicitly.
+  if (args.upstream === 'api-key') captureApiKey();
   let lock;
   if (args.scenariosDir) {
     // The frozen plan and run pins are checked before resolving any binary or credentials.

@@ -1,0 +1,30 @@
+title: "protogetter findings in hashicorp/go-plugin"
+source: proposed
+# The API-key lane: the release rerun (npm run twins) is the seat lane and skips this twin.
+lane: api-key
+# A short Claude Code session on an Anthropic API key (base URL only, no MCP): fix the
+# protogetter findings golangci-lint reports. Run it with --upstream api-key.
+# No client plan yet. Add twinOf: <that plan's planHash> once a client's frozen
+# plan has this shape. Never use a placeholder.
+repo:
+  git: https://github.com/hashicorp/go-plugin.git
+  # v1.6.3. At this commit protogetter reports 43 findings across six files
+  # (grpc_broker.go, grpc_stdio.go, plugin_test.go, grpc_client_test.go and two examples/*/shared/grpc.go).
+  ref: 5b05b3e78c6c3e4e0b8f21a9921cbd739ba72f2a
+# golangci-lint v2 dropped --disable-all; the shim maps it to --default=none.
+patch: [golangci-lint-shim.patch]
+hidePatch: true
+# Toolchain the findings and the check were verified with: go 1.27.1, golangci-lint 2.13.2.
+task: >-
+  The lint step is red. Run `./scripts/golangci-lint run --disable-all -E protogetter ./...`
+  and fix every finding without changing behavior. Do not add nolint comments or lint
+  config. Make sure the same command, `go build ./...` and `go test ./...` pass.
+# The grader calls the real golangci-lint, never the shim the agent could edit. It fails on any
+# finding, a build or test failure, a nolint comment, or a new or changed lint config.
+check: >-
+  golangci-lint run --default=none -E protogetter --max-issues-per-linter=0 --max-same-issues=0 ./...
+  && go build ./... && go test ./...
+  && ! git status --porcelain | grep -E '\.golangci|golangci-lint\.ya?ml'
+  && ! git diff HEAD | grep -E '^\+.*nolint'
+maxTurns: 80
+timeoutMin: 10

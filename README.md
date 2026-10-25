@@ -430,6 +430,9 @@ measure six noise rounds, run paired rounds (eight by default), and publish with
 the supplied release tag. The gateway version is recorded separately. The committed
 twins remain unchanged, and the temporary copy is removed on exit.
 
+A twin with `lane: api-key` in its `scenario.yaml` is left out of this rerun: it is for
+the parity check with `--upstream api-key`, and the rerun is the seat lane.
+
 
 ## Running the bench
 
@@ -546,6 +549,8 @@ It refuses to pool files with a different scenario, compare mode, model or provi
 | `--compare anyray` (default) | direct | through Anyray | ask the end-to-end question |
 | `--compare control` | direct | direct | see how far two identical setups drift. A result inside that band proves nothing. |
 | `--compare gateway` | through Anyray | through Anyray + treatment | isolate one feature. Both arms carry everything else the gateway brings. |
+| `--compare gateway --bare` | pass-through | pass-through | P vs P: the noise floor of the gateway path itself. No `--kinds` needed. |
+| `--compare gateway --bare-a` | pass-through | through Anyray | P vs B: does Anyray's default beat pass-through? B runs `--kinds`, or the tenant's stored defaults on a frozen plan. |
 
 - `--with-control` runs a control next to the main comparison and prints its median and
   range as the noise band.
@@ -623,6 +628,34 @@ cache breaks and strategy actions for each turn after a long pause, and anything
 makes the round unreadable as a comparison.
 
 ## Other lanes
+
+### On an Anthropic API key
+
+`--upstream api-key` runs both arms on an Anthropic API key with only the base URL
+changed, the way a customer on a key connects. The default, `--upstream seat`, uses the
+Claude subscription seat.
+
+```bash
+cp -r twins/go-protogetter-lint ./client-scenarios/   # then plan and freeze it as above
+ANTHROPIC_API_KEY=<key> npm run agent -- --scenarios-dir ./client-scenarios \
+  --scenario go-protogetter-lint --rounds 6 --compare gateway --bare-a --upstream api-key
+```
+
+- The harness takes `ANTHROPIC_API_KEY` out of its own environment at startup and gives it
+  to the Claude arm processes alone, warm-up included. Graders, git and helpers never see it.
+  It is never written to settings, `--arm-env`, arguments, metadata or results.
+- `--arm-env` refuses the key, and `--upstream api-key` refuses `--provider bedrock`.
+- Seat-expiry checks are skipped on this lane. Rounds go to their own file (label `api-key`).
+- It covers Claude Code on an API key only: not seat headroom, and not SDK agents.
+
+The parity twin is [twins/go-protogetter-lint](twins/go-protogetter-lint): fix the
+protogetter findings in hashicorp/go-plugin v1.6.3 (43 findings in six files), pinned to
+Go 1.27.1 and golangci-lint 2.13.2. A shim maps the old `--disable-all` flag to
+golangci-lint v2's `--default=none`. The grader runs the real binary and fails on any
+finding, a failed build or test, a `nolint` comment, or a lint-config edit.
+
+A twin names no customer. `tests/customerIdentifiers.test.mjs` checks every tracked file
+against hashed identifiers, by whole word.
 
 ### On AWS Bedrock
 
@@ -754,6 +787,8 @@ first checks that D's agents really used the batch read in at least half the D s
 | `--mcp-catalog N` | Add a stub MCP server with N unused tools (200 ≈ a seat with many connectors). Pair with `--arm-env ENABLE_TOOL_SEARCH=false`. |
 | `--experiment <name>` | Tag the Anyray arm with `experiment=<name>`, for a gateway rule on this run only |
 | `--kinds-b <k1,k2>` | `gateway` mode: B requests other kinds than `--kinds` |
+| `--bare` / `--bare-a` | `gateway` mode: both arms / arm A alone is pass-through (base URL and headers only, optimization off) |
+| `--upstream seat\|api-key` | Run the Claude arms on the seat (default) or on `ANTHROPIC_API_KEY`. See [On an Anthropic API key](#on-an-anthropic-api-key). |
 | `--read-trim-b` / `--read-trim` | Connect's nested-Read trim on B only / on every Anyray arm |
 | `--hook-posture-b <name>=<on\|off>` / `--hook-posture` | Pin one team-policy hook switch on B only / on every Anyray arm |
 | `--client-tool-policy name=true\|false` | Set a Connect MCP switch in the Anyray arm, e.g. `readBatchRanges=true` |

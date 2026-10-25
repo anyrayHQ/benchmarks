@@ -1,0 +1,10 @@
+diff --git a/scripts/golangci-lint b/scripts/golangci-lint
+new file mode 100755
+index 0000000..3630904
+--- /dev/null
++++ b/scripts/golangci-lint
+@@ -0,0 +1,4 @@
++#!/bin/sh
++# golangci-lint v2 dropped --disable-all; v1 callers still pass it. Map it to its v2 spelling.
++for a in "$@"; do shift; [ "$a" = "--disable-all" ] && a="--default=none"; set -- "$@" "$a"; done
++exec golangci-lint "$@"

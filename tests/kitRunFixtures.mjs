@@ -180,7 +180,13 @@ const behaviour = ((cfg.behave || {})[kind] || {})[ordinal] || 'ok';
 const sessionId = crypto.randomUUID();
 const model = opt('--model') || 'claude-sonnet-5';
 const streamed = argv.includes('--input-format');
-log({ session: true, kind, ordinal, cost, behaviour, sessionId, bin: __filename, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
+// What the process was handed, never the values: whether each credential is in its env, a digest of the API key
+// (to match it to the one the test set), and whether the key sits in the settings file the arm was given.
+let settingsText = '';
+try { settingsText = fs.readFileSync(opt('--settings'), 'utf8'); } catch {}
+const apiKey = process.env.ANTHROPIC_API_KEY || '';
+const procCreds = { apiKey: Boolean(apiKey), apiKeySha: apiKey ? crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 12) : null, oauth: Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN), keyInSettings: Boolean(apiKey) && settingsText.includes(apiKey) };
+log({ session: true, kind, ordinal, cost, behaviour, sessionId, bin: __filename, procCreds, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 // The session is over without a further turn: stop reading stdin, so the process ends on its
 // own once stdout has drained (process.exit could cut a pipe write short on macOS).
