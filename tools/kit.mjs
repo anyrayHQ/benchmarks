@@ -183,8 +183,9 @@ try {
         } else if (command === 'report') {
           process.stdout.write(json ? JSON.stringify(body) + '\n' : formatKitReport(verdict, body));
         } else {
-          const id = await publishResult(releaseGateway(options, lock), body);
-          process.stdout.write(json ? JSON.stringify({ ok: true, command, id }) + '\n' : id + '\n');
+          const published = await publishResult(releaseGateway(options, lock), body);
+          process.stdout.write(json ? JSON.stringify({ ok: true, command, ...published }) + '\n' : published.id + '\n');
+          if (!json) for (const warning of published.warnings ?? []) process.stderr.write(`${warning.code}: ${warning.message}\n`);
           if (!json) process.stderr.write('Published. It shows under Measurement on the Optimizer page of your console.\n');
         }
       }
@@ -196,7 +197,10 @@ try {
   else if (['noise', 'run'].includes(command) && !json && answer.stopped === 'budget_reached') process.stdout.write(formatStopped(answer));
   else if (command === 'doctor' && !json) process.stdout.write(formatDoctor(answer));
   else if (command === 'release-check' && !json) process.stdout.write(`changed=${answer.changed}\n`);
-  else if (command === 'twins' && !json) process.stdout.write(answer.id + '\n');
+  else if (command === 'twins' && !json) {
+    process.stdout.write(answer.id + '\n');
+    for (const warning of answer.warnings ?? []) process.stderr.write(`${warning.code}: ${warning.message}\n`);
+  }
   else if (command === 'noise' && !json && !answer.stopped) process.stdout.write(answer.summary);
   else if (command === 'verdict' && !json) process.stdout.write(formatKitVerdict(answer));
   else if (command === 'plan' && !json) process.stdout.write(formatPlan(answer, catalog) + (answer.tenant.evaluationCohort ? `${answer.tenant.kindsEvaluated} kinds will be evaluated on test sessions only.\n` : ''));

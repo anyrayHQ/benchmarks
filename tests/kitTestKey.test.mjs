@@ -120,13 +120,17 @@ test('a context the plan cannot read is refused, never assumed: plan_tenant_unre
 
 // ---- run -------------------------------------------------------------------------------------------
 
-/** A frozen one-scenario plan with noise, a stand-in Claude, a poisoned PATH and a test-key gateway. */
-async function runSetup({ restart = false, viaFile = false } = {}) {
+/**
+ * A frozen one-scenario plan with noise, a stand-in Claude, a poisoned PATH and a test-key gateway.
+ * `sessionGate` / `evaluationCohort` are what the context reports; `kinds` freezes the plan with
+ * `--kinds <list>` (the pinned-kinds path).
+ */
+async function runSetup({ restart = false, viaFile = false, sessionGate, evaluationCohort, kinds } = {}) {
   const root = sharedTemp('kit-testkey-run-');
   const origin = originRepo(root);
   const copy = kitRunCopy(join(root, 'kit'));
   const dir = writeDir(root, { 'acme-fix': runScenario(origin) });
-  const gateway = await gatewayFor({ restartOnFirstInference: restart });
+  const gateway = await gatewayFor({ restartOnFirstInference: restart, sessionGate, evaluationCohort });
   const poison = poisonClaude(join(root, 'poison'));
   const claude = fakeClaude(join(root, 'claude'), { costs: { direct: [1, 1.2], anyray: [0.5, 0.6] }, marked: false });
   const home = join(root, 'home');
@@ -136,15 +140,22 @@ async function runSetup({ restart = false, viaFile = false } = {}) {
     writeTestKitEnv(home, { gateway: gateway.url });
     env = kitEnv(home, path);
   } else env = testKeyEnv(home, gateway, path);
-  const lock = await freezeWith(copy.root, dir, gateway.url, env);
+  let lock;
+  if (kinds) {
+    const frozen = json(await kitIn(copy.root, ['freeze', '--scenarios-dir', dir, ...PIN_ARGS(gateway.url), '--kinds', kinds, '--json'], { env }), 'freeze --kinds --json');
+    assert.equal(frozen.ok, true, `freeze --kinds must succeed before this test can check anything: ${JSON.stringify(frozen)}`);
+    lock = readLock(dir);
+  } else lock = await freezeWith(copy.root, dir, gateway.url, env);
   writeNoise(dir);
   return { root, copy, dir, gateway, poison, claude, env, lock };
 }
 const run = (s, rounds) => kitIn(s.copy.root, ['run', '--scenarios-dir', s.dir, '--claude-bin', s.claude.bin, '--rounds', String(rounds), '--json'], { env: s.env });
 
-// Two rounds on the test key alone; the gateway "restarts" under the first. Read by the leaf tests below.
+// Two rounds on the test key alone; the gateway "restarts" under the first. The context puts the
+// test sessions in the evaluation cohort with 2 kinds on, 3 in shadow and 1 off. Read by the leaf
+// tests below.
 const testKeyRun = once(async () => {
-  const s = await runSetup({ restart: true });
+  const s = await runSetup({ restart: true, sessionGate: { on: 2, shadow: 3, off: 1 } });
   const child = await run(s, 2);
   return { ...s, child };
 });
@@ -174,6 +185,57 @@ test('run records the gateway version GET /connect/test/context reports', async 
   const s = await testKeyRun();
   ranOk(s, 'run --json on the test key');
   assert.equal(readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray').gatewayVersion, CONTEXT_VERSION);
+});
+
+// ANY-1684: a result says how many of the kinds the test evaluated were still in shadow, so the run
+// record keeps the context's counts. Only the two counts: never `off`, the tenant or anything else.
+test('run records the kinds the test sessions evaluated, from the context\'s session gate, as exactly { on, shadow }', async () => {
+  const s = await testKeyRun();
+  ranOk(s, 'run --json on the test key');
+  readsWithTestKey(s.gateway, 'GET', CONTEXT, 'run');
+  const record = readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray');
+  assert.deepEqual(record.evaluatedKinds, { on: 2, shadow: 3 }, 'the on and shadow counts, nothing else');
+});
+
+test('a context that does not put the test sessions in an evaluation cohort records no evaluated kinds: those sessions applied only what is on', async () => {
+  const s = await runSetup({ sessionGate: { on: 2, shadow: 3, off: 1 }, evaluationCohort: false });
+  s.child = await run(s, 1);
+  ranOk(s, 'run --json, context without the evaluation cohort');
+  readsWithTestKey(s.gateway, 'GET', CONTEXT, 'run without the cohort');
+  const record = readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray');
+  assert.equal(record.gatewayVersion, CONTEXT_VERSION, 'the context was read and the record written');
+  assert.equal(counted(record).length, 1, 'the round ran');
+  assert.ok(!Object.hasOwn(record, 'evaluatedKinds'), `no evaluatedKinds without the cohort: ${JSON.stringify(record.evaluatedKinds)}`);
+});
+
+test('a plan frozen with --kinds records no evaluated kinds: its Anyray arm runs the pinned kinds, not the tenant\'s gate', async () => {
+  const s = await runSetup({ sessionGate: { on: 2, shadow: 3, off: 1 }, kinds: 'observation_mask' });
+  assert.equal(s.lock.pins.kinds, 'observation_mask', 'the plan pins its kinds');
+  s.child = await run(s, 1);
+  ranOk(s, 'run --json on a --kinds plan');
+  const record = readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray');
+  assert.equal(record.gatewayVersion, CONTEXT_VERSION, 'the context was read and the record written');
+  assert.equal(counted(record).length, 1, 'the round ran');
+  assert.ok(!Object.hasOwn(record, 'evaluatedKinds'), `no evaluatedKinds on the pinned-kinds path: ${JSON.stringify(record.evaluatedKinds)}`);
+});
+
+// Repeat invocations add rounds to one record. Kinds promoted between them must not erase that
+// earlier rounds ran with more kinds in shadow: the record keeps the invocation with the most
+// shadow kinds (conservative), and a context whose counts are not integers changes nothing.
+test('across repeated run invocations the record keeps the evaluated kinds with the most in shadow, and ignores a malformed count', async () => {
+  const s = await runSetup({ sessionGate: { on: 1, shadow: 4, off: 0 } });
+  const step = async (gate, expected, rounds, what) => {
+    s.gateway.state.sessionGate = gate;
+    s.child = await run(s, 1);
+    ranOk(s, `run --json (${what})`);
+    const record = readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray');
+    assert.equal(record.rounds.length, rounds, `${what}: the invocation added its round`);
+    assert.deepEqual(record.evaluatedKinds, expected, what);
+  };
+  await step({ on: 1, shadow: 4, off: 0 }, { on: 1, shadow: 4 }, 1, 'first invocation: 4 in shadow');
+  await step({ on: 0, shadow: '9', off: 0 }, { on: 1, shadow: 4 }, 2, 'a shadow count that is not an integer is not recorded');
+  await step({ on: 0, shadow: 5, off: 1 }, { on: 0, shadow: 5 }, 3, 'more kinds in shadow than before: the new counts');
+  await step({ on: 4, shadow: 1, off: 0 }, { on: 0, shadow: 5 }, 4, 'kinds promoted since: the earlier, larger shadow count stays');
 });
 
 test('each Anyray session\'s keep-warm pings come from GET /connect/test/sessions/:id, keyed by its Claude Code session id, and are added to its cost', async () => {

@@ -1092,7 +1092,7 @@ export function insertRound(rounds, r) {
  */
 function recordSaver(file, record, write, args) {
   let queue = Promise.resolve();
-  return () => (queue = queue.then(() => write(file, JSON.stringify(args?.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n')));
+  return () => (queue = queue.then(() => write(file, JSON.stringify(args?.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion, args.evaluatedKinds) : record, null, 2) + '\n')));
 }
 
 /**
@@ -1172,7 +1172,7 @@ async function main(args) {
   if (controlRecord) {
     record.control = { file: resultFileName(controlArgs(args)) };
     record.noiseBand = noiseBand(solvedPairVerdict(controlRecord.rounds.filter((x) => !x.gatewayRestarted)));
-    writeFileSync(file, JSON.stringify(args.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n');
+    writeFileSync(file, JSON.stringify(args.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion, args.evaluatedKinds) : record, null, 2) + '\n');
   }
   console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, ...verdictOptions(args) })}\n${formatVerdictBlock(record.verdict)}`);
   const tail = args.scenariosDir ? null : tailBlockForRun(record, { dir: join(cfg.root, 'results', 'agent'), treatment: args.treatment ?? 'b' });

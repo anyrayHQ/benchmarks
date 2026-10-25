@@ -332,10 +332,12 @@ const parseJson = (s) => {
  * route answers (201 with `result.id`, or that error status). `inferenceStatus`: what inference
  * answers instead of 200, for every session (a number, e.g. 401) or for chosen ones (an object
  * keyed by the session's index, 0-based, in the order the gateway first saw its sessionId); an
- * error answer carries no optimization-result header. The server is unref'd, so it never keeps
- * the test process alive.
+ * error answer carries no optimization-result header. `testContext` ({ sessionGate,
+ * evaluationCohort }): GET /connect/test/context answers it for ANY key, and the admin settings
+ * route carries the same fields, so a test can show the admin path ignores them wherever they
+ * appear. The server is unref'd, so it never keeps the test process alive.
  */
-export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, inferenceStatus = null } = {}) {
+export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, inferenceStatus = null, testContext = null } = {}) {
   const requests = [];
   const held = new Set();
   const seen = [];
@@ -376,8 +378,11 @@ export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, in
         return send(200, { id: 'msg_fake', type: 'message', role: 'assistant', model: 'claude-sonnet-5', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } },
           { 'x-anyray-optimization-result': JSON.stringify(drawn ? HELD_RESULT : CLEAN_RESULT) });
       }
+      if (testContext && req.method === 'GET' && url.pathname === '/connect/test/context') {
+        return send(200, { tenant: 'acme', gatewayVersion: GATEWAY_VERSION, evaluationCohort: testContext.evaluationCohort, sessionGate: testContext.sessionGate, replicas: [] });
+      }
       if (req.method === 'GET' && url.pathname === '/admin/v1/settings/updates') {
-        return admin ? send(200, { version: GATEWAY_VERSION, updateMethod: 'compose', hasApplier: false, update: null }) : send(401, { error: { message: 'unauthorized' } });
+        return admin ? send(200, { version: GATEWAY_VERSION, updateMethod: 'compose', hasApplier: false, update: null, ...(testContext ?? {}) }) : send(401, { error: { message: 'unauthorized' } });
       }
       if (req.method === 'GET' && url.pathname === '/admin/v1/optimizer') {
         return admin ? send(200, { config: { strategies: [] }, overrides: null }) : send(401, { error: { message: 'unauthorized' } });
@@ -643,8 +648,9 @@ export function writeDir(parent, scenarios, name = 'client-tests') {
 // ---- the gateway's client-tests body (POST /admin/v1/client-tests) ------------------------------------
 
 // Copied from the monorepo's gateway/src/services/clientTests.ts (clientTestResultSchema, ANY-1488,
-// commit 4457e55c8). The kit's `report --json` and `publish-result` must produce a body this
-// accepts. Keep the two in step by hand: the gateway lives in another repository.
+// commit 4457e55c8), plus ANY-1684's optional top-level evaluatedKinds. The kit's `report --json`
+// and `publish-result` must produce a body this accepts. Keep the two in step by hand: the gateway
+// lives in another repository.
 const identity = z.string().min(1).regex(/^[A-Za-z0-9][\w.:-]{0,63}$/);
 const version = z.string().min(1).regex(/^[0-9A-Za-z][\w.+-]{0,63}$/);
 const ratio = z.number().finite().gt(0).max(1000);
@@ -659,6 +665,8 @@ const parity = z.object({
 }).strict().refine((p) => p.passDirect <= p.n && p.passAnyray <= p.n && p.anyrayWorse + p.anyrayBetter <= p.n
   && p.anyrayWorse <= p.passDirect && p.anyrayBetter <= p.n - p.passDirect
   && p.passAnyray === p.passDirect - p.anyrayWorse + p.anyrayBetter);
+// The session gate's kind counts the test sessions ran with (ANY-1684): on, and still in shadow.
+const kindCount = z.number().int().min(0).max(1000);
 const scenario = z.object({
   shapeId: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   source: z.enum(['client', 'proposed']),
@@ -690,6 +698,7 @@ export const clientTestBodySchema = z.object({
     costUsdPerSession: z.object({ direct: z.number().finite().min(0).max(1e6), anyray: z.number().finite().min(0).max(1e6) }).strict(),
   }).strict(),
   rule0Verdict: z.enum(['PASS', 'FAIL', 'INCONCLUSIVE', 'INSUFFICIENT', 'NO DATA']),
+  evaluatedKinds: z.object({ on: kindCount, shadow: kindCount }).strict().optional(),
 }).strict();
 
 /** Parse with the gateway's schema; a failure names the paths (never the values). */

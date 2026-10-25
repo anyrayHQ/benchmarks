@@ -23,6 +23,12 @@ export const REPLICA_RESTARTED = '2026-10-22T08:30:00.000Z';
 
 const CLEAN_RESULT = { status: 'applied', applied: ['observation_mask'], skipped: [], preserved: [] };
 
+/** The result body's top-level fields before ANY-1684: a gateway this old refuses any other. */
+export const OLD_RESULT_FIELDS = [
+  'planHash', 'kitVersion', 'benchmarksCommit', 'gatewayVersion', 'releaseTag', 'clientTool', 'clientToolVersion',
+  'model', 'provider', 'scenarios', 'totals', 'rule0Verdict',
+];
+
 const parseJson = (s) => {
   try {
     return JSON.parse(s);
@@ -95,14 +101,21 @@ export async function closedGatewayUrl() {
  *   with PING as its cache_warm pings.
  * - `restartOnFirstInference`: the one replica reports a later start time once the first
  *   inference request has arrived (a gateway restart during the first round).
+ * - `state.sessionGate` is what the context reports from then on: a test may change it between
+ *   two kit commands (kinds promoted, or a malformed answer).
+ * - `oldGateway`: POST results refuses a body with a top-level field the gateway predates (any
+ *   field outside OLD_RESULT_FIELDS, e.g. ANY-1684's evaluatedKinds) exactly as the strict schema
+ *   does: 400 { issues: [{ path: [], code: 'unrecognized_keys' }] }.
+ * - `postResults`: replies POST results gives, one per POST in order ({ status, payload }, or
+ *   { status, raw } for a body sent as is); once they run out it answers as above.
  * - /admin/*: 401. No test here holds an admin token, so a request there is a regression.
  */
 export async function fakeTestGateway({
   sessionGate = { on: 0, shadow: 4, off: 0 }, evaluationCohort = true, contextStatus = 200,
-  probeDelayMs = 0, restartOnFirstInference = false, results = [],
+  probeDelayMs = 0, restartOnFirstInference = false, results = [], oldGateway = false, postResults = [],
 } = {}) {
   const requests = [];
-  const state = { results, inferenceSeen: false };
+  const state = { results, inferenceSeen: false, sessionGate, postResults: [...postResults] };
   const server = createServer((req, res) => {
     let raw = '';
     req.setEncoding('utf8');
@@ -135,9 +148,17 @@ export async function fakeTestGateway({
         if (req.method === 'GET' && url.pathname === '/connect/test/context') {
           if (contextStatus !== 200) return send(contextStatus, { error: { type: 'unavailable' } });
           const startedAt = restartOnFirstInference && state.inferenceSeen ? REPLICA_RESTARTED : REPLICA_STARTED;
-          return send(200, { tenant: 'acme', gatewayVersion: CONTEXT_VERSION, evaluationCohort, sessionGate, replicas: [{ replicaId: 'replica-1', startedAt }] });
+          return send(200, { tenant: 'acme', gatewayVersion: CONTEXT_VERSION, evaluationCohort, sessionGate: state.sessionGate, replicas: [{ replicaId: 'replica-1', startedAt }] });
         }
         if (req.method === 'POST' && url.pathname === '/connect/test/results') {
+          const reply = state.postResults.shift();
+          if (reply?.raw !== undefined) {
+            res.writeHead(reply.status, { 'content-type': 'application/json' });
+            return res.end(reply.raw);
+          }
+          if (reply) return send(reply.status, reply.payload);
+          const fields = entry.body && typeof entry.body === 'object' ? Object.keys(entry.body) : [];
+          if (oldGateway && fields.some((f) => !OLD_RESULT_FIELDS.includes(f))) return send(400, { issues: [{ path: [], code: 'unrecognized_keys' }] });
           return send(201, { result: { ...(entry.body ?? {}), id: TEST_PUBLISHED_ID, receivedAt: '2026-10-22T09:00:00.000Z' } });
         }
         if (req.method === 'GET' && url.pathname === '/connect/test/results') return send(200, { results: state.results });
