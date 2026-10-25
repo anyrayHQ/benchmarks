@@ -7,7 +7,7 @@ import { KINDS_PIN, PlanError, assertGatewayAllowed, freezePlan, verifyPlan, res
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
-import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend, meanRoundMs } from '../lib/kitResults.mjs';
+import { readKitRecords, kitVerdict, formatKitVerdict, formatNoise, formatStopped, kitSpend, meanRoundMs, headlineBasis } from '../lib/kitResults.mjs';
 import { clientTestBody, formatKitReport } from '../lib/clientTestBody.mjs';
 import { DEFAULT_MIN_ROUNDS } from '../lib/benchVerdict.mjs';
 import { adminToken, sessionGateState } from '../lib/traces.mjs';
@@ -181,7 +181,7 @@ try {
           writeFileSync(file, renderReportHtml({ body, verdict, records, lock }));
           process.stdout.write(json ? JSON.stringify({ ok: true, command, file }) + '\n' : `${file}\n`);
         } else if (command === 'report') {
-          process.stdout.write(json ? JSON.stringify(body) + '\n' : formatKitReport(verdict, body));
+          process.stdout.write(json ? JSON.stringify(body) + '\n' : formatKitReport(verdict, body, headlineBasis(records)));
         } else {
           const published = await publishResult(releaseGateway(options, lock), body);
           process.stdout.write(json ? JSON.stringify({ ok: true, command, ...published }) + '\n' : published.id + '\n');
