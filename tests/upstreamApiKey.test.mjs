@@ -26,8 +26,9 @@ test('--upstream api-key refuses Bedrock and files its rounds apart', () => {
 
 test('both slots carry the upstream, and the run records it without the key', () => {
   const a = parseArgs([...base, '--upstream', 'api-key']);
-  const arms = armsFor(a);
-  for (const slot of ['a', 'b']) assert.equal(slotOptions(a, slot, arms).upstream, 'api-key');
+  const arms = armsFor(a.compare);
+  for (const slot of ['a', 'b']) assert.equal(slotOptions(a, arms, slot).upstream, 'api-key');
+  assert.equal(slotOptions(parseArgs(base), arms, 'a').upstream, undefined);
   assert.equal(requestRecord(a).upstream, 'api-key');
   assert.equal(requestRecord(parseArgs(base)).upstream, undefined);
 });

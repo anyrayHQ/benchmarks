@@ -328,6 +328,7 @@ export function parseArgs(argv, env = process.env) {
     else if (argv[i] === '--parallel') a.parallel = parseParallel(argv[++i]); // rounds in flight, shared with --with-control
     else if (argv[i] === '--provider') a.provider = argv[++i]; // anthropic (seat) | bedrock (AWS direct vs the gateway's Bedrock route)
     else if (argv[i] === '--upstream') a.upstream = argv[++i]; // seat (default: the OAuth seat) | api-key (ANTHROPIC_API_KEY, base URL only)
+    else if (argv[i] === '--bare-a') a.bareA = true; // --compare gateway: arm A pass-through, arm B the Anyray arm (P vs B, with no kinds override)
     else if (argv[i] === '--bare') a.bare = true; // Anyray arm = base URL + headers only: no anyray-connect, optimization off
     else if (argv[i] === '--persist-session') a.persistSession = true; // the default: both arms keep their transcript, as Claude Code does outside the bench
     else if (argv[i] === '--no-persist-session') a.persistSession = false; // both arms run --no-session-persistence, as every run did before 2026-10-12
@@ -423,6 +424,10 @@ export function parseArgs(argv, env = process.env) {
   if (a.bare && a.integrationLevel) throw new Error('--bare runs without anyray-connect, which is what applies --integration-level: use one or the other');
   if (a.bare && (a.kinds || a.readTrim || a.provider === 'bedrock')) throw new Error('--bare runs with optimization off on the seat lane: it takes no --kinds, --strategy, --read-trim or --provider bedrock');
   if (a.bare && pinsHooks) throw new Error('--bare runs without anyray-connect, whose hooks --hook-posture sets');
+  if (a.bareA && a.compare !== 'gateway') throw new Error('--bare-a needs --compare gateway: it makes arm A of two gateway arms pass-through');
+  if (a.bareA && a.bare) throw new Error('--bare-a and --bare are different pairs: --bare makes both arms pass-through');
+  if (a.bareA && a.kindsB) throw new Error('--bare-a runs arm A without optimization, so --kinds-b has nothing to differ from: give arm B --kinds');
+  if (a.bareA && (a.readTrim || pinsHooks)) throw new Error('--bare-a runs arm A without anyray-connect, whose hooks --read-trim and --hook-posture set');
   if (a.seedHome?.length && (!gateway || a.bare || SDK_SCENARIOS.includes(a.scenario))) throw new Error('--seed-home needs an anyray-connect arm: --compare anyray or gateway, not --bare');
   if (a.client === 'codex') assertCodexArgs(a, { claudeBinFlag, pinsHooks });
   if (gateway && !a.scenariosDir && !a.kinds && !a.bare && !SDK_SCENARIOS.includes(a.scenario)) {
@@ -431,6 +436,7 @@ export function parseArgs(argv, env = process.env) {
   a.label ??= a.strategy;
   if (a.provider === 'bedrock') a.label ??= 'bedrock'; // never mixed into a seat run's file
   if (a.upstream === 'api-key') a.label = a.label ? `api-key-${a.label}` : 'api-key'; // never mixed into a seat run's file
+  if (a.bareA) a.label = a.label ? `bare-a-${a.label}` : 'bare-a'; // never mixed into a pair whose arm A runs connect
   if (a.bare) a.label = a.label ? `bare-${a.label}` : 'bare'; // never mixed into a connect-configured run's file
   if (a.client === 'codex') a.label = a.label ? `codex-${a.label}` : 'codex'; // never mixed into a Claude Code run's file
   a.env = parseArmEnv(a.armEnv);
@@ -568,13 +574,16 @@ export const verdictOptions = (args) => ({
  * One slot's runAgent options beyond the shared ones. --read-trim follows the ARM (anyray),
  * --arm-env follows the SLOT (a/b): under --compare control both slots are 'direct'.
  */
+/** Whether the slot is a pass-through gateway arm: both under --bare, arm A under --bare-a. */
+const bareSlot = (args, arms, slot) => arms[slot] === 'anyray' && (!!args.bare || (!!args.bareA && slot === 'a'));
+
 export const slotOptions = (args, arms, slot) => ({
   arm: arms[slot],
   readTrim: armReadTrim(args, arms[slot], slot),
   ...postureOption(armHookPosture(args, arms[slot], slot)),
   env: args.env?.[slot] ?? {},
-  kinds: arms[slot] === 'anyray' ? slotKinds(args, slot)[0] : null,
-  kindsSource: arms[slot] === 'anyray' ? slotKinds(args, slot)[1] : null,
+  kinds: arms[slot] === 'anyray' && !bareSlot(args, arms, slot) ? slotKinds(args, slot)[0] : null,
+  kindsSource: arms[slot] === 'anyray' && !bareSlot(args, arms, slot) ? slotKinds(args, slot)[1] : null,
   // ANYRAY_BENCH_SHARED_HEADERS on every Anyray arm, then the treatment on B.
   extraHeaders: [
     ...(arms[slot] === 'anyray' ? args.sharedHeaders ?? [] : []),
@@ -594,8 +603,9 @@ export const slotOptions = (args, arms, slot) => ({
   // start from the same no-app profile and must run exactly their build.
   ...(arms[slot] === 'anyray' && args.connectBinB ? { connectBinPinned: true } : {}),
   ...(arms[slot] === 'anyray' && args.seedHome?.length ? { seedHome: args.seedHome } : {}), // --seed-home: every Anyray arm, identically
-  bare: !!args.bare && arms[slot] === 'anyray',
-  ...(args.scenariosDir && arms[slot] === 'anyray' && !args.kinds ? { tenantDefaults: true } : {}),
+  bare: bareSlot(args, arms, slot),
+  // A pass-through arm forwards as sent: the tenant's stored defaults are for the arm that optimizes.
+  ...(args.scenariosDir && arms[slot] === 'anyray' && !args.kinds && !bareSlot(args, arms, slot) ? { tenantDefaults: true } : {}),
   warmUp: !!args.warmUp, // both slots, so the pair stays like for like
   ...(args.persistSession === false ? { persistSession: false } : {}), // --no-persist-session: both slots, so the pair stays like for like
   ...(args.claude ? { claude: args.claude } : {}), // the resolved Claude Code binary, both slots (--claude-bin / ANYRAY_CLAUDE_BIN / PATH)
@@ -607,6 +617,7 @@ export const requestRecord = (args) => ({
   ...(args.timeoutMin ? { timeoutMin: args.timeoutMin } : {}), // the session cap both arms ran under
   ...(args.mcpCatalog ? { mcpCatalog: args.mcpCatalog } : {}), // synthetic MCP tools both arms carried
   bare: !!args.bare,
+  ...(args.bareA ? { bareA: true } : {}), // arm A alone is pass-through
   ...(args.upstream === 'api-key' ? { upstream: 'api-key' } : {}), // the lane, never the key
   warmUp: !!args.warmUp,
   experiment: args.experiment ?? null,
