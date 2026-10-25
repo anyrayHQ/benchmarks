@@ -584,3 +584,41 @@ test('the client flow needs no admin token: SKILL.md names no admin token variab
   for (const name of ['ANYRAY_ADMIN_KEY', 'ANYRAY_TRACE_KEY', 'ANYRAY_TRACE_TOKEN']) assert.ok(!text.includes(name), `SKILL.md asks for ${name}`);
   assert.ok(!text.includes('/admin/'), 'SKILL.md reaches an /admin/ route');
 });
+
+// --- ANY-1684: results disclose the kinds still in shadow on the tenant ---
+
+/** The text of the `## <heading>` section, up to the next `## ` heading. */
+function sectionOf(text, heading) {
+  const start = text.indexOf(`\n## ${heading}\n`);
+  assert.ok(start !== -1, `SKILL.md has a "## ${heading}" section`);
+  const end = text.indexOf('\n## ', start + 1);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
+test('the plugin and its marketplace entry are at 0.4.0, the release whose results disclose shadow kinds', () => {
+  assert.equal(readJson(PLUGIN).version, '0.4.0');
+  assert.equal(readJson(MARKETPLACE).plugins?.find((p) => p?.name === 'anyray-test')?.version, '0.4.0');
+});
+
+test('SKILL.md puts the kit\'s Kinds line beside the pooled Rule 0 word, filled from the body\'s evaluatedKinds, only when a kind was in shadow', () => {
+  const section = sectionOf(readSkill(), 'Verdict and report').replace(/\s+/g, ' ');
+  const line = 'Kinds: N of M tested were still in shadow on your tenant; live traffic gets them only after promotion.';
+  const at = section.indexOf(line);
+  assert.ok(at !== -1, `the Verdict section carries the kit's line verbatim: ${line}`);
+  assert.match(section, /`evaluatedKinds`/, 'filled from the report body\'s evaluatedKinds');
+  assert.match(section, /`shadow`/, 'N is its shadow count');
+  assert.match(section.slice(Math.max(0, at - 500), at + line.length + 500), /Rule 0/, 'beside the Rule 0 word');
+  assert.match(section, /\b(?:without|no) `evaluatedKinds`/i, 'and says what a body without evaluatedKinds means (unknown, not zero)');
+});
+
+test('SKILL.md Plan section shows the kit\'s kindsEvaluated line, the kinds the test sessions evaluate', () => {
+  const section = sectionOf(readSkill(), 'Plan').replace(/\s+/g, ' ');
+  assert.match(section, /`kindsEvaluated`/, 'the plan JSON field');
+  assert.match(section, /kinds will be evaluated on test sessions only/, 'the kit\'s own words for it');
+});
+
+test('SKILL.md Publish section copies any warning publish-result returns, as printed', () => {
+  const section = sectionOf(readSkill(), 'Publish and next release').replace(/\s+/g, ' ');
+  assert.match(section, /`warnings`/, 'the JSON field publish-result adds');
+  assert.match(section, /`evaluated_kinds_dropped`/, 'the warning an older gateway causes');
+});

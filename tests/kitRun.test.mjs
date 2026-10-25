@@ -27,12 +27,12 @@ after(async () => {
 });
 
 /** A frozen one-scenario plan with a fake gateway, a stand-in Claude and a poisoned PATH. */
-async function setup({ holdout = 'none', marked = false, noise = true } = {}) {
+async function setup({ holdout = 'none', marked = false, noise = true, testContext = null } = {}) {
   const root = sharedTemp('kit-run-');
   const origin = originRepo(root);
   const copy = kitRunCopy(join(root, 'kit'));
   const dir = writeDir(root, { 'acme-fix': runScenario(origin, { marked }) });
-  const gateway = await fakeRunGateway({ holdout });
+  const gateway = await fakeRunGateway({ holdout, testContext });
   gateways.push(gateway);
   const poison = poisonClaude(join(root, 'poison'));
   const claude = fakeClaude(join(root, 'claude'), { costs: { direct: [1, 1.2], anyray: [0.5, 0.6] }, marked });
@@ -45,9 +45,12 @@ async function setup({ holdout = 'none', marked = false, noise = true } = {}) {
 const run = (s, args, env = s.env) => kitIn(s.copy.root, ['run', '--scenarios-dir', s.dir, '--claude-bin', s.claude.bin, ...args], { env });
 
 // Two paired rounds of a scenario carrying a marker in every content field; the gateway draws the
-// first Anyray session it sees into a holdout. Run once, read by the leaf tests below.
+// first Anyray session it sees into a holdout. It also answers the test-key context (evaluation
+// cohort, kinds in shadow) to any key, which this admin-key run must ignore. Run once, read by
+// the leaf tests below.
+const ANY_KEY_CONTEXT = { sessionGate: { on: 2, shadow: 3, off: 1 }, evaluationCohort: true };
 const markedRun = once(async () => {
-  const s = await setup({ holdout: 'first', marked: true });
+  const s = await setup({ holdout: 'first', marked: true, testContext: ANY_KEY_CONTEXT });
   const child = await run(s, ['--rounds', '2', '--redraw-holdout', '2', '--json']);
   return { ...s, child };
 });
@@ -75,6 +78,16 @@ test('run measures the tenant\'s own defaults: no kinds header on any request, a
   const counted = countedRounds(record);
   assert.equal(counted.length, 2);
   for (const r of counted) assert.deepEqual(r.kindsObserved, OBSERVED_KINDS, `round ${r.round}`);
+});
+
+// ANY-1684: the evaluated kinds come from the test-key context only. On the admin path the run
+// applies what the admin route reports, so it records none, even when a context would answer.
+test('a run on the admin key records no evaluated kinds', async () => {
+  const s = await markedRun();
+  ranOk(s);
+  const record = readRecord(s.dir, s.lock.planHash, 'acme-fix', 'anyray');
+  assert.equal(record.gatewayVersion, GATEWAY_VERSION, 'the admin route\'s version: the record was written on the admin path');
+  assert.ok(!Object.hasOwn(record, 'evaluatedKinds'), `no evaluatedKinds on the admin path: ${JSON.stringify(record.evaluatedKinds)}`);
 });
 
 test('every Anyray request carries the kit\'s tag: exactly one x-anyray-metadata with tool anyray-bench and a session id per attempt, on the kit\'s own key', async () => {
