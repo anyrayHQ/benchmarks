@@ -106,8 +106,8 @@ export async function closedGatewayUrl() {
  * - `oldGateway`: POST results refuses a body with a top-level field the gateway predates (any
  *   field outside OLD_RESULT_FIELDS, e.g. ANY-1684's evaluatedKinds) exactly as the strict schema
  *   does: 400 { issues: [{ path: [], code: 'unrecognized_keys' }] }.
- * - `postResults`: replies POST results gives, one per POST in order ({ status, payload }); once
- *   they run out it answers as above.
+ * - `postResults`: replies POST results gives, one per POST in order ({ status, payload }, or
+ *   { status, raw } for a body sent as is); once they run out it answers as above.
  * - /admin/*: 401. No test here holds an admin token, so a request there is a regression.
  */
 export async function fakeTestGateway({
@@ -152,6 +152,10 @@ export async function fakeTestGateway({
         }
         if (req.method === 'POST' && url.pathname === '/connect/test/results') {
           const reply = state.postResults.shift();
+          if (reply?.raw !== undefined) {
+            res.writeHead(reply.status, { 'content-type': 'application/json' });
+            return res.end(reply.raw);
+          }
           if (reply) return send(reply.status, reply.payload);
           const fields = entry.body && typeof entry.body === 'object' ? Object.keys(entry.body) : [];
           if (oldGateway && fields.some((f) => !OLD_RESULT_FIELDS.includes(f))) return send(400, { issues: [{ path: [], code: 'unrecognized_keys' }] });

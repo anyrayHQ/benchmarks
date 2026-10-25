@@ -333,8 +333,9 @@ const parseJson = (s) => {
  * answers instead of 200, for every session (a number, e.g. 401) or for chosen ones (an object
  * keyed by the session's index, 0-based, in the order the gateway first saw its sessionId); an
  * error answer carries no optimization-result header. `testContext` ({ sessionGate,
- * evaluationCohort }): GET /connect/test/context answers it for ANY key, so a test can show the
- * admin path ignores it. The server is unref'd, so it never keeps the test process alive.
+ * evaluationCohort }): GET /connect/test/context answers it for ANY key, and the admin settings
+ * route carries the same fields, so a test can show the admin path ignores them wherever they
+ * appear. The server is unref'd, so it never keeps the test process alive.
  */
 export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, inferenceStatus = null, testContext = null } = {}) {
   const requests = [];
@@ -381,7 +382,7 @@ export async function fakeRunGateway({ holdout = 'none', publishStatus = 201, in
         return send(200, { tenant: 'acme', gatewayVersion: GATEWAY_VERSION, evaluationCohort: testContext.evaluationCohort, sessionGate: testContext.sessionGate, replicas: [] });
       }
       if (req.method === 'GET' && url.pathname === '/admin/v1/settings/updates') {
-        return admin ? send(200, { version: GATEWAY_VERSION, updateMethod: 'compose', hasApplier: false, update: null }) : send(401, { error: { message: 'unauthorized' } });
+        return admin ? send(200, { version: GATEWAY_VERSION, updateMethod: 'compose', hasApplier: false, update: null, ...(testContext ?? {}) }) : send(401, { error: { message: 'unauthorized' } });
       }
       if (req.method === 'GET' && url.pathname === '/admin/v1/optimizer') {
         return admin ? send(200, { config: { strategies: [] }, overrides: null }) : send(401, { error: { message: 'unauthorized' } });

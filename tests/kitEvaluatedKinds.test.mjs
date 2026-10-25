@@ -99,7 +99,7 @@ test('with no record carrying evaluated kinds the body has no evaluatedKinds fie
   assert.doesNotMatch(await reportPage(s), /still in shadow/, 'no shadow sentence on the page');
 });
 
-test('a record whose counts are not non-negative integers is skipped, and no record field but on and shadow reaches the body', async (t) => {
+test('a record whose counts are not integers from 0 to 1000 is skipped, and no record field but on and shadow reaches the body', async (t) => {
   const s = await planWith(t, {
     'check-long': { on: 1, shadow: '7' },
     facts: { on: 4, shadow: 2, note: MARK.keyFact },
@@ -108,6 +108,12 @@ test('a record whose counts are not non-negative integers is skipped, and no rec
   const body = await reportBody(s);
   assert.deepEqual(body.evaluatedKinds, { on: 4, shadow: 2 }, 'the one record with integer counts, and only its two counts');
   assert.deepEqual(leaks(JSON.stringify(body)), [], 'a hand-edited record field never travels');
+
+  // Above the schema's bound a count would win on shadow and then fail the whole body: skipped instead.
+  setKinds(s, { 'check-long': { on: 1, shadow: 5000 }, facts: { on: 4, shadow: 2 }, 'short-task': { on: 2000, shadow: 3 } });
+  const bounded = await reportBody(s);
+  assert.equal(typeof bounded.rule0Verdict, 'string', `the report still builds: ${JSON.stringify({ ok: bounded.ok, code: bounded.code })}`);
+  assert.deepEqual(bounded.evaluatedKinds, { on: 4, shadow: 2 }, 'counts above 1000 are skipped');
 });
 
 test('the kit\'s body schema and the gateway copy agree: evaluatedKinds is optional and a strict { on, shadow } of non-negative integers', async (t) => {
@@ -203,9 +209,13 @@ test('any other refusal is still publish_failed after one POST: another issue, a
     ['an unknown key below the top level', { status: 400, payload: { issues: [{ path: ['scenarios', 0], code: 'unrecognized_keys' }] } }],
     ['an unknown top-level key beside another issue', { status: 400, payload: { issues: [unrecognizedRoot, { path: ['totals'], code: 'invalid_type' }] } }],
     ['a different top-level issue', { status: 400, payload: { issues: [{ path: [], code: 'invalid_type' }] } }],
+    ['an unknown top-level key issue that carries more than path and code', { status: 400, payload: { issues: [{ ...unrecognizedRoot, keys: ['evaluatedKinds'] }] } }],
+    ['a path that is not a list', { status: 400, payload: { issues: [{ path: '', code: 'unrecognized_keys' }] } }],
     ['an empty issue list', { status: 400, payload: { issues: [] } }],
     ['no issue list', { status: 400, payload: { error: { type: 'invalid' } } }],
     ['the same issue under another status', { status: 422, payload: { issues: [unrecognizedRoot] } }],
+    ['a body that is not JSON and quotes the request', { status: 400, raw: `refused: ${MARK.answer} {` }],
+    ['issues that quote the request', { status: 400, payload: { issues: [{ path: [MARK.keyFact], code: 'unrecognized_keys', message: MARK.answer }] } }],
   ];
   const gateway = await gatewayFor();
   const s = await planWith(t, { facts: { on: 2, shadow: 3 } }, { gateway });
@@ -218,6 +228,7 @@ test('any other refusal is still publish_failed after one POST: another issue, a
     assert.equal(child.status, 1, what);
     assert.equal(posted(gateway).length - before, 1, `${what}: sent once, never resent`);
     assert.doesNotMatch(`${child.stdout}${child.stderr}`, /evaluated_kinds_dropped/, `${what}: no warning`);
+    assert.deepEqual(leaks(`${child.stdout}${child.stderr}`), [], `${what}: the refusal's body is never printed`);
   }
 });
 
