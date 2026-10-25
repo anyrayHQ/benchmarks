@@ -550,17 +550,27 @@ fails the run when T is above the largest value in every one of K blocks of the 
 number of no-op pairs. Under no effect T and those block maxima are exchangeable, so a
 no-op run fails with probability at most 1/(K+1): 5% at K = 19.
 
-The no-op pairs are your own pass-through (P/P) result files: `--compare gateway --bare`,
-including the `api-key` lane. Rounds accumulate in those files, so every run tops them up.
-A file joins only if its scenario, model, upstream lane, gateway host and Claude Code
-version match the run being judged; the others are skipped by name.
+The no-op is the judged pair with the treatment taken out, from result files already on
+disk. Rounds accumulate in them, so every run tops them up:
+
+| Judged pair | Read against |
+|---|---|
+| direct vs Anyray (`--compare anyray`, and every `kit` plan) | `--compare control` pairs (direct vs direct); for a plan, its own `noise` rounds |
+| pass-through vs B (`--compare gateway --bare-a`) | `--compare gateway --bare` pairs (P/P), including the `api-key` lane |
+| any other gateway pair | none: no recorded run is it without its treatment, so no tail check is printed |
+
+A file joins only if its scenario, model, upstream lane, Claude Code version (and gateway
+host, for P/P) match the run being judged; the others are skipped by name.
 
 - **Needs 19 blocks.** For 12 pairs that is 228 P/P pairs. With fewer, the check prints
   `insufficient calibration` and how many more to collect. It never passes.
-- **Printed with every verdict** that is not itself the noise (`npm run agent`), or on its
-  own: `node tools/bench-verdict.mjs --noise-library pp.json result.json`. There, an
-  excess exits 1, and a library too small to calibrate turns a passing verdict into exit 2.
-  Runs under `--scenarios-dir` do not print it yet.
+- **Printed with every verdict** that is not itself the noise: `npm run agent`, and
+  `npm run verdict` for a plan (one line per scenario, local only, never published). Or on
+  its own: `node tools/bench-verdict.mjs --noise-library pp.json result.json`, where an
+  excess exits 1 and a library too small to calibrate turns a passing verdict into exit 2.
+- **Topping a plan up:** the verdict prints the command, `npm run noise -- --scenarios-dir
+  <dir> --rounds N`. It appends N control pairs to every scenario in the plan (the floor is
+  6 per call) and keeps the noise block valid.
 - **It is weak, and says so.** At 12 pairs and a log-ratio SD of 0.924 it misses about 93%
   of runs where one session costs double, and about 74% where every session does: a
   doubling is smaller than the noise, and more pairs barely help because the largest

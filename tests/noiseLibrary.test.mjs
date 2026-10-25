@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { libraryFrom, findLibraryFiles, tailForRecord } from '../lib/noiseLibrary.mjs';
+import { libraryFrom, findLibraryFiles, tailForRecord, noiseKindFor } from '../lib/noiseLibrary.mjs';
 import { seededNormals } from '../lib/tailSim.mjs';
 
 const round = (i, ratio, over = {}) => ({ round: i, ratio, quality: { a: true, b: true }, sessions: { a: { totals: { costUsd: 1 } }, b: { totals: { costUsd: ratio } } }, ...over });
@@ -74,4 +74,47 @@ test('with no library the answer is insufficient calibration, with the prior SD 
   assert.equal(out.check.state, 'insufficient_calibration');
   assert.equal(out.sd, 0.924);
   assert.deepEqual(out.anchors, []);
+});
+
+// ---- which no-op fits which pair -------------------------------------------------------------
+const control = (ratios, over = {}) => rec(ratios, { compare: 'control', request: {}, gateway: undefined, ...over });
+const direct = (ratios, over = {}) => rec(ratios, { compare: 'anyray', request: {}, ...over });
+
+test('the no-op is the pair with the treatment taken out: direct vs Anyray uses control, pass-through vs B uses P/P, any other gateway pair has none', () => {
+  assert.equal(noiseKindFor(direct([1])), 'control');
+  assert.equal(noiseKindFor(treated([1])), 'pass-through');
+  assert.equal(noiseKindFor(rec([1], { request: {} })), null, 'A runs kinds: no pass-through noise matches it');
+  assert.equal(noiseKindFor(rec([1])), null, 'a bare pair is itself the noise');
+  assert.equal(noiseKindFor(control([1])), null);
+});
+
+test('a direct-vs-Anyray run reads control pairs and skips the pass-through files, and the reverse', () => {
+  const d = libraryFrom([{ file: 'c.json', record: control(noise(5)) }, { file: 'p.json', record: rec(noise(5)) }], direct([1]));
+  assert.deepEqual(d.anchors.map((a) => a.file), ['c.json']);
+  assert.deepEqual(d.skipped, [{ file: 'p.json', reason: 'not a control pair run' }]);
+  const p = libraryFrom([{ file: 'c.json', record: control(noise(5)) }, { file: 'p.json', record: rec(noise(5)) }], treated([1]));
+  assert.deepEqual(p.anchors.map((a) => a.file), ['p.json']);
+  assert.deepEqual(p.skipped, [{ file: 'c.json', reason: 'not a pass-through pair run' }]);
+});
+
+test('control pairs match on scenario, model, upstream and Claude Code version, not on a gateway they never touched', () => {
+  const lib = libraryFrom([
+    { file: 'ok.json', record: control(noise(5)) },
+    { file: 'ver.json', record: control(noise(5), { claudeVersions: { a: { '9': 5 }, b: { '9': 5 } } }) },
+  ], direct([1]));
+  assert.deepEqual(lib.anchors.map((a) => a.file), ['ok.json']);
+  assert.deepEqual(lib.skipped, [{ file: 'ver.json', reason: 'different Claude Code version' }]);
+});
+
+test('findLibraryFiles takes the kind: control files for control, bare files for pass-through', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lib-'));
+  mkdirSync(join(dir, 'agent'));
+  for (const f of ['s--control.json', 's--control--x.json', 's--gateway--bare.json', 's--anyray.json']) writeFileSync(join(dir, 'agent', f), '{}');
+  const names = (kind) => findLibraryFiles(join(dir, 'agent'), kind).map((p) => p.split('/').pop()).sort();
+  assert.deepEqual(names('control'), ['s--control--x.json', 's--control.json']);
+  assert.deepEqual(names('pass-through'), ['s--gateway--bare.json']);
+});
+
+test('tailForRecord says there is no matching noise for a pair that has none, never a calibration it cannot have', () => {
+  assert.equal(tailForRecord(rec([1], { request: {} }), []), null);
 });

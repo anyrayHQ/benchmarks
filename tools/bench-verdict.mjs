@@ -83,10 +83,16 @@ export function run(argv, { out = process.stdout, err = process.stderr } = {}) {
       // library too small to calibrate never passes it.
       const first = pooled.sources[0].record;
       const tail = tailForRecord({ ...first, rounds: pooled.rounds.map((x) => x.round) }, loadLibraryFiles(args.noiseLibrary), { treatment: first.treatment ?? 'b' });
-      result.tailCheck = { ...tail.check, anchors: tail.anchors, skipped: tail.skipped };
-      tailText = `\n${formatTailBlock(tail.check, { anchors: tail.anchors, sd: tail.sd })}`;
-      if (tail.check.state === 'excess') code = 1;
-      else if (tail.check.state !== 'within_noise' && code === 0) code = 2;
+      if (tail === null) {
+        result.tailCheck = { state: 'no_matching_noise' };
+        tailText = '\nTail check: not defined for this pair: no recorded run is it without its treatment (direct vs Anyray reads control pairs, pass-through vs B reads P/P pairs).';
+        if (code === 0) code = 2;
+      } else {
+        result.tailCheck = { ...tail.check, anchors: tail.anchors, skipped: tail.skipped };
+        tailText = `\n${formatTailBlock(tail.check, { anchors: tail.anchors, sd: tail.sd })}`;
+        if (tail.check.state === 'excess') code = 1;
+        else if (tail.check.state !== 'within_noise' && code === 0) code = 2;
+      }
     }
     out.write(args.json ? `${JSON.stringify(result, null, 2)}\n` : `${formatTable(pooled, verdict)}${tailText}\n`);
     return code;

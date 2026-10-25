@@ -67,3 +67,11 @@ test('--json carries the tail check, its anchors and skipped files', () => {
   assert.deepEqual(j.tailCheck.anchors, ['pp-full2.json']);
   assert.deepEqual(j.tailCheck.skipped, [{ file: 'pp-other.json', reason: 'different scenario' }]);
 });
+
+test('a pair with no matching noise says so and cannot pass', () => {
+  const lib = write('pp-for-feature.json', pp(19 * 12));
+  const r = write('t5.json', rec(saving, { request: {} })); // gateway A and B both run strategies
+  const { code, out } = go(['--noise-library', lib, r]);
+  assert.match(out, /Tail check: not defined for this pair/);
+  assert.equal(code, 2);
+});

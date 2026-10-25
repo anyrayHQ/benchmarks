@@ -39,6 +39,20 @@ test('the noise runs themselves, and control pairs, print no tail check', () => 
   assert.equal(tailBlockForRun(treated([]), { dir: dirWith({}) }), null);
 });
 
+test('a direct-vs-Anyray run is read against control pairs, not against pass-through files', () => {
+  const direct = rec([...Array(11).fill(1), 40], { compare: 'anyray', request: {} });
+  const control = rec(seededNormals(1, 19 * 12).map((z) => Math.exp(z * 0.5)), { compare: 'control', request: {}, gateway: undefined });
+  const passThrough = rec(seededNormals(2, 19 * 12).map((z) => Math.exp(z * 0.5)));
+  assert.match(tailBlockForRun(direct, { dir: dirWith({ 's--control.json': control }) }), /Tail check: excess/);
+  const onlyPP = tailBlockForRun(direct, { dir: dirWith({ 's--gateway--bare.json': passThrough }) });
+  assert.match(onlyPP, /insufficient calibration/, 'pass-through pairs are not this pair\'s noise');
+});
+
+test('a gateway pair whose A is not pass-through has no matching noise: no block, not a calibration it cannot have', () => {
+  const featureAB = rec([1, 1.1], { request: {} });
+  assert.equal(tailBlockForRun(featureAB, { dir: dirWith({}) }), null);
+});
+
 // ---- through the CLI -------------------------------------------------------------------------
 const gateways = [];
 after(async () => {
