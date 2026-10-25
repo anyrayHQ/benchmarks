@@ -171,7 +171,7 @@ try {
       }
       const records = readKitRecords(dir, lock);
       const frozen = validatedScenarios(dir);
-      const verdict = kitVerdict(lock, records);
+      const verdict = kitVerdict(lock, records, command === 'verdict' ? readKitRecords(dir, lock, 'control') : null);
       verdict.scenarios = verdict.scenarios.map((s) => ({ ...s, expect: expectedOf(frozen.find(({ id }) => id === s.id)?.scenario) }));
       if (command === 'verdict') answer = verdict;
       else {

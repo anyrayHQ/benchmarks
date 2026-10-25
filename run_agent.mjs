@@ -135,6 +135,7 @@ import { ANYRAY_BIN, CONNECT_BIN_PINNED } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, differingNames, kindDifference, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
+import { tailBlockForRun } from './lib/tailReport.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, adminToken, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
@@ -455,7 +456,7 @@ const CODEX_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 function assertCodexArgs(a, { claudeBinFlag, pinsHooks }) {
   if (SDK_SCENARIOS.includes(a.scenario)) throw new Error(`${a.scenario} runs its own SDK agent, not Codex`);
   if (a.provider !== 'anthropic') throw new Error('--client codex runs on the ChatGPT seat: --provider does not apply');
-  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--client-tool-policy-b', a.clientToolPoliciesB], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--seed-home', a.seedHome?.length], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
+  const claudeOnly = [['--claude-bin', claudeBinFlag], ['--read-trim / --hook-posture', pinsHooks], ['--integration-level', a.integrationLevel], ['--client-tool-policy', a.clientToolPolicies], ['--client-tool-policy-b', a.clientToolPoliciesB], ['--warm-up', a.warmUp], ['--no-subagents', a.noSubagents], ['--mcp-catalog', a.mcpCatalog], ['--(no-)persist-session', a.persistSession !== undefined], ['--arm-env', a.armEnv.length], ['--bare', a.bare], ['--bare-a', a.bareA], ['--seed-home', a.seedHome?.length], ['--redraw-holdout', a.redrawHoldout], ['--max-turns', a.maxTurns]];
   const used = claudeOnly.filter(([, on]) => on).map(([flag]) => flag);
   if (used.length) throw new Error(`--client codex does not take ${used.join(', ')}: ${used.includes('--max-turns') ? 'Codex has no turn cap (use --timeout-min); ' : ''}those are Claude Code switches`);
   if (a.codexModel !== undefined && !CODEX_MODEL.test(a.codexModel)) throw new Error(`--codex-model takes a model id, got ${JSON.stringify(a.codexModel)}`);
@@ -886,6 +887,8 @@ export function summarize(session, pricing) {
 /** How the round printout names a slot's arm; under gateway, B names its extra headers. */
 export const armLabel = (args, arms, slot) => {
   if (args.compare !== 'gateway') return arms[slot];
+  if (args.bare || (args.bareA && slot === 'a')) return 'anyray (pass-through)';
+  if (args.bareA) return `anyray + ${args.kinds ? `kinds=${args.kinds.join(',')}` : 'tenant defaults'}`;
   const added = args.kindsB ? args.kindsB.filter((k) => !(args.kinds ?? []).includes(k)) : [];
   const dropped = args.kindsB ? (args.kinds ?? []).filter((k) => !args.kindsB.includes(k)) : [];
   const treatment = slot === 'b' ? [
@@ -1172,6 +1175,8 @@ async function main(args) {
     writeFileSync(file, JSON.stringify(args.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n');
   }
   console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, ...verdictOptions(args) })}\n${formatVerdictBlock(record.verdict)}`);
+  const tail = args.scenariosDir ? null : tailBlockForRun(record, { dir: join(cfg.root, 'results', 'agent'), treatment: args.treatment ?? 'b' });
+  if (tail) console.log(tail);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
     const kinds = slotKinds(args, slot)[0];
@@ -1560,7 +1565,7 @@ export async function runComparison(args, cfg, { prefix = '', schedule = createP
   args.extraHeaders = viaGateway.length ? benchExtraHeaders() : [];
   args.sharedHeaders = viaGateway.length ? benchSharedHeaders() : [];
   if (args.connectBinB) digestConnectBinB(args);
-  if (args.compare === 'gateway' && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length && !args.clientToolPoliciesB) {
+  if (args.compare === 'gateway' && !args.bareA && !args.extraHeaders.length && !args.experimentB && !args.kindsB && !args.connectBinB && !Object.keys(args.hookPostureB ?? {}).length && !args.clientToolPoliciesB) {
     console.warn('--compare gateway without ANYRAY_BENCH_EXTRA_HEADERS: A and B are the same arm (a gateway noise floor)');
   }
   const { run, pricing } = cfg;

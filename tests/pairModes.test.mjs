@@ -54,3 +54,33 @@ test('--bare-a refuses what makes the pair mean something else', () => {
 test('--bare-a without kinds or a frozen plan has nothing for B to run', () => {
   assert.throws(() => parseArgs(pb), /needs --kinds/);
 });
+
+// ---- found on the first real pair: the round printout and warning must describe the arms as they are ----
+import { armLabel } from '../run_agent.mjs';
+
+test('arm labels: --bare-a names A pass-through and B what it runs; P/P names both pass-through', () => {
+  const a = parseArgs([...pb, '--kinds', 'observation_mask']);
+  const arms = armsFor(a.compare);
+  assert.equal(armLabel(a, arms, 'a'), 'anyray (pass-through)');
+  assert.equal(armLabel(a, arms, 'b'), 'anyray + kinds=observation_mask');
+  const defaults = { ...a, kinds: null }; // a frozen plan: B runs the tenant's stored defaults
+  assert.equal(armLabel(defaults, arms, 'b'), 'anyray + tenant defaults');
+  const bare = parseArgs(pp);
+  assert.equal(armLabel(bare, armsFor(bare.compare), 'a'), 'anyray (pass-through)');
+  assert.equal(armLabel(bare, armsFor(bare.compare), 'b'), 'anyray (pass-through)');
+});
+
+test('arm labels are unchanged for the other gateway pairs', () => {
+  const a = parseArgs(['--scenario', 's', '--compare', 'gateway', '--kinds', 'observation_mask']);
+  assert.equal(armLabel(a, armsFor('gateway'), 'a'), 'anyray (baseline)');
+});
+
+test('--bare-a is Claude Code only: Codex refuses it as it refuses --bare', () => {
+  assert.throws(() => parseArgs([...pb, '--kinds', 'observation_mask', '--client', 'codex']), /--bare-a/);
+});
+
+test('a --bare-a pair is not warned about as "the same arm": its arms differ by design', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../run_agent.mjs', import.meta.url), 'utf8');
+  const guard = src.slice(src.indexOf("args.compare === 'gateway' && !args.bareA"), src.indexOf("A and B are the same arm (a gateway noise floor)'", src.indexOf("args.compare === 'gateway' && !args.bareA")));
+  assert.ok(guard.includes('!args.bareA'), 'the warning is skipped when arm A is pass-through');
+});
