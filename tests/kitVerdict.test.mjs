@@ -17,7 +17,7 @@ import { kitIn, syntheticPlan } from './kitRunFixtures.mjs';
 
 // nextStep and tieNote (what to say when a verdict cannot decide) have their own suites,
 // kitNextStep.test.mjs and kitFirstRunClarity.test.mjs.
-const withoutNext = ({ nextStep: _next, tieNote: _tie, ...rest }) => rest;
+const withoutNext = ({ nextStep: _next, tieNote: _tie, expect: _expect, ...rest }) => rest;
 const verdict = (copy, dir, env, args = ['--json']) => kitIn(copy.root, ['verdict', '--scenarios-dir', dir, ...args], { env });
 
 /** What the verdict must say for one scenario, computed with the libraries on the same rounds. */

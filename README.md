@@ -609,6 +609,7 @@ has answered and has been idle for 30 seconds; wall time runs to the final answe
 | `mcpTools` | Optional non-negative integer count of MCP tools for planning. To reproduce a synthetic seat, also pass `--mcp-catalog N` on the run; it applies to both arms. |
 | `patch:` | One file or a list, applied in order |
 | `hidePatch: true` | Re-imports the patched checkout as one commit, so `git diff` and `git log` cannot find the bug |
+| `expect: text` | Optional. What a passing run looks like, in your words (up to 300 characters). Frozen with the plan, shown as "Expected: ..." beside the quality line in the local report and page, and never sent in the JSON body or a published result |
 | `pastes: { name: file }` | Puts that file's text (beside `scenario.yaml`) wherever `{{name}}` stands in the task or a follow-up, byte for byte the same each time |
 | `gatewaySettleSec` | Wait after the session before reading the Anyray arm's ping cost |
 
