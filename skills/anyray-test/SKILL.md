@@ -38,10 +38,10 @@ Write or Edit when available.
   `anyray-test--v<version>`. For this release the setup is:
 
   ```bash
-  git clone --branch anyray-test--v0.3.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
+  git clone --branch anyray-test--v0.4.0 --single-branch https://github.com/anyrayHQ/benchmarks.git "${CLAUDE_PLUGIN_DATA}/kit"
   npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" ci
   git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse HEAD
-  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.3.0^{commit}'
+  git -C "${CLAUDE_PLUGIN_DATA}/kit" rev-parse 'anyray-test--v0.4.0^{commit}'
   ```
 
   The two commits must match. Check the kit's scripts, lockfile and dependencies.
@@ -186,6 +186,9 @@ kit's numbers without recomputing or rounding them. Explain `resolvable: false`
 without promising savings. Ask whether the budget is acceptable or needs a new
 plan. A refusal stops the flow; name its code and fix rather than bypassing it.
 
+When the plan JSON's tenant has `kindsEvaluated`, show its count as the kit's
+line: "N kinds will be evaluated on test sessions only."
+
 ## Freeze
 
 Show the scenarios, pins, predictions and ceiling and ask for approval to freeze.
@@ -251,6 +254,13 @@ into a percentage saving or soften a verdict. Include exclusions and predicted
 versus actual results without cherry-picking. For a requested two-line summary,
 use the kit's verdict words and numbers, with no extra workflow or paid command.
 
+When the report body's `evaluatedKinds` has `shadow` above 0, put this line
+beside the pooled Rule 0 word, filling N from `shadow` and M from `on` + `shadow`
+and otherwise copying it verbatim:
+"Kinds: N of M tested were still in shadow on your tenant; live traffic gets them only after promotion."
+With `shadow` 0 or no `evaluatedKinds`, say nothing about shadow kinds;
+no `evaluatedKinds` means unknown, not zero.
+
 An undecided verdict (`inconclusive`, `INCONCLUSIVE` or `INSUFFICIENT`) carries a
 `nextStep` in the kit's verdict: how many more pairs would settle it and what they
 cost. Copy it exactly beside that scenario and never replace it with your own
@@ -288,6 +298,10 @@ when the user asks to publish, run:
 ```bash
 npm --prefix "${CLAUDE_PLUGIN_DATA}/kit" run -s publish-result -- --scenarios-dir anyray-test --json
 ```
+
+When publish-result's JSON has `warnings`, show each `message` as printed.
+`evaluated_kinds_dropped` means an older gateway published the result without the
+disclosure; upgrading the gateway shows it.
 
 Publish only to the frozen gateway. Return the result id; never print the server
 body or token. If the console or per-release template is unavailable, say so.

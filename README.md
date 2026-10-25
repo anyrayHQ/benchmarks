@@ -108,6 +108,9 @@ Pooled Rule 0: PASS
 Cost per session: direct $1.30, Anyray $0.96 (26% lower)
 ```
 
+When some kinds the test evaluated were still in shadow on your tenant, a `Kinds:` line after
+the pooled verdict says how many: your live traffic gets them only after they are promoted.
+
 Rule 0 passes only when Anyray wins clearly more pairs than noise alone would and the
 third quartile still saves: it judges the tail, not the average, so the line shows the
 tail (Q3 and the worst pair) beside the median. The quality clause is your own check run
