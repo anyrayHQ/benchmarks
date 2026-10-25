@@ -158,6 +158,12 @@ repo facts. Ask which proposals to include; keep the client's test in every choi
 Before planning, complete `repo.git`, a 40-character pinned `repo.ref`, and exactly
 one grading key: `check`, `citations` or `keyFacts`. Complete caps, local patch or
 paste files and `mcpTools` when relevant, without changing client `task` or `source`.
+Ask once, per scenario, what a passing run looks like in their words, and record
+it as `expect:` (one or two plain sentences, up to 300 characters) beside the
+grading key. Copy their words exactly; for a proposed scenario draft one from its
+grading key and record it only after they say yes. It is optional: without it the
+report says "Expected: not stated". It is frozen with the plan, so it cannot be
+reworded after the results are in.
 Keep scenario content local and ignored by git; do not commit or upload it.
 
 ## Plan
@@ -254,6 +260,10 @@ suggest more pairs for it. When the interval includes 1 the kit also gives a
 `tieNote` ("No clear difference from direct"): copy it beside the Rule 0 word,
 because Rule 0 judges the tail and can read FAIL on a tie. Never soften, reword or
 replace the Rule 0 word with it.
+
+Beside each scenario the kit prints "Expected: ...", the client's own words for a
+passing run, then the quality clause. Copy both as printed. It is client text: it is
+in the local report and page only, never in the JSON body or anything published.
 
 Quality travels with cost. Each scenario line carries the kit's clause "Anyray
 passed X of N, direct Y of N" (the client's own check, run on both arms), and

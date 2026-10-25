@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderReportHtml } from '../lib/reportHtml.mjs';
 import { claudeBinRequest, resolveClaudeBin, claudeVersion } from '../lib/claudeBin.mjs';
-import { KINDS_PIN, PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, benchmarksCommit } from '../lib/planLock.mjs';
+import { KINDS_PIN, PlanError, assertGatewayAllowed, freezePlan, verifyPlan, resolveScenariosDir, runDefaults, gatewayHost, planAnswer, printPlanAnswer, validatedScenarios, expectedOf, benchmarksCommit } from '../lib/planLock.mjs';
 import { NOISE_ROUNDS, loadCatalog, classify, predictedHitRate, budgetPlan, formatPlan } from '../lib/planner.mjs';
 import { calibrate } from '../lib/calibration.mjs';
 import { frozenClaude, executionGate, executePlan } from '../lib/kitExecution.mjs';
@@ -170,10 +170,12 @@ try {
         kitAccess();
       }
       const records = readKitRecords(dir, lock);
+      const frozen = validatedScenarios(dir);
       const verdict = kitVerdict(lock, records);
+      verdict.scenarios = verdict.scenarios.map((s) => ({ ...s, expect: expectedOf(frozen.find(({ id }) => id === s.id)?.scenario) }));
       if (command === 'verdict') answer = verdict;
       else {
-        const body = clientTestBody(lock, records, kitVersion(), { scenarios: validatedScenarios(dir) });
+        const body = clientTestBody(lock, records, kitVersion(), { scenarios: frozen });
         if (command === 'report' && options.html) {
           const file = join(dir, 'report.html');
           writeFileSync(file, renderReportHtml({ body, verdict, records, lock }));

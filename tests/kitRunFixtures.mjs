@@ -604,11 +604,11 @@ export const citationsScenario = (origin) => ({
  * in the records (as an old or hand-edited record would carry them). Returns the copy, the dir,
  * the lock and the rounds written per scenario.
  */
-export async function syntheticPlan(root, { gatewayUrl = 'https://gw.example.test', env, marked = false, records = true, gatewayVersion = GATEWAY_VERSION, lostPair = false } = {}) {
+export async function syntheticPlan(root, { gatewayUrl = 'https://gw.example.test', env, marked = false, records = true, gatewayVersion = GATEWAY_VERSION, lostPair = false, expect } = {}) {
   const origin = { git: `https://git.example.test/acme/${MARK.repo}.git`, ref: '0123456789abcdef0123456789abcdef01234567', patchText: `--- a/lib.js\n+++ b/lib.js\n@@ -1 +1,2 @@\n export const one = 1;\n+export const two = '${MARK.patch}';\n` };
   const copy = kitRunCopy(join(root, 'kit'));
   const dir = writeDir(root, {
-    'check-long': runScenario(origin, { marked }),
+    'check-long': runScenario(origin, { marked, over: expect === undefined ? {} : { expect } }),
     docs: citationsScenario(origin),
     facts: factsScenario(origin, marked ? { title: MARK.title, keyFacts: [MARK.keyFact] } : {}),
     'short-task': runScenario(origin, { marked, over: { maxTurns: 6 } }),
@@ -651,6 +651,7 @@ const pairCount = z.number().int().min(0).max(10000);
 const parity = z.object({
   n: pairCount, passDirect: pairCount, passAnyray: pairCount, anyrayWorse: pairCount, anyrayBetter: pairCount,
 }).strict().refine((p) => p.passDirect <= p.n && p.passAnyray <= p.n && p.anyrayWorse + p.anyrayBetter <= p.n
+  && p.anyrayWorse <= p.passDirect && p.anyrayBetter <= p.n - p.passDirect
   && p.passAnyray === p.passDirect - p.anyrayWorse + p.anyrayBetter);
 const scenario = z.object({
   shapeId: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
