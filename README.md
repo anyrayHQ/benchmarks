@@ -63,17 +63,17 @@ reworded or dropped. Scenario files stay on your machine.
 
 ### 3. Review the plan
 
-Claude asks for your budget and the cost of one direct session, then shows the plan.
-For example:
+Claude asks for your budget, then shows the plan. For example, with a $30 budget:
 
 ```text
-client-1: prediction: none; pairs planned: 12
-At this budget you can detect at least 52.6% saving (prior SD, 80% power, two-sided 95%).
-Spend ceiling: $28.80 (noise: 6 rounds, $9.60; paired runs: 12 pairs, $19.20)
-Budget resolves the bands: no
+client-1: prediction: none; pairs planned: after noise
+Pairs: set after the noise rounds measure your session cost
+Noise alone is 12 sessions (6 rounds of two direct sessions): the budget must cover them before any pair runs.
+Spend ceiling: $30.00
 ```
 
-The spend ceiling is the most the test can spend, noise rounds included. A predicted
+The spend ceiling is the most the test can spend, noise rounds included. The noise rounds
+measure what one session costs, so the pair count comes after them. A predicted
 range appears once our public results cover your task's shape with at least eight rounds;
 until then the plan says `prediction: none`.
 
@@ -130,7 +130,7 @@ repository, transcript or tool output. The Measurement card in your console then
 the result, for example:
 
 ```text
-Your test (plan 2d13843, 20 pairs): 0.75x, Rule 0 PASS.
+Your test (plan 2d13843, 20 pairs): 0.75x, Cost check: Passed; Anyray passed 20 of 20, direct 20 of 20.
 ```
 
 ### 9. Rerun it on every release
