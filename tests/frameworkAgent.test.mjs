@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { runFrameworkAgent, recordingFetch, withoutInheritedRoute } from '../lib/frameworkAgent.mjs';
 import { EMPTY_ANSWER_REQUEST, FINAL_ANSWER_REQUEST } from '../lib/sdkAgent.mjs';
-import { parseArgs, runComparison } from '../run_agent.mjs';
+import { parseArgs, runComparison, solved } from '../run_agent.mjs';
+import { buildCatalog, expectedAnswer, writeCatalog } from '../lib/apiCatalog.mjs';
 
 const fresh = () => mkdtempSync(join(process.cwd(), 'framework-test-'));
 const pricing = { models: { 'claude-sonnet-5': { input: 2, output: 10 } }, cache_read: 0.1, cache_write: 1.25 };
@@ -176,4 +177,59 @@ test('framework-docs takes the paired SDK flags and records its framework transp
     assert.equal(result.record.rounds[0].ratio, 0.5);
     assert.equal(JSON.parse(readFileSync(file, 'utf8')).rounds.length, 1);
   } finally { if (file) rmSync(file, { force: true }); for (const dir of workDirs) rmSync(dir, { recursive: true, force: true }); }
+});
+
+// --- wiring: the paired runner builds the catalog work dir and grades by the expected answer line ---
+
+test('framework-api-agent runs paired, hands each arm a catalog, and is solved only by the expected answer line', async () => {
+  const label = `offline-api-${process.pid}-${Date.now()}`;
+  const args = parseArgs(['--scenario', 'framework-api-agent', '--provider', 'bedrock', '--rounds', '1', '--label', label]);
+  const seen = [];
+  const wrong = 'ANSWER: 1 1';
+  const deps = {
+    clientKey: 'fake-key',
+    resolveBedrock: async () => ({ model: 'us.anthropic.claude-sonnet-5', profile: 'test', region: 'us-east-1' }),
+    runSdkAgent: async ({ arm, work, scenario }) => {
+      seen.push({ arm, hasCatalog: existsSync(join(work, 'catalog.json')), tools: scenario.tools });
+      return { requests: [], totals: { costUsd: arm === 'direct' ? 0.00002 : 0.00001, input: 10, cacheRead: 0, cacheWrite: 0, output: 1, turns: 1, requests: 1, outsideCheckout: 0 }, result: { text: arm === 'direct' ? `done\n${expectedAnswer(buildCatalog())}` : wrong }, citations: null };
+    },
+    log: () => {},
+  };
+  const cfg = { root: process.cwd(), run: { gatewayUrl: 'https://gateway.test.invalid', model: 'claude-sonnet-5' }, pricing };
+  let file;
+  try {
+    const result = await runComparison(args, cfg, { deps });
+    file = result.file;
+    assert.deepEqual(seen.map((s) => [s.arm, s.hasCatalog, s.tools]).sort(), [['anyray', true, 'api'], ['direct', true, 'api']]);
+    assert.deepEqual(result.record.rounds[0].quality, { a: true, b: false });
+    assert.equal(result.record.scenario.name, 'framework-api-agent');
+  } finally { if (file) rmSync(file, { force: true }); }
+});
+
+test('solved: the expected answer line, and nothing less', () => {
+  const scenario = { keyFacts: [expectedAnswer(buildCatalog())] };
+  assert.equal(solved(scenario, { result: { text: `x ${expectedAnswer(buildCatalog())}` } }), true);
+  assert.equal(solved(scenario, { result: { text: 'ANSWER: 58167 36' } }), false);
+});
+
+test('the api tools run through the graph: search, select, then a paged call whose result reaches the model', async () => {
+  const root = fresh();
+  try {
+    writeCatalog(root);
+    const call = (id, name, input) => reply({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name, input }], usage: { input_tokens: 10, output_tokens: 4 } });
+    const { sent, fetchImpl } = wire([
+      call('t1', 'searchApi', { query: 'ledger entries' }),
+      call('t2', 'selectApi', { name: 'listLedgerEntries' }),
+      call('t3', 'apiCall', { name: 'listLedgerEntries', params: { building: 'B-07', page: 1 } }),
+      answer(expectedAnswer(buildCatalog())),
+    ]);
+    const scenario = { task: 'Total it', tools: 'api', system: 'You call an internal API.', maxTurns: 8, keyFacts: [expectedAnswer(buildCatalog())] };
+    const session = await runFrameworkAgent({ arm: 'anyray', scenario, work: root, model: 'claude-sonnet-5', pricing, gatewayUrl: 'https://gateway.test.invalid', clientKey: 'fake-key', bedrock, sessionId: 's', fetchImpl, credentials });
+    assert.deepEqual(sent[0].body.tools.map((t) => t.name), ['searchApi', 'selectApi', 'apiCall']);
+    assert.match(JSON.stringify(sent[0].body.system), /internal API/);
+    assert.match(JSON.stringify(sent[1].body.messages.at(-1)), /listLedgerEntriesArchived/);
+    assert.match(JSON.stringify(sent[3].body.messages.at(-1)), /nextPage/);
+    assert.equal(session.totals.toolCalls, 3);
+    assert.equal(solved(scenario, session), true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -139,7 +139,8 @@ import { tailBlockForRun } from './lib/tailReport.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, adminToken, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
-import { rmSync } from 'node:fs';
+import { rmSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { parseArmEnv, assertArmEnvSafe } from './lib/armEnv.mjs';
 import { SHADOW_HEADER, parseKinds, tallyKinds, formatKindTally, otherKindsThatActed, heldOutKinds } from './lib/optimizationKinds.mjs';
 import { experimentRules, sameRules, validExperimentName } from './lib/benchRule.mjs';
@@ -148,6 +149,7 @@ import { bedrockOptions, bedrockSmallModel, probeGatewayRoute, assertBedrockRout
 import { formatChecks } from './lib/connectChecks.mjs';
 import { runSdkAgent } from './lib/sdkAgent.mjs';
 import { runFrameworkAgent } from './lib/frameworkAgent.mjs';
+import { writeCatalog } from './lib/apiCatalog.mjs';
 import { createBenchLevel, LEVELS, redactLevelError } from './lib/benchLevel.mjs';
 import { claudeBinRequest, resolveClaudeBin, claudeVersion, describeClaudeBin } from './lib/claudeBin.mjs';
 
@@ -267,7 +269,7 @@ export function parseSeedHome(spec) {
 }
 
 /** Scenarios whose arms are an in-process agent (no Claude Code), paired direct Bedrock vs gateway. */
-export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs'];
+export const SDK_SCENARIOS = ['sdk-docs', 'framework-docs', 'framework-api-agent'];
 // Scenarios another runner drives (run_sdk_app.mjs): an Agent SDK app with no Claude Code
 // hooks, so no connect work mode either. This harness refuses them.
 export const APP_SCENARIOS = ['sdk-app-scanner', 'sdk-app-code-scan'];
@@ -1206,10 +1208,20 @@ export async function resolveBedrock(run, { env = process.env, probe = probeGate
 /** What runComparison reaches outside the process through; tests stub them. */
 const LIVE = { runAgent, prepareRepo, describeRepo, write: writeFileSync, log: console.log, resolveBedrock, readOptimizerConfig: optimizerConfig, resolveClaudeBin, claudeVersion };
 
+/** A fresh work directory holding the API catalog an API-agent scenario's tools read. */
+function prepareApiWork(_scenario, _dir, { workParent = tmpdir() } = {}) {
+  mkdirSync(workParent, { recursive: true });
+  const work = mkdtempSync(join(workParent, 'anyray-bench-work-'));
+  writeCatalog(work);
+  return work;
+}
+const describeApiWork = (work) => ({ api: true, endpoints: JSON.parse(readFileSync(join(work, 'catalog.json'), 'utf8')).endpoints.length });
+
 /** Each SDK scenario's agent and the transport each arm records; framework-docs runs a graph agent on the framework's chat model. */
 const SDK_AGENTS = {
   'sdk-docs': { run: runSdkAgent, transport: { a: 'bedrock-invoke-model', b: 'anyray-messages' } },
   'framework-docs': { run: runFrameworkAgent, transport: { a: 'framework-anthropic-bedrock', b: 'framework-anthropic-gateway' }, framework: 'graph-agent' },
+  'framework-api-agent': { run: runFrameworkAgent, transport: { a: 'framework-anthropic-bedrock', b: 'framework-anthropic-gateway' }, framework: 'graph-agent' },
 };
 
 /** Paired pay-per-token SDK scenario; its record shape is accepted by bench-verdict. */
@@ -1217,8 +1229,9 @@ export async function runSdkComparison(args, cfg, { prefix = '', schedule = crea
   const name = args.scenario;
   const agent = SDK_AGENTS[name];
   const runSdk = deps.runSdkAgent ?? agent.run;
-  const checkout = deps.prepareRepo ?? prepareRepo;
-  const describe = deps.describeRepo ?? describeRepo;
+  // An API-agent scenario has no repository: its work directory holds the generated catalog.
+  const checkout = (s, d, o) => (deps.prepareRepo ?? (s.tools === 'api' ? prepareApiWork : prepareRepo))(s, d, o);
+  const describe = (w, s) => (deps.describeRepo ?? (s.tools === 'api' ? describeApiWork : describeRepo))(w, s);
   const write = deps.write ?? writeFileSync;
   const log = (s) => (deps.log ?? console.log)(prefix + s);
   const { run, pricing } = cfg;
