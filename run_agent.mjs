@@ -135,6 +135,7 @@ import { ANYRAY_BIN, CONNECT_BIN_PINNED } from './lib/connectArm.mjs';
 import { costOfAnthropicUsage } from './lib/cost.mjs';
 import { bandPosition, differingNames, kindDifference, noiseBand, rule0, solvedPairVerdict } from './lib/stats.mjs';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from './lib/benchVerdict.mjs';
+import { tailBlockForRun } from './lib/tailReport.mjs';
 import { countCacheBreaks } from './lib/cacheBreaks.mjs';
 import { addGatewayPings, adminToken, connectPolicy, gatewayReplicaStarts, optimizerConfig, restartedDuring, sessionGatewaySpend, sessionTraces } from './lib/traces.mjs';
 import { savingsCheck, savingsCheckNote, savingsCheckSummary } from './lib/savingsCheck.mjs';
@@ -1172,6 +1173,8 @@ async function main(args) {
     writeFileSync(file, JSON.stringify(args.scenariosDir ? redactedRecord(record, args.planLock, args.scenario, args.gatewayVersion) : record, null, 2) + '\n');
   }
   console.log(`${formatVerdict({ scenario: args.scenario, compare: args.compare, rounds: record.rounds, controlRounds: controlRecord?.rounds, ...verdictOptions(args) })}\n${formatVerdictBlock(record.verdict)}`);
+  const tail = args.scenariosDir ? null : tailBlockForRun(record, { dir: join(cfg.root, 'results', 'agent'), treatment: args.treatment ?? 'b' });
+  if (tail) console.log(tail);
   for (const slot of viaGateway) {
     const feedback = record.rounds.flatMap((x) => x.sessions?.[slot]?.optimization?.results ?? []);
     const kinds = slotKinds(args, slot)[0];

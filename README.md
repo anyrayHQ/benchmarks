@@ -542,6 +542,31 @@ node tools/bench-verdict.mjs --json --min-rounds 12 results/agent/example.json
 It refuses to pool files with a different scenario, compare mode, model or provider
 (`--allow-mixed` overrides). Exit codes: 0 pass, 1 fail, 2 inconclusive.
 
+### The tail check
+
+The win-rate, Q3 and mean gates say nothing about one very expensive session. The tail
+check does. It takes T, the largest `log(B / P)` cost ratio over the valid pairs, and
+fails the run when T is above the largest value in every one of K blocks of the same
+number of no-op pairs. Under no effect T and those block maxima are exchangeable, so a
+no-op run fails with probability at most 1/(K+1): 5% at K = 19.
+
+The no-op pairs are your own pass-through (P/P) result files: `--compare gateway --bare`,
+including the `api-key` lane. Rounds accumulate in those files, so every run tops them up.
+A file joins only if its scenario, model, upstream lane, gateway host and Claude Code
+version match the run being judged; the others are skipped by name.
+
+- **Needs 19 blocks.** For 12 pairs that is 228 P/P pairs. With fewer, the check prints
+  `insufficient calibration` and how many more to collect. It never passes.
+- **Printed with every verdict** that is not itself the noise (`npm run agent`), or on its
+  own: `node tools/bench-verdict.mjs --noise-library pp.json result.json`. There, an
+  excess exits 1, and a library too small to calibrate turns a passing verdict into exit 2.
+  Runs under `--scenarios-dir` do not print it yet.
+- **It is weak, and says so.** At 12 pairs and a log-ratio SD of 0.924 it misses about 93%
+  of runs where one session costs double, and about 74% where every session does: a
+  doubling is smaller than the noise, and more pairs barely help because the largest
+  value grows with them. Those cases are what the win-rate, Q3 and mean gates are for.
+  A run within noise is not proof of safety.
+
 ## Comparison modes
 
 | Mode | A | B | Use it to |
