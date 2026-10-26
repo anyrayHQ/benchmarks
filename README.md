@@ -10,10 +10,11 @@ against Anyray's Rule 0: **a session must never cost more because of us.**
 
 **Contents:** [Test it on your own work](#test-it-on-your-own-work) ·
 [Latest results](#latest-results-2026-10-15) · [Kit commands](#kit-commands) ·
-[Running our bench](#running-our-bench) · [How a round works](#how-a-round-works) ·
+[Running our bench](#running-our-bench) · [Gateway setup](#gateway-setup) ·
+[How a round works](#how-a-round-works) ·
 [Reading the verdict](#reading-the-verdict) · [Comparison modes](#comparison-modes) ·
 [Scenarios](#scenarios) · [Other lanes](#other-lanes) · [Run options](#run-options) ·
-[Gateway setup](#gateway-setup) · [Replay suite](#the-replay-suite-secondary) ·
+[Replay suite](#the-replay-suite-secondary) ·
 [On your own traffic](#on-your-own-traffic) · [Layout](#layout)
 
 More detail: [docs/kit-internals.md](docs/kit-internals.md) (what each kit command checks
@@ -109,23 +110,27 @@ Pooled Rule 0: PASS
 Cost per session: direct $1.30, Anyray $0.96 (26% lower)
 ```
 
-When some kinds the test evaluated were still in shadow on your tenant, a `Kinds:` line after
-the pooled verdict says how many: your live traffic gets them only after they are promoted.
+How to read it:
 
-Rule 0 passes only when Anyray wins clearly more pairs than noise alone would and the
-third quartile still saves: it judges the tail, not the average, so the line shows the
-tail (Q3 and the worst pair) beside the median. The quality clause is your own check run
-on both arms: a cheaper run that fails it is never a win. Claude copies the verdict word
-for word and writes `anyray-test/report.html`, an offline page with no content from your
-task, built by the kit: the headline, every scenario's tail, savings by session length
-and every pair with its checks. Paste a plan, verdict or report back to Claude later to
-pick up where you left off.
+- **`median`, `CI`, `pass`:** the paired cost verdict. `pass` needs at least 8 pairs and a
+  95% interval that stays below 1.
+- **`Rule 0 PASS`:** Anyray wins clearly more pairs than noise alone would, and the third
+  quartile (`Q3`) still saves. It judges the tail, not the average, so the line shows `Q3`
+  and the worst pair beside the median. See [Reading the verdict](#reading-the-verdict).
+- **`Anyray passed 10 of 10, direct 10 of 10`:** your own check, run on both arms. A
+  cheaper run that fails it is never a win.
+- **`Kinds:`** (when shown): how many kinds the test evaluated were still in shadow on
+  your tenant. Your live traffic gets them only after they are promoted.
+- **`Next:`** (when the verdict cannot decide yet): for example
+  `Next: Run 6 more pairs (about $12.00) to reach the minimum of 8.`, priced at your own
+  pair cost. Running them is a new paid run with its own Start.
+- **`Note:`** (when the interval includes 1): there is no clear difference from direct.
+  Rule 0 judges the tail, so it can read FAIL on a tie; the Rule 0 word is never softened.
 
-If a verdict cannot decide yet (too few pairs, or too noisy), it ends with a line such as
-`Next: Run 6 more pairs (about $12.00) to reach the minimum of 8.`, priced at your own pair
-cost. Running them is a new paid run with its own Start. When the interval includes 1 a
-`Note:` says there is no clear difference from direct, because Rule 0 judges the tail and
-can read FAIL on a tie; the Rule 0 word itself is never softened.
+Claude copies the verdict word for word and writes `anyray-test/report.html`: an offline
+page with no content from your task. It shows the headline, every scenario's tail, savings
+by session length and every pair with its checks. Paste a plan, verdict or report back to
+Claude later to pick up where you left off.
 
 ### 8. Publish, if you want to
 
@@ -314,6 +319,64 @@ npm run agent:report     # → results/agent/report.html
   sessions on the one subscription, hence the low cap. Each round is saved as it finishes,
   so an interrupted run keeps them.
 - `npm test` uses stubs and makes no model requests.
+
+## Gateway setup
+
+### Use a dedicated tenant
+
+> [!IMPORTANT]
+> The gateway keeps regret-guard verdicts, cooloffs and holdouts per tenant, and the
+> tenant comes from the client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose tenant
+> only benchmarks use, and `ANYRAY_BENCH_TENANT` to its id. Without it the run warns and
+> uses the shared `default` tenant. A separate tenant needs a multi-tenant gateway
+> (`ANYRAY_MULTI_TENANT=true`).
+
+### Turn strategies on for benchmark traffic only
+
+```bash
+npm run bench-rule -- show           # what is on and off, and what the regret guard suppresses now
+npm run bench-rule -- enable [kind…] # default: every strategy that is off
+npm run bench-rule -- only <kind…>   # just these on, every other strategy off
+                                     # either takes --params '{"<kind>":{…}}'
+npm run bench-rule -- per-experiment <kind…>  # one rule per kind, picked with --strategy <kind>
+npm run bench-rule -- remove                  # removes what enable, only and per-experiment added
+npm run bench-rule -- params <experiment> --params '{"<kind>":{…}}'  # params for one experiment tag
+npm run bench-rule -- remove-params <experiment>                    # removes exactly that rule
+```
+
+- Every rule matches `metadata.tool == "anyray-bench"`, which only this harness sends, so
+  other traffic keeps its config.
+- The config before the change is saved to `results/optimizer-config.before.json`.
+- `params` writes are revision-checked: a concurrent edit is retried, never overwritten.
+  Param names are checked against the deployed optimizer, since a misspelt one does nothing.
+- Gateways in `config.yaml` `run.blocked_gateways` are refused (the kit refuses them at plan
+  and freeze with `plan_gateway_blocked`). Benchmark config changes never touch our hosted
+  gateway, gateway.anyray.ai; benchmark traffic may run there.
+
+### Pick a Claude Code integration level
+
+```bash
+ANYRAY_CONNECT_BIN=/absolute/path/to/anyray-connect npm run agent -- \
+  --scenario cobra-flag-groups --kinds observation_mask --integration-level gateway_hooks
+npm run bench-level -- show
+npm run bench-level -- set gateway
+npm run bench-level -- clear
+```
+
+`--integration-level gateway|gateway_hooks|gateway_hooks_mcp` sets the level on the
+benchmark key for the run and restores it afterwards, even on Ctrl-C. `--read-trim` needs
+`gateway_hooks_mcp`. For a service key pass `--agent <id>`; for a user seat `--user <id>`.
+
+### Connect checks and pinned builds
+
+Every round checks that `anyray-connect` set up the Anyray arm correctly: what it wrote
+before the session, and what the session loaded. A failed required check fails the round
+instead of measuring a half-connected client.
+
+`ANYRAY_CONNECT_BIN=<abs path>` (every Anyray arm) and `--connect-bin-b <abs path>` (B
+only) pin the Connect build an arm runs. The harness makes sure an installed Connect
+desktop app cannot take over, and fails the round if a different build ran. Details:
+[docs/harness-internals.md](docs/harness-internals.md#connect-checks).
 
 ## How a round works
 
@@ -515,14 +578,9 @@ ANTHROPIC_API_KEY=<key> npm run agent -- --scenarios-dir ./client-scenarios \
 - Seat-expiry checks are skipped on this lane. Rounds go to their own file (label `api-key`).
 - It covers Claude Code on an API key only: not seat headroom, and not SDK agents.
 
-The parity twin is [twins/go-protogetter-lint](twins/go-protogetter-lint): fix the
-protogetter findings in hashicorp/go-plugin v1.6.3 (43 findings in six files), pinned to
-Go 1.27.1 and golangci-lint 2.13.2. A shim maps the old `--disable-all` flag to
-golangci-lint v2's `--default=none`. The grader runs the real binary and fails on any
-finding, a failed build or test, a `nolint` comment, or a lint-config edit.
-
-A twin names no customer. `tests/customerIdentifiers.test.mjs` checks every tracked file
-against hashed identifiers, by whole word.
+The parity twin is [twins/go-protogetter-lint](twins/go-protogetter-lint): fix 43
+protogetter lint findings in hashicorp/go-plugin. How it is pinned and graded is in
+[docs/harness-internals.md](docs/harness-internals.md#parity-twin).
 
 ### On AWS Bedrock
 
@@ -680,64 +738,6 @@ Each flag is recorded in the result file. The exact fields, limits and refusals 
 - `SHARED FILE with the other arm`: both arms wrote the same file outside their checkouts,
   usually a test log under `/tmp`. The arms run at once, so each could overwrite or read
   the other's. The round is excluded as `shared file`.
-
-## Gateway setup
-
-### Use a dedicated tenant
-
-> [!IMPORTANT]
-> The gateway keeps regret-guard verdicts, cooloffs and holdouts per tenant, and the
-> tenant comes from the client key. Set `ANYRAY_BENCH_CLIENT_KEY` to a key whose tenant
-> only benchmarks use, and `ANYRAY_BENCH_TENANT` to its id. Without it the run warns and
-> uses the shared `default` tenant. A separate tenant needs a multi-tenant gateway
-> (`ANYRAY_MULTI_TENANT=true`).
-
-### Turn strategies on for benchmark traffic only
-
-```bash
-npm run bench-rule -- show           # what is on and off, and what the regret guard suppresses now
-npm run bench-rule -- enable [kind…] # default: every strategy that is off
-npm run bench-rule -- only <kind…>   # just these on, every other strategy off
-                                     # either takes --params '{"<kind>":{…}}'
-npm run bench-rule -- per-experiment <kind…>  # one rule per kind, picked with --strategy <kind>
-npm run bench-rule -- remove                  # removes what enable, only and per-experiment added
-npm run bench-rule -- params <experiment> --params '{"<kind>":{…}}'  # params for one experiment tag
-npm run bench-rule -- remove-params <experiment>                    # removes exactly that rule
-```
-
-- Every rule matches `metadata.tool == "anyray-bench"`, which only this harness sends, so
-  other traffic keeps its config.
-- The config before the change is saved to `results/optimizer-config.before.json`.
-- `params` writes are revision-checked: a concurrent edit is retried, never overwritten.
-  Param names are checked against the deployed optimizer, since a misspelt one does nothing.
-- Gateways in `config.yaml` `run.blocked_gateways` are refused (the kit refuses them at plan
-  and freeze with `plan_gateway_blocked`). Benchmark config changes never touch our hosted
-  gateway, gateway.anyray.ai; benchmark traffic may run there.
-
-### Pick a Claude Code integration level
-
-```bash
-ANYRAY_CONNECT_BIN=/absolute/path/to/anyray-connect npm run agent -- \
-  --scenario cobra-flag-groups --kinds observation_mask --integration-level gateway_hooks
-npm run bench-level -- show
-npm run bench-level -- set gateway
-npm run bench-level -- clear
-```
-
-`--integration-level gateway|gateway_hooks|gateway_hooks_mcp` sets the level on the
-benchmark key for the run and restores it afterwards, even on Ctrl-C. `--read-trim` needs
-`gateway_hooks_mcp`. For a service key pass `--agent <id>`; for a user seat `--user <id>`.
-
-### Connect checks and pinned builds
-
-Every round checks that `anyray-connect` set up the Anyray arm correctly: what it wrote
-before the session, and what the session loaded. A failed required check fails the round
-instead of measuring a half-connected client.
-
-`ANYRAY_CONNECT_BIN=<abs path>` (every Anyray arm) and `--connect-bin-b <abs path>` (B
-only) pin the Connect build an arm runs. The harness makes sure an installed Connect
-desktop app cannot take over, and fails the round if a different build ran. Details:
-[docs/harness-internals.md](docs/harness-internals.md#connect-checks).
 
 ## The replay suite (secondary)
 

@@ -8,6 +8,7 @@ it records. For running the benchmark, start at the [README](../README.md).
 - [Tail check](#tail-check)
 - [Comparison mode details](#comparison-mode-details)
 - [Session end and grading](#session-end-and-grading)
+- [Parity twin](#parity-twin)
 - [Bedrock small model](#bedrock-small-model)
 - [Per-token agents](#per-token-agents)
 - [Codex hook isolation](#codex-hook-isolation)
@@ -149,6 +150,17 @@ changes.
 attested the cache expiry, the tokens each strategy removed, what the provider wrote and
 read, and why a strategy declined. It flags a gateway restart, different kinds held out
 per arm, a rule that changed, or a cold turn that was not attested.
+
+## Parity twin
+
+The parity twin is [twins/go-protogetter-lint](twins/go-protogetter-lint): fix the
+protogetter findings in hashicorp/go-plugin v1.6.3 (43 findings in six files), pinned to
+Go 1.27.1 and golangci-lint 2.13.2. A shim maps the old `--disable-all` flag to
+golangci-lint v2's `--default=none`. The grader runs the real binary and fails on any
+finding, a failed build or test, a `nolint` comment, or a lint-config edit.
+
+A twin names no customer. `tests/customerIdentifiers.test.mjs` checks every tracked file
+against hashed identifiers, by whole word.
 
 ## Bedrock small model
 
