@@ -10,14 +10,15 @@ against Anyray's Rule 0: **a session must never cost more because of us.**
 
 **Contents:** [Test it on your own work](#test-it-on-your-own-work) ·
 [Latest results](#latest-results-2026-10-15) · [Kit commands](#kit-commands) ·
-[Running the bench](#running-the-bench) · [How a round works](#how-a-round-works) ·
+[Running our bench](#running-our-bench) · [How a round works](#how-a-round-works) ·
 [Reading the verdict](#reading-the-verdict) · [Comparison modes](#comparison-modes) ·
 [Scenarios](#scenarios) · [Other lanes](#other-lanes) · [Run options](#run-options) ·
 [Gateway setup](#gateway-setup) · [Replay suite](#the-replay-suite-secondary) ·
-[Layout](#layout)
+[On your own traffic](#on-your-own-traffic) · [Layout](#layout)
 
-Harness internals (what each check does and which fields it records) are in
-[docs/harness-internals.md](docs/harness-internals.md).
+More detail: [docs/kit-internals.md](docs/kit-internals.md) (what each kit command checks
+and records), [docs/harness-internals.md](docs/harness-internals.md) (what each harness
+check does) and [docs/results-history.md](docs/results-history.md) (earlier runs).
 
 ## Test it on your own work
 
@@ -145,20 +146,21 @@ whenever your gateway moves to a new release. Setup is under
 
 ### Multi-tenant gateways
 
-A gateway running in Anyray-hosted multi-tenant (fleet) mode cannot mint the self-serve
-test key, because a key minted by the gateway cannot authenticate there. On such a
-gateway, use your normal key as `ANYRAY_BENCH_CLIENT_KEY` with a tenant-bound admin key
-as `ANYRAY_ADMIN_KEY`, and pin the kinds to evaluate when you freeze:
+A gateway in Anyray-hosted multi-tenant (fleet) mode cannot mint the self-serve test key.
+On such a gateway, set your normal key as `ANYRAY_BENCH_CLIENT_KEY` and a tenant-bound
+admin key as `ANYRAY_ADMIN_KEY`, and pin the kinds to evaluate when you freeze:
 
 ```bash
 npm run freeze -- --scenarios-dir ./anyray-test --kinds auto ...
 ```
 
-`auto` reads the kinds that are on for your tenant with the admin key and pins them: sorted,
-deduplicated and part of the plan hash, so the test measures what you would get. They are sent
-as `x-anyray-optimization-kinds` on the Anyray arm only. A tenant with no kind on is refused
-(`plan_kinds_empty`). You can also name kinds yourself (`--kinds code_graph,observation_mask`),
-but then the test measures that list, not your tenant's. Without `--kinds` nothing changes.
+- `auto` reads the kinds that are on for your tenant and pins them in the plan hash, so
+  the test measures what you would get. They go to the Anyray arm only, as
+  `x-anyray-optimization-kinds`.
+- A tenant with no kind on is refused (`plan_kinds_empty`).
+- `--kinds code_graph,observation_mask` names kinds yourself; the test then measures that
+  list, not your tenant's.
+- Without `--kinds` nothing changes.
 
 ### Checking this machine yourself
 
@@ -169,16 +171,15 @@ anyray-connect test-key --json
 npm run -s doctor -- --json
 ```
 
-Connect uses your enrolled identity and saves a key that lasts seven days in
-`~/.anyray/test-kit.env`, readable only by you (mode 0600). The kit reads the file. You
-can override its gateway and key with `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY`.
-Keep keys out of chat and scenario files.
-
-Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
-gateway context, one 1-token probe, the upstream credential and header settings. It
-reports each failed code and its fix. Exit 0 means ready; exit 2 means fix a check and
-retry. Probe latency over ten seconds is a `gateway_slow` warning. Doctor never prints a
-key. Rerun the test-key command when the key expires.
+- Connect saves a key that lasts seven days in `~/.anyray/test-kit.env` (mode 0600).
+  Rerun the test-key command when it expires.
+- `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` override the file's gateway and key.
+  Keep keys out of chat and scenario files.
+- Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
+  gateway context, a 1-token probe, the upstream credential and header settings. It never
+  prints a key.
+- Exit 0 means ready; exit 2 means fix the named check and retry. A probe over ten seconds
+  is a `gateway_slow` warning.
 
 ## Latest results (2026-10-15)
 
@@ -219,225 +220,78 @@ or more between runs on the agent's path alone (`pyrepo-docs` 0.55× then, 0.35�
 
 - **Clients that send no cache markers** (`sdk-docs`, `framework-docs`): the gateway
   adds cache breakpoints, so most of each request's input becomes a cache read.
-- **A seat with many MCP tools:** gateway tool deferral keeps the tool schemas out of
-  every request (about 135k tokens on the 200-tool seat). On a plain Claude Code seat it
-  still defers about 7k tokens of rarely used tools per request.
-- **Doc and code-trace tasks** (`pyrepo-docs`, `pyrepo-pillar-docs`, `pyrepo-state-docs`):
-  the Anyray arm's main agent reads the code itself with ranged batch reads, in 33 to 39
-  requests and none in subagents; the direct arms made 97 to 130, 83 to 86 of them in the
-  3 to 5 subagents they fanned the trace out to.
+- **A seat with many MCP tools:** tool deferral keeps the tool schemas out of every
+  request (about 135k tokens on the 200-tool seat, about 7k on a plain seat).
+- **Doc and code-trace tasks** (`pyrepo-*-docs`): the Anyray arm's main agent reads the
+  code itself with ranged batch reads, in 33 to 39 requests. The direct arms made 97 to
+  130, most of them in the 3 to 5 subagents they fanned the trace out to.
 - **Long test output** (`gin-test-triage`, `gin-long-session`): failures are grepped
   instead of read whole, and long command output is folded.
 
 **Where it is close or lost**
 
-- On a task of 4 to 8 requests (`cobra-flag-groups`, `cobra-dispatch`, `pyrepo-loader`),
-  Anyray's built-in saving is a few percent, while one optional step changes a session's
-  cost by about 20%, so single rounds land on either side of 1.0×.
-- `gin-doc-audit` (1.05×): in the counted round the direct arm did the audit without
-  subagents and finished at $1.09, against a $1.82 median in the 2026-10-11 run; the
-  Anyray arm's $1.15 is below its own $1.31 median there. The first round (0.43×) was
-  not counted: its direct arm wrote to `/tmp`.
-- `cobra-web-flags` (1.60×): to load the deferred WebFetch tool, the gateway's tool
-  search ran an extra model step inside one request, adding about 9k uncached input
-  tokens ($0.04 of the $0.15). Usually the model calls the deferred tool directly: only
-  one of 82 earlier Anyray sessions of this scenario paid more than 1k uncached input.
+- **Short tasks** of 4 to 8 requests (`cobra-flag-groups`, `cobra-dispatch`,
+  `pyrepo-loader`): the saving is a few percent, smaller than the noise of one round.
+- `gin-doc-audit` (1.05×): the counted direct arm skipped subagents and cost $1.09,
+  against its $1.82 median in the 2026-10-11 run.
+- `cobra-web-flags` (1.60×): tool search ran an extra model step to load the deferred
+  WebFetch tool, about 9k uncached input tokens. Only one of 82 earlier Anyray sessions
+  of this scenario paid more than 1k uncached input.
 
 **Notes**
 
-- New in the default set since the 2026-10-11 run: `repeat_factor`, which replaces a long
-  block repeated across tool results or pasted user context with a pointer to its first
-  copy, still in the request. It acted only on the two long sessions. An on/off pair
-  (three rounds of each long session) found it lossless and under 1% of session cost
-  here: it acted in 2 of 6 sessions, each time on one repeated block of about 470 tokens.
-- `pyrepo-long-session` has no counted pair: in both of its rounds the direct arm wrote
-  a scratch file to `/tmp`, outside its checkout, which the harness excludes on purpose.
-  Both were cheaper through Anyray (0.59× and 0.72×).
+- `repeat_factor` is new in the default set since 2026-10-11. It replaces a long block
+  repeated across tool results with a pointer to its first copy. An on/off pair found it
+  lossless and under 1% of session cost here.
+- `pyrepo-long-session` has no counted pair: in both rounds the direct arm wrote a scratch
+  file to `/tmp`, outside its checkout, which the harness excludes on purpose.
 - Both arms solved every round. `cobra-3pause` and `cobra-walkaway` were not in this run.
 - The [paired verdict](#reading-the-verdict) needs at least 8 valid rounds per scenario;
   this run is a one-round check against the last multi-round one.
 
-### Agent SDK app: arm E against arm B (2026-10-13)
-
-16 paired rounds of [`sdk-app-code-scan`](#agent-sdk-app-code-scan) on the dev gateway,
-Claude Sonnet 5.5, each arm on its own fresh key. Arm E ran a prototype Connect build: the
-`sdk` source plus the ANY-1124 path fix. Rounds 1 to 8 used the fix branch (5e6daef1a),
-rounds 9 to 16 used main (ee91f8337). The instructions were the same in both builds.
-
-| Rounds | E cheaper | Median E/B | Q3 | Max | Geometric mean (95% interval) |
-|---|---|---|---|---|---|
-| 1 to 8 | 6 of 8 | 0.941 | 0.989 | 1.103 | 0.961 (0.897 to 1.029) |
-| 9 to 16 | 8 of 8 | 0.844 | 0.877 | 0.939 | 0.830 (0.768 to 0.896) |
-| All 16 | 14 of 16 | 0.896 | 0.940 | 1.103 | 0.893 (0.841 to 0.949) |
-
-Every E session made 1 to 5 batch reads; 40 of 41 were served (one `invalid_arguments`).
-E made 238 Reads to B's 423, and 390 requests to B's 424. Every session completed in 7
-main-agent turns. B found 8 of 9 facts in every round; E found 8 of 9 in 15 rounds and 7
-in round 10. Both arms always missed `_SESSION_AUDIT_FORMAT`.
+Earlier runs, such as the Agent SDK app arm comparison, are in
+[docs/results-history.md](docs/results-history.md).
 
 ## Kit commands
 
-The skill runs these for you. To drive the kit yourself, run them from this checkout.
+The skill runs these for you. To drive the kit yourself, run them from this checkout, in
+this order. Every command takes `--json`, and all but `doctor` take `--scenarios-dir <dir>`. What each one
+checks, records and refuses is in [docs/kit-internals.md](docs/kit-internals.md).
 
-### Plan before spending
+| Command | What it does |
+|---|---|
+| `npm run -s doctor` | Checks this machine and the test key |
+| `npm run -s plan -- --budget-usd N --gateway <url>` | Shows what the budget can prove. No model calls, no files. |
+| `npm run -s freeze -- --model … --provider … --client … --client-version … --gateway <url>` | Locks the plan hash over scenarios, pins and predictions |
+| `npm run -s verify` | Checks the files still match the frozen plan |
+| `npm run -s noise -- --claude-bin <abs> --rounds 6 --budget-usd N` | Direct-vs-direct rounds that measure your noise floor |
+| `npm run -s run -- --claude-bin <abs> --budget-usd N --redraw-holdout 2` | Paired rounds, direct vs Anyray, inside the budget |
+| `npm run -s verdict` | Rule 0, the paired cost verdict and the tail check |
+| `npm run -s report -- --redact` | Local report and `report.html`, with no task content |
+| `npm run -s publish-result` | Sends the redacted body to your gateway |
+| `npm run -s release-check` | Says whether the gateway version changed since the last published result |
 
-For client scenarios, set `source: client` (or `proposed` for a task we proposed)
-and pin `repo.ref` to a 40-character commit. Keep the directory locally. Then:
-
-```bash
-npm run -s plan -- --scenarios-dir ./client-scenarios --budget-usd 500 --gateway https://your-gateway.example --json
-```
-
-With a budget alone, the plan sets `pairsPlanned: null` and the spend ceiling to
-your budget. Pairs are set after noise measures your session cost.
-
-Optional `--session-cost-usd 0.15` supplies your typical direct session cost. The plan takes the
-six noise rounds (two direct sessions per scenario each) off the budget first, splits
-the rest evenly across scenarios, and reports pairs needed, the saving detectable at
-that budget, and a spend ceiling that includes the noise rounds. A budget that cannot
-cover noise plus one pair per scenario is refused with `plan_budget_too_small` and
-the minimum budget. It uses the paired log-ratio SD prior of 0.924,
-80% power and two-sided 95% confidence: 20%, 10% and 30% savings need 135, 604 and
-53 pairs respectively. An insufficient budget is reported with `resolvable: false`.
-
-With the test key, the plan reads your tenant's context. Kinds that are on or in
-shadow are evaluated on the test sessions only. Kinds that are off stay off. An
-unreadable context blocks planning. The plan makes no model calls and writes no
-files. Omit `--json` for human output; use `--client codex` to classify a Codex seat
-(the default is Claude Code).
-
-Operators and CI can still set an admin token to use the existing routes. On that
-path, `--tenant <id>` selects a tenant and an all-shadow gate blocks planning.
-
-[predictions.yaml](predictions.yaml) records bands from the published results.
-Every current seed has fewer than eight attributable public rounds, so it prints
-`prediction: none`. The older aggregate run cannot supply per-shape round counts.
-The check-single shape also cannot distinguish a short fix from test-output
-triage; its source records both ratios and the resulting wide band.
-
-Freeze records these predictions and the kit's Git HEAD before the run:
-
-```bash
-npm run -s freeze -- --scenarios-dir ./client-scenarios --model claude-sonnet-5 --provider anthropic --client claude-code --client-version 2.1.300 --gateway https://your-gateway.example --json
-npm run -s verify -- --scenarios-dir ./client-scenarios --json
-```
-
-The keyed plan hash covers every scenario file, pins, kit commit and prediction.
-Verify retains the frozen predictions even if the catalog changes. Use
-`freeze --replace` to write a new plan with a fresh nonce and current catalog.
-The lock contains ids, hashes and predictions; task and file contents stay local.
-
-Each release refreshes the catalog from vendor-admin's content-free calibration document:
-run `npm run calibrate -- --from <file>`, review and commit `predictions.yaml`.
-Calibration keeps every miss and publishes a band's hit rate after eight client test
-rounds. Plans show how often the band was right; reports read the current catalog.
-
-### Measure, run and share a client plan
-
-Use Claude Code for kit execution. Run `anyray-connect test-key --json`, then
-`npm run -s doctor -- --json`. Plan, noise, run, verdict, report, publish-result
-and release-check need no admin token. Both arms use the resolved `--claude-bin`
-build, checked against the version in the lock. Keep the same gateway and key
-throughout the test.
-
-```bash
-npm run -s noise -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --rounds 6 --budget-usd 500 --json
-npm run -s run -- --scenarios-dir ./client-scenarios --claude-bin /absolute/path/to/claude --budget-usd 500 --redraw-holdout 2 --json
-npm run -s verdict -- --scenarios-dir ./client-scenarios --json
-npm run -s report -- --scenarios-dir ./client-scenarios --redact
-npm run -s report -- --scenarios-dir ./client-scenarios --redact --json
-npm run -s publish-result -- --scenarios-dir ./client-scenarios --json
-```
-
-Noise comes first: at least six interleaved direct-vs-direct pairs per scenario
-measure the pooled within-scenario log-ratio SD. A signed `noise` block records
-that floor without changing the plan hash, and the command reprints pairs needed
-at the measured SD. Repeating `noise` or `run` adds rounds to that plan.
-
-Pass the same positive `--budget-usd` to noise and run. Before every round, the
-guard counts all recorded session costs for the plan, including earlier noise
-and failed rounds. It stops if spend has reached the budget or adding the most
-expensive recorded round would exceed it. Only a plan's first round has no cost
-estimate. `budget_reached` exits successfully and reports spend, budget and rounds
-run by this command, possibly zero. Without `--rounds`, a budgeted run uses the
-remaining budget divided by mean recorded pair cost, rounded down and capped at
-the band's pairs needed. Use `--rounds` to request a specific count.
-
-Each finished round prints its id, costs, ratio, total spend and estimated time
-left on stderr. Failed rounds are saved and excluded from scoring. One failure
-allows the run to continue. Two consecutive failures stop with `run_failed`;
-`auth_error` stops at once. Other failure labels are `timeout`, `no_result`,
-`crash` and `gateway_error`. Failure stops exit 1.
-
-Paired runs use the test key's evaluation cohort without a kinds selection header.
-They record `kindsObserved`, use `tool: anyray-bench` on every gateway request, and use
-a hash prefix for attribution instead of the client's scenario name. Early
-holdouts of any kind trigger fresh pairs; the final draw is excluded as
-`holdout drawn`, even with `--redraw-holdout 0`. The default is two redraws.
-Header overrides from `ANYRAY_BENCH_EXTRA_HEADERS` or `ANYRAY_BENCH_SHARED_HEADERS`
-are refused.
-
-Records live in `<scenarios-dir>/.kit-results/<planHash>/`, with an ignoring
-`.gitignore`. They retain hashes, counts, costs, outcomes and versions, built
-from an allowlist after grading. Tasks, repositories, patches, transcripts,
-tool I/O, diffs and check output do not enter the records. Replacing a frozen
-plan starts a separate results directory. The lock's nonce stays local.
-
-Verdict uses both existing verdict libraries and compares actual medians with
-the frozen bands. Report requires `--redact`; its human form includes scenario
-ids, while JSON contains aggregate shapes and statistics only. The JSON body
-keeps full precision; human ratios and confidence bounds use three decimals. It
-is validated against the gateway client-tests schema before it is printed or
-published. A missing or mixed gateway version prevents sharing. Publishing
-sends that same body to the frozen gateway and prints only the result id.
-For legacy `results/agent/` records, `npm run agent:report -- --redact` creates
-an HTML page from an allowlist too.
+- Pass the same `--budget-usd` to `noise` and `run`. The guard counts every recorded
+  session, noise and failed rounds included, and stops before the budget is passed.
+- One failed round lets a run continue; two in a row stop it (`run_failed`).
+- Records stay in `<scenarios-dir>/.kit-results/<planHash>/`: hashes, counts, costs and
+  outcomes only, never tasks, transcripts or tool output.
 
 ### Rerun on every release
 
-Copy [kit/workflows/anyray-regression.yml](kit/workflows/anyray-regression.yml)
-into your private scenarios repository as `.github/workflows/anyray-regression.yml`.
-Commit the scenarios and `plan.lock.json` at its root after measuring noise.
-Set the repository variable `ANYRAY_GATEWAY_URL` and secrets `ANYRAY_ADMIN_KEY`,
-`ANYRAY_BENCH_CLIENT_KEY`, and `ANYRAY_UPSTREAM_TOKEN` (provider API credentials for
-CI). The admin key needs `settings:read`, `client-tests:read`, `client-tests:write`,
-`optimizer:read`, `traces:read`, and `spend:read`.
+Copy [kit/workflows/anyray-regression.yml](kit/workflows/anyray-regression.yml) into your
+private scenarios repository as `.github/workflows/anyray-regression.yml`, and commit the
+scenarios and `plan.lock.json` after measuring noise. Set `ANYRAY_GATEWAY_URL`,
+`ANYRAY_ADMIN_KEY`, `ANYRAY_BENCH_CLIENT_KEY` and `ANYRAY_UPSTREAM_TOKEN`. A daily
+`release-check` starts paid rounds only when the gateway version changed. The admin-key
+scopes, runner options and public [twins/](twins/) are in
+[docs/kit-internals.md](docs/kit-internals.md#rerun-on-every-release).
 
-The daily check runs `release-check`: it compares the gateway version with the
-newest published result of this plan. Only a changed version starts paid rounds;
-a manual dispatch also runs them. The kit commit and Claude Code version come
-from the lock, and CI keeps the frozen plan and noise floor. An unreadable gateway
-fails the check. To check locally:
+---
 
-```bash
-npm run -s release-check -- --scenarios-dir ./client-scenarios --json
-```
+The rest of this README is for running our own bench on public scenarios.
 
-`ANYRAY_TEST_RUNNER` optionally selects the runner, defaulting to `ubuntu-latest`.
-For a Bedrock plan, select a self-hosted runner whose instance role reaches Bedrock.
-If you add OIDC, add `id-token: write` to your workflow copy. The template supports
-Claude Code plans.
-
-Our public [twins/](twins/) describe task shapes on public repositories. Their ids
-and titles describe the task; client scenarios stay private. Optional `twinOf`
-links a proposed scenario to a client's frozen plan hash (64 lowercase hex, never
-all zeros). Leave it absent until a client plan exists. Publishing that field
-requires the gateway's ANY-1491 schema update; the seed twin omits it.
-
-```bash
-npm run twins -- --release v1.10.520 --gateway https://your-gateway.example --rounds 8 --json
-```
-
-Twins require benchmark and admin credentials. They freeze a fresh temporary copy,
-measure six noise rounds, run paired rounds (eight by default), and publish with
-the supplied release tag. The gateway version is recorded separately. The committed
-twins remain unchanged, and the temporary copy is removed on exit.
-
-A twin with `lane: api-key` in its `scenario.yaml` is left out of this rerun: it is for
-the parity check with `--upstream api-key`, and the rerun is the seat lane.
-
-
-## Running the bench
+## Running our bench
 
 Our own paired bench on public scenarios, the one behind [Latest results](#latest-results-2026-10-15).
 
@@ -445,7 +299,7 @@ Requirements: Node.js 22.13+, the `claude` CLI signed in to a Claude subscriptio
 upstream credential for both arms), `git`, and Go for the cobra and gin checks.
 
 ```bash
-cp .env.example .env     # ANYRAY_GATEWAY_URL, ANYRAY_CLIENT_KEY, ANYRAY_ADMIN_KEY
+cp .env.example .env     # set ANYRAY_GATEWAY_URL; keys are optional overrides
 
 npm run agent -- --scenario cobra-flag-groups --kinds observation_mask,code_graph   # 1 round, ~1 min
 npm run agent -- --scenario cobra-flag-groups --rounds 6 --compare control
@@ -548,37 +402,12 @@ It refuses to pool files with a different scenario, compare mode, model or provi
 ### The tail check
 
 The win-rate, Q3 and mean gates say nothing about one very expensive session. The tail
-check does. It takes T, the largest `log(B / P)` cost ratio over the valid pairs, and
-fails the run when T is above the largest value in every one of K blocks of the same
-number of no-op pairs. Under no effect T and those block maxima are exchangeable, so a
-no-op run fails with probability at most 1/(K+1): 5% at K = 19.
-
-The no-op is the judged pair with the treatment taken out, from result files already on
-disk. Rounds accumulate in them, so every run tops them up:
-
-| Judged pair | Read against |
-|---|---|
-| direct vs Anyray (`--compare anyray`, and every `kit` plan) | `--compare control` pairs (direct vs direct); for a plan, its own `noise` rounds |
-| pass-through vs B (`--compare gateway --bare-a`) | `--compare gateway --bare` pairs (P/P), including the `api-key` lane |
-| any other gateway pair | none: no recorded run is it without its treatment, so no tail check is printed |
-
-A file joins only if its scenario, model, upstream lane, Claude Code version (and gateway
-host, for P/P) match the run being judged; the others are skipped by name.
-
-- **Needs 19 blocks.** For 12 pairs that is 228 P/P pairs. With fewer, the check prints
-  `insufficient calibration` and how many more to collect. It never passes.
-- **Printed with every verdict** that is not itself the noise: `npm run agent`, and
-  `npm run verdict` for a plan (one line per scenario, local only, never published). Or on
-  its own: `node tools/bench-verdict.mjs --noise-library pp.json result.json`, where an
-  excess exits 1 and a library too small to calibrate turns a passing verdict into exit 2.
-- **Topping a plan up:** the verdict prints the command, `npm run noise -- --scenarios-dir
-  <dir> --rounds N`. It appends N control pairs to every scenario in the plan (the floor is
-  6 per call) and keeps the noise block valid.
-- **It is weak, and says so.** At 12 pairs and a log-ratio SD of 0.924 it misses about 93%
-  of runs where one session costs double, and about 74% where every session does: a
-  doubling is smaller than the noise, and more pairs barely help because the largest
-  value grows with them. Those cases are what the win-rate, Q3 and mean gates are for.
-  A run within noise is not proof of safety.
+check does: it fails a run when its worst pair is worse than the worst pair in each of 19
+blocks of no-op pairs (direct vs direct, or pass-through vs pass-through), recorded
+earlier for the same scenario. With too few no-op pairs it prints
+`insufficient calibration` and never passes. It is a weak check and says so. The math,
+the no-op sources and how to top them up are in
+[docs/harness-internals.md](docs/harness-internals.md#tail-check).
 
 ## Comparison modes
 
@@ -956,4 +785,6 @@ config.yaml           model, pricing, blocked gateways, replay workload list
 run.mjs · report.mjs · show.mjs · lib/client.mjs · lib/judge.mjs · lib/toAnthropic.mjs
                       the replay suite
 docs/harness-internals.md  what each harness check does and records
+docs/kit-internals.md      what each kit command checks, records and refuses
+docs/results-history.md    earlier runs
 ```

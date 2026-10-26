@@ -5,6 +5,7 @@ it records. For running the benchmark, start at the [README](../README.md).
 
 - [What a round records](#what-a-round-records)
 - [Verdict details](#verdict-details)
+- [Tail check](#tail-check)
 - [Comparison mode details](#comparison-mode-details)
 - [Session end and grading](#session-end-and-grading)
 - [Bedrock small model](#bedrock-small-model)
@@ -51,6 +52,41 @@ logarithms. The minimum detectable ratio is the largest hypothetical B/A ratio b
 whose 95% interval would clear 1 at the observed variation and sample size. It is a
 confidence threshold, not a power guarantee. One round has no variance estimate, so its
 ratio cannot establish a cost win.
+
+## Tail check
+
+The win-rate, Q3 and mean gates say nothing about one very expensive session. The tail
+check does. It takes T, the largest `log(B / P)` cost ratio over the valid pairs, and
+fails the run when T is above the largest value in every one of K blocks of the same
+number of no-op pairs. Under no effect T and those block maxima are exchangeable, so a
+no-op run fails with probability at most 1/(K+1): 5% at K = 19.
+
+The no-op is the judged pair with the treatment taken out, from result files already on
+disk. Rounds accumulate in them, so every run tops them up:
+
+| Judged pair | Read against |
+|---|---|
+| direct vs Anyray (`--compare anyray`, and every `kit` plan) | `--compare control` pairs (direct vs direct); for a plan, its own `noise` rounds |
+| pass-through vs B (`--compare gateway --bare-a`) | `--compare gateway --bare` pairs (P/P), including the `api-key` lane |
+| any other gateway pair | none: no recorded run is it without its treatment, so no tail check is printed |
+
+A file joins only if its scenario, model, upstream lane, Claude Code version (and gateway
+host, for P/P) match the run being judged; the others are skipped by name.
+
+- **Needs 19 blocks.** For 12 pairs that is 228 P/P pairs. With fewer, the check prints
+  `insufficient calibration` and how many more to collect. It never passes.
+- **Printed with every verdict** that is not itself the noise: `npm run agent`, and
+  `npm run verdict` for a plan (one line per scenario, local only, never published). Or on
+  its own: `node tools/bench-verdict.mjs --noise-library pp.json result.json`, where an
+  excess exits 1 and a library too small to calibrate turns a passing verdict into exit 2.
+- **Topping a plan up:** the verdict prints the command, `npm run noise -- --scenarios-dir
+  <dir> --rounds N`. It appends N control pairs to every scenario in the plan (the floor is
+  6 per call) and keeps the noise block valid.
+- **It is weak, and says so.** At 12 pairs and a log-ratio SD of 0.924 it misses about 93%
+  of runs where one session costs double, and about 74% where every session does: a
+  doubling is smaller than the noise, and more pairs barely help because the largest
+  value grows with them. Those cases are what the win-rate, Q3 and mean gates are for.
+  A run within noise is not proof of safety.
 
 ## Comparison mode details
 
