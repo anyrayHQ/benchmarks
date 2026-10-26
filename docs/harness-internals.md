@@ -153,7 +153,7 @@ per arm, a rule that changed, or a cold turn that was not attested.
 
 ## Parity twin
 
-The parity twin is [twins/go-protogetter-lint](twins/go-protogetter-lint): fix the
+The parity twin is [twins/go-protogetter-lint](../twins/go-protogetter-lint): fix the
 protogetter findings in hashicorp/go-plugin v1.6.3 (43 findings in six files), pinned to
 Go 1.27.1 and golangci-lint 2.13.2. A shim maps the old `--disable-all` flag to
 golangci-lint v2's `--default=none`. The grader runs the real binary and fails on any
