@@ -1,6 +1,6 @@
 // The committed shape catalog (ANY-1486): predictions.yaml at the kit root maps content-free
 // scenario shapes to a predicted band of paired cost ratios. Bands, never points; parity is an
-// explicit prediction; every band is seeded from the README's published results and carries the
+// explicit prediction; every band is seeded from the published results in docs/results.md and carries the
 // number of public rounds behind it. Read straight from the file: what plan does with it is
 // tests/kitPlan.test.mjs.
 
@@ -46,10 +46,10 @@ test('shape ids are unique and no two shapes match on the same features', () => 
   assert.equal(new Set(matches).size, matches.length, 'two shapes have the same match: the second can never be chosen');
 });
 
-test('every band endpoint is a ratio published in the README "Latest results (2026-10-15)" section', () => {
-  const readme = readFileSync(join(KIT_ROOT, 'README.md'), 'utf8');
+test('every band endpoint is a ratio published in the docs/results.md "Latest results (2026-10-15)" section', () => {
+  const readme = readFileSync(join(KIT_ROOT, 'docs', 'results.md'), 'utf8');
   const start = readme.indexOf('## Latest results (2026-10-15)');
-  assert.ok(start >= 0, 'the README has the 2026-10-15 results section');
+  assert.ok(start >= 0, 'docs/results.md has the 2026-10-15 results section');
   const end = readme.indexOf('\n## ', start + 1);
   const section = readme.slice(start, end < 0 ? undefined : end);
   const published = [...section.matchAll(/(\d+\.\d+)×/g)].map((m) => Number(m[1]));

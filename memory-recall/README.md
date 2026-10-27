@@ -5,7 +5,7 @@ past sessions, decisions, research notes, a back catalogue, a week of activity �
 and recall a large slice of it to answer a narrow question. The whole store is
 billed unless it's filtered to what the question actually touches.
 
-Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see the [README](../README.md#the-replay-suite-secondary).
+Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see [the replay suite](../docs/bench.md#the-replay-suite-secondary).
 
 | Workload | Payload |
 |---|---|

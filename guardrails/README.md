@@ -4,7 +4,7 @@
 enterprise LLM traffic (**18%** exact duplicates, **~47%** semantically similar) —
 the cache case.
 
-Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see the [README](../README.md#the-replay-suite-secondary).
+Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see [the replay suite](../docs/bench.md#the-replay-suite-secondary).
 
 | Workload | Payload |
 |---|---|
