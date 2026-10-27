@@ -5,14 +5,35 @@ command checks, records and refuses. To run a test, start at the
 [README](../README.md#test-it-on-your-own-work); the `anyray-test` skill runs these
 commands for you.
 
+- [Doctor](#doctor)
 - [Plan](#plan)
 - [Predictions and calibration](#predictions-and-calibration)
 - [Freeze and verify](#freeze-and-verify)
+- [Multi-tenant gateways](#multi-tenant-gateways)
 - [Noise and paired runs](#noise-and-paired-runs)
 - [Records](#records)
 - [Verdict, report and publish](#verdict-report-and-publish)
 - [Rerun on every release](#rerun-on-every-release)
 - [Public twins](#public-twins)
+
+## Doctor
+
+The skill runs these for you. Run them by hand to debug a failure.
+
+```bash
+anyray-connect test-key --json
+npm run -s doctor -- --json
+```
+
+- Connect saves a key that lasts seven days in `~/.anyray/test-kit.env` (mode 0600).
+  Rerun the test-key command when it expires.
+- `ANYRAY_GATEWAY_URL` and `ANYRAY_BENCH_CLIENT_KEY` override the file's gateway and key.
+  Keep keys out of chat and scenario files.
+- Doctor checks Node, git, a clean kit checkout, Claude Code, Connect, the test key,
+  gateway context, a 1-token probe, the upstream credential and header settings. It never
+  prints a key.
+- Exit 0 means ready; exit 2 means fix the named check and retry. A probe over ten seconds
+  is a `gateway_slow` warning.
 
 ## Plan
 
@@ -72,7 +93,25 @@ npm run -s verify -- --scenarios-dir ./client-scenarios --json
 - The lock contains ids, hashes and predictions; task and file contents stay local. The
   lock's nonce stays local too.
 - `--kinds auto|<k1,k2>` pins the optimizer kinds the test evaluates, for multi-tenant
-  gateways. See [Multi-tenant gateways](../README.md#multi-tenant-gateways).
+  gateways. See [Multi-tenant gateways](#multi-tenant-gateways).
+
+## Multi-tenant gateways
+
+A gateway in Anyray-hosted multi-tenant (fleet) mode cannot mint the self-serve test key.
+On such a gateway, set your normal key as `ANYRAY_BENCH_CLIENT_KEY` and a tenant-bound
+admin key as `ANYRAY_ADMIN_KEY`, and pin the kinds to evaluate when you freeze:
+
+```bash
+npm run freeze -- --scenarios-dir ./anyray-test --kinds auto ...
+```
+
+- `auto` reads the kinds that are on for your tenant and pins them in the plan hash, so
+  the test measures what you would get. They go to the Anyray arm only, as
+  `x-anyray-optimization-kinds`.
+- A tenant with no kind on is refused (`plan_kinds_empty`).
+- `--kinds code_graph,observation_mask` names kinds yourself; the test then measures that
+  list, not your tenant's.
+- Without `--kinds` nothing changes.
 
 ## Noise and paired runs
 

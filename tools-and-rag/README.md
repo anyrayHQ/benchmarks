@@ -5,7 +5,7 @@ definitions riding along before the first message, RAG pipelines over-fetch
 **3–5×** the chunks the answer uses, and templated batch jobs re-paste the same
 instruction block once per item — all billed every call.
 
-Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see the [README](../README.md#the-replay-suite-secondary).
+Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see [the replay suite](../docs/bench.md#the-replay-suite-secondary).
 
 | Workload | Payload |
 |---|---|
