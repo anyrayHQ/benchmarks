@@ -198,6 +198,14 @@ arms elsewhere. The agent builds its clients without them, and refuses any reque
 another host or with an `x-anyray-*` header it did not set. Each request's content block
 types are stored too.
 
+**`framework-api-agent`.** The same graph agent on a synthetic internal API: `searchApi`,
+`selectApi` and `apiCall` over a catalog generated from a seed (`lib/apiCatalog.mjs`, written
+to the work directory as `catalog.json`), so both arms see identical data. It reproduces the
+general form of a graph agent on a company API: a search, select, call chain, six pages of
+results piling into the context, and a model call per step. The task is graded by an exact
+answer line (`keyFacts`), computed from the raw records, not by a model. Direct is Bedrock,
+as for `framework-docs`. A live run is required to establish route parity and measured savings.
+
 A live run is required to establish route parity and measured savings.
 
 ## Codex hook isolation

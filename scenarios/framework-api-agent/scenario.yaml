@@ -1,0 +1,18 @@
+title: "Graph agent on an internal API — search the catalog, select an endpoint, page through a ledger"
+# The general form of a graph agent on a company's internal API (LangGraph, 6-9 model calls, a
+# search / select / call tool chain, tool results piling into the context), run on the same
+# framework harness as framework-docs. The API is synthetic: lib/apiCatalog.mjs, from a seed.
+tools: api
+system: >-
+  You answer questions about a property portfolio by calling its internal API. Use searchApi to
+  find an endpoint, selectApi to read its spec, and apiCall to call it. Read every page a call
+  returns before you answer. Use calculate to add numbers; do not add them in your head. Do not guess.
+task: >-
+  What is the total of the open ledger entries (status "open") for building B-07 in the current
+  ledger, and how many entries make it up? Use listLedgerEntries, not the archived ledger. Add up
+  the amount field. Finish with one line in exactly this form: ANSWER: <total> <count>, with the
+  total as plain digits and no commas or currency sign.
+keyFacts:
+  - "ANSWER: 111981 65"
+maxTurns: 30
+interTurnDelaySec: 0
