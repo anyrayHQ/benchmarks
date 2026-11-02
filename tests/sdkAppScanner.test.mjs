@@ -183,7 +183,7 @@ test('armEnvFor wires A and B to the gateway with the harness switch, C as the o
   const envA = armEnvFor({ ...base, arm: 'A', clientKey: 'ark_synthetic-a' });
   assert.equal(envA.ANTHROPIC_BASE_URL, 'https://gw.example');
   assert.equal(envA.ANTHROPIC_API_KEY, 'ark_synthetic-a');
-  assert.match(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-metadata: .*"tool":"sdk-agent"/);
+  assert.match(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-metadata: .*"tool":"anyray-bench"/);
   assert.match(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval: off/);
   assert.doesNotMatch(envA.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-optimize/);
   const envB = armEnvFor({ ...base, arm: 'B', clientKey: 'ark_synthetic-b' });
@@ -195,7 +195,7 @@ test('armEnvFor wires A and B to the gateway with the harness switch, C as the o
   assert.equal(envC.ANTHROPIC_API_KEY, 'ark_synthetic-c');
   assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-optimize: off/);
   assert.doesNotMatch(envC.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval/);
-  assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /"tool":"sdk-agent"/);
+  assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /"tool":"anyray-bench"/);
   for (const env of [envA, envB, envC]) assert.ok(!('CLAUDE_CODE_USE_BEDROCK' in env));
   assert.throws(() => armEnvFor({ ...base, arm: 'Z', clientKey: 'k' }), /arm/);
 });
@@ -218,11 +218,11 @@ test('armMcpServers adds the gateway read path on A and B only', () => {
 const envelope = (requests, evidence, emitted) => ({
   state: 'measured',
   windowHours: 24,
-  runtimes: requests ? [{ clientTool: 'sdk-agent', verdict: 'wired', requests, evidence }] : [],
-  ...(emitted === 'absent' ? {} : { readBack: emitted === undefined ? [] : [{ clientTool: 'sdk-agent', ...(emitted === null ? {} : { emitted }), retrieved: 0, missed: 0 }] }),
+  runtimes: requests ? [{ clientTool: 'anyray-bench', verdict: 'wired', requests, evidence }] : [],
+  ...(emitted === 'absent' ? {} : { readBack: emitted === undefined ? [] : [{ clientTool: 'anyray-bench', ...(emitted === null ? {} : { emitted }), retrieved: 0, missed: 0 }] }),
 });
 
-test('evidenceDelta is the sdk-agent runtime growth across one session', () => {
+test('evidenceDelta is the bench runtime growth across one session', () => {
   const before = envelope(10, { no_discovery: 10 }, 0);
   const after = envelope(31, { no_discovery: 12, direct: 19 }, 4);
   const d = evidenceDelta(before, after);

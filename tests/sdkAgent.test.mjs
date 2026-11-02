@@ -81,6 +81,10 @@ test('gateway and Bedrock transports carry the same unmarked body', async () => 
   assert.equal(sent.url, 'https://gateway.test.invalid/v1/messages');
   assert.equal(sent.init.headers.authorization, 'Bearer fake-key');
   assert.equal(sent.init.headers['x-anyray-provider'], undefined);
+  assert.deepEqual(JSON.parse(sent.init.headers['x-anyray-metadata']), {
+    tool: 'anyray-bench',
+    sessionId: 'session',
+  });
   assert.deepEqual(JSON.parse(sent.init.body), body);
   const scratch = fresh();
   try {

@@ -34,7 +34,10 @@ test('framework agent runs tools through the graph, sends no cache markers, and 
     assert.equal(sent.length, 2);
     assert.equal(sent[0].url.href, 'https://gateway.test.invalid/v1/messages');
     assert.equal(sent[0].headers.get('x-api-key'), 'fake-key');
-    assert.equal(JSON.parse(sent[0].headers.get('x-anyray-metadata')).sessionId, 'sess-1');
+    assert.deepEqual(JSON.parse(sent[0].headers.get('x-anyray-metadata')), {
+      tool: 'anyray-bench',
+      sessionId: 'sess-1',
+    });
     assert.equal(sent[0].headers.get('x-anyray-optimization-kinds'), 'cache_lint');
     assert.equal(JSON.stringify(sent.map((s) => s.body)).includes('cache_control'), false);
     assert.deepEqual(sent[0].body.tools.map((t) => t.name), ['read_file', 'list_dir', 'grep']);
