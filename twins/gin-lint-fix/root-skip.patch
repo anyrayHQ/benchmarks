@@ -1,0 +1,14 @@
+diff --git a/context_test.go b/context_test.go
+index b82e04d..c9e2965 100644
+--- a/context_test.go
++++ b/context_test.go
+@@ -256,6 +256,9 @@ func TestSaveUploadedFileWithPermission(t *testing.T) {
+ }
+ 
+ func TestSaveUploadedFileWithPermissionFailed(t *testing.T) {
++	if os.Geteuid() == 0 {
++		t.Skip("root creates files in a directory without the search bit, so this save cannot fail")
++	}
+ 	buf := new(bytes.Buffer)
+ 	mw := multipart.NewWriter(buf)
+ 	w, err := mw.CreateFormFile("file", "permission_test")
