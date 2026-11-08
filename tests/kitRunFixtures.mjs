@@ -186,7 +186,7 @@ let settingsText = '';
 try { settingsText = fs.readFileSync(opt('--settings'), 'utf8'); } catch {}
 const apiKey = process.env.ANTHROPIC_API_KEY || '';
 const procCreds = { apiKey: Boolean(apiKey), apiKeySha: apiKey ? crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 12) : null, oauth: Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN), keyInSettings: Boolean(apiKey) && settingsText.includes(apiKey) };
-log({ session: true, kind, ordinal, cost, behaviour, sessionId, bin: __filename, procCreds, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
+log({ session: true, kind, ordinal, cost, behaviour, sessionId, bin: __filename, procCreds, sandbox: process.env.IS_SANDBOX ?? null, headerNames: lines.map((l) => l.slice(0, l.indexOf(':')).trim().toLowerCase()) });
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 // The session is over without a further turn: stop reading stdin, so the process ends on its
 // own once stdout has drained (process.exit could cut a pipe write short on macOS).
