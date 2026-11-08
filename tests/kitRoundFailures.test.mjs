@@ -11,6 +11,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { exclusionReasons } from '../lib/benchVerdict.mjs';
 import { json } from './kitPlanFixtures.mjs';
 import {
   BENCH_KEY, fakeClaude, fakeRunGateway, freezeWith, kitIn, kitRunCopy, once, originRepo, poisonClaude, readRecord, runEnv, runScenario,
@@ -76,6 +77,22 @@ test('each failed round is recorded with its content-free failure: timeout, no_r
     if (r.failure) assert.ok(FAILURES.includes(r.failure), `round ${r.round}: ${r.failure} is one of the enum`);
     else assert.ok(Number.isFinite(r.ratio) && r.ratio > 0, `round ${r.round}: a good round keeps its ratio`);
   }
+});
+
+// The round line names why a round will not count, in the verdict's own fixed tokens, so a
+// run that ends noise_insufficient (every round excluded) says why on its own stderr.
+test('each excluded round\'s progress line ends with its exclusion reasons; a counted round\'s line names none', async () => {
+  const s = await isolated();
+  assert.equal(json(s.child, 'run --json').ok, true, 'the run must finish before its record can be read');
+  const record = readRecord(s.dir, s.lock.planHash, ID, 'anyray');
+  const lines = s.child.stderr.split('\n').filter((l) => /\bround \d+\/\d+:/.test(l));
+  assert.equal(lines.length, record.rounds.length, s.child.stderr.slice(-1500));
+  record.rounds.forEach((r, i) => {
+    const reasons = exclusionReasons(r);
+    if (reasons.length) assert.ok(lines[i].endsWith(` · excluded: ${reasons.join(', ')}`), `round ${r.round}: ${lines[i]}`);
+    else assert.ok(!lines[i].includes('excluded'), `round ${r.round}: ${lines[i]}`);
+  });
+  assert.deepEqual(record.rounds.filter((r) => exclusionReasons(r).length).map((r) => r.round), [2, 4, 6]);
 });
 
 test('a failed round is excluded from the verdict as a failed round, and the good rounds are scored', async () => {

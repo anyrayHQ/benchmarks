@@ -146,6 +146,11 @@ concurrent runs of that package's tests take turns, and gives each test binary i
 temp dir, so `TestUnixSocket` never meets another run's socket. No test or library code
 changes.
 
+The `gin-lint-fix` twin also applies `root-skip.patch`. The release twins run as root on
+CodeBuild, and root can save into a directory without the search bit, so gin's
+`TestSaveUploadedFileWithPermissionFailed` fails there and the check never passes. The patch
+skips that one test when the effective uid is 0.
+
 `npm run cold-turns` reports, for each turn after a long pause: whether the gateway
 attested the cache expiry, the tokens each strategy removed, what the provider wrote and
 read, and why a strategy declined. It flags a gateway restart, different kinds held out

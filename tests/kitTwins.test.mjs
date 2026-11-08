@@ -192,3 +192,25 @@ test('the seed twin is a one-turn lint fix on gin, graded by a check, with a pat
   assert.deepEqual(shapeFeatures(doc, 'claude-code'), { client: 'claude-code', cacheMarkers: 'client', mcp: 'none', requests: 'single', pause: false, outcome: 'check' });
   assert.ok(scenarioPatches(doc).length >= 1, 'a patch plants the lint findings');
 });
+
+// The release twins run as root on CodeBuild. gin's TestSaveUploadedFileWithPermissionFailed
+// expects a save into a directory without the search bit to fail, which it cannot as root, so
+// `go test ./...` (the check, and the task) failed on every round: both arms "not solved", every
+// round excluded, noise_insufficient (anyrayHQ/monorepo client-test-twins, v1.10.574).
+test('the gin twin skips the one gin test that cannot pass as root, in a hidden patch that touches no library code', () => {
+  const doc = twinDoc('gin-lint-fix');
+  assert.equal(doc.hidePatch, true);
+  const patches = [doc.patch].flat();
+  assert.ok(patches.includes('root-skip.patch'), `patches: ${patches.join(', ')}`);
+  assert.equal(patches.at(-1), 'root-skip.patch', 'applied last, after the planted findings');
+  const patch = readFileSync(join(TWINS, 'gin-lint-fix', 'root-skip.patch'), 'utf8');
+  assert.deepEqual([...patch.matchAll(/^\+\+\+ b\/(\S+)/gm)].map((m) => m[1]), ['context_test.go']);
+  const added = patch.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1).trim());
+  assert.equal(added.length, 3, added.join('\n'));
+  assert.equal(added[0], 'if os.Geteuid() == 0 {', 'skips as root only');
+  assert.match(added[1], /^t\.Skip\("/);
+  assert.equal(added[2], '}');
+  assert.ok(!patch.split('\n').some((l) => l.startsWith('-') && !l.startsWith('---')), 'removes nothing');
+  assert.match(patch, /^@@ .* func TestSaveUploadedFileWithPermission\(t \*testing\.T\) \{$/m);
+  assert.match(patch, /^ func TestSaveUploadedFileWithPermissionFailed\(t \*testing\.T\) \{$/m);
+});

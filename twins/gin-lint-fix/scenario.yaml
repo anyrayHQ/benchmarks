@@ -7,7 +7,9 @@ repo:
   ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
 # lint.patch plants go vet printf findings in library code.
 # fixed-ports-lock.patch serializes gin tests that bind fixed ports across both arms.
-patch: [lint.patch, fixed-ports-lock.patch]
+# root-skip.patch skips TestSaveUploadedFileWithPermissionFailed as root, where the save it
+# expects to fail succeeds: the release twins run as root on CodeBuild.
+patch: [lint.patch, fixed-ports-lock.patch, root-skip.patch]
 hidePatch: true
 task: >-
   The lint step is red. Run `go vet ./...` and fix every finding in the library
