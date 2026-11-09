@@ -153,6 +153,7 @@ test('a client that disconnects mid-request takes the upstream request down with
   await within(gw.gotRequest, 2000, 'the request reached the gateway');
   req.destroy(); // the session was killed
   await within(gw.upstreamClosed, 2000, 'the upstream request is still open after its client went away');
+  assert.deepEqual(proxy.results, [], 'a client abort is not an upstream 502');
 });
 
 test('close() aborts every request still in flight, so nothing keeps the process alive', async (t) => {
@@ -163,4 +164,5 @@ test('close() aborts every request still in flight, so nothing keeps the process
   await within(gw.gotRequest, 2000, 'the request reached the gateway');
   await within(proxy.close(), 2000, 'close() did not resolve');
   await within(gw.upstreamClosed, 2000, 'an upstream request outlived close()');
+  assert.deepEqual(proxy.results, [], 'closing the harness is not an upstream 502');
 });

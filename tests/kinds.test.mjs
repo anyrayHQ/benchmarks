@@ -127,6 +127,13 @@ test('tallyKinds: a requested kind the response neither applied nor skipped coun
   assert.deepEqual(t.byKind.observation_mask, { applied: 0, skipped: {}, unconfirmed: 1 });
 });
 
+test('tallyKinds treats transport-only results with no feedback arrays as unconfirmed', () => {
+  const tally = tallyKinds([{ httpStatus: 502 }], ['observation_mask']);
+  assert.equal(tally.requests, 1);
+  assert.equal(tally.unconfirmed, 1);
+  assert.equal(tally.byKind.observation_mask.unconfirmed, 1);
+});
+
 test('tallyKinds also counts kinds applied outside the request (support kinds, preserved rewrites)', () => {
   const t = tallyKinds([{ status: 'applied', applied: ['observation_mask', 'cache_optimizer'], skipped: [], preserved: ['thinking_trim'] }], ['observation_mask']);
   assert.deepEqual(t.otherApplied, { cache_optimizer: 1 });
