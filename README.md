@@ -24,6 +24,7 @@ against Anyray's Rule 0: **a session must never cost more because of us.**
 - [Results](#results)
 - [Kit commands](#kit-commands)
 - [Our bench](#our-bench)
+- [Terminal-Bench 2](#terminal-bench-2)
 - [On your own traffic](#on-your-own-traffic)
 - [Docs](#docs)
 - [Layout](#layout)
@@ -204,6 +205,11 @@ Rule 0 and a paired cost verdict over the pairs. It needs a gateway you control.
 [docs/bench.md](docs/bench.md); other clients and providers are in
 [docs/lanes.md](docs/lanes.md).
 
+## Terminal-Bench 2
+
+The same direct-versus-Anyray comparison on Terminal-Bench 2's own tasks, run through Harbor. The 26
+tasks and the exact version of each are pinned in [terminal-bench/](terminal-bench/README.md).
+
 ## On your own traffic
 
 The scenarios here are ours, not yours. [`anyrayHQ/simulator`](https://github.com/anyrayHQ/simulator)
@@ -230,6 +236,7 @@ tools/compare-sdk-app.mjs  per-pair ratios for an Agent SDK app result file
 tools/probe-sdk-code-scan.mjs  offline check of arm D's Connect MCP mount
 report_agent.mjs      → results/agent/report.html
 scenarios/            one directory per task: scenario.yaml (+ patch)
+terminal-bench/       the pinned Terminal-Bench 2 tasks (tasks.json) and how we ran them
 tools/bench-rule.mjs  strategies on/off for benchmark traffic only; params for one experiment tag
 tools/cold-turns.mjs  a pause-scenario round, read back per cold turn
 lib/agentRun.mjs      checkout, headless Claude Code per arm, transcript parsing

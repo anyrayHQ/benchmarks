@@ -1,0 +1,199 @@
+{
+  "dataset": "terminal-bench/terminal-bench-2",
+  "harbor": "0.25.0",
+  "ranWith": "ref latest; pinned here by Harbor task_checksum",
+  "tasks": {
+    "bn-fit-modify": {
+      "role": "reported",
+      "checksum": "de87a0c253c75b7dfbc68a2fcf120d5bd77b1df632c7469e3d0a3b74321d26c2",
+      "pilotChecksum": "f34f2473e83fd1cd5b3558403f4a9a3116419b5dd415817cb5aef2e953a9736f",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "build-pov-ray": {
+      "role": "reported",
+      "checksum": "3426fb4714b5bb0463cc30bd872712a2400b23934b135c40ef7f88b27da4cd7a",
+      "lists": [
+        "long"
+      ]
+    },
+    "circuit-fibsqrt": {
+      "role": "reported",
+      "checksum": "dc4c18df98c940d9ec11336861e07f7f5ca2a13b9e8e0f95e886c20f3d61bc0d",
+      "lists": [
+        "long",
+        "short10"
+      ]
+    },
+    "compile-compcert": {
+      "role": "reported",
+      "checksum": "48aa77171fd532f9c3ccf3d19c90f9585c84e800340f3b4e2b9536ea9e73d989",
+      "lists": [
+        "long"
+      ]
+    },
+    "configure-git-webserver": {
+      "role": "reported",
+      "checksum": "84d7c2fd653dad4307c7d2e9dd4f937ecbcd7ad4d1acf5d2b74c35166634178e",
+      "pilotChecksum": "cf2c66b79368e4f5be614393e3766c1256c718ceff86aba9517bf7a12751c014",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "custom-memory-heap-crash": {
+      "role": "reported",
+      "checksum": "a0db695f342c1b72f1b3d0b6c234eb802e970c4758931355e4ceeea4c9e73c37",
+      "lists": [
+        "long"
+      ]
+    },
+    "dna-insert": {
+      "role": "reported",
+      "checksum": "8ee918b8953bf437bf764153a84080475e1c2dfa18d0209cc4b19fee12ccce3c",
+      "pilotChecksum": "bb56a25f994ff659c356ba706a978e7367990b77de204be2b2113b6e86d6d04f",
+      "lists": [
+        "rr_pilot"
+      ]
+    },
+    "feal-differential-cryptanalysis": {
+      "role": "reported",
+      "checksum": "edacb57935c0b4181a115ac309d3b0e7c26c7cf49ccadf69762822068445df78",
+      "pilotChecksum": "eb361b8b559624fb5bf4ba922514020b6399db282db22ba52c032d5193837370",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "fix-code-vulnerability": {
+      "role": "reported",
+      "checksum": "80d707a96acfd0e19af96f0f0c8f44deefdbf167538fefbc0d1dc6391392090a",
+      "pilotChecksum": "468031620a5bc5a49dbd43cb739baea9ed77229c4520f2c0b9819a1dd6b0397a",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "fix-git": {
+      "role": "probe-only",
+      "checksum": "d3220d70bc668ec6f4034fab51e62873dff724a61f824d764fd201d6f5e7a88a"
+    },
+    "fix-ocaml-gc": {
+      "role": "reported",
+      "checksum": "811cace6625023ba2bed90b8a07aa23affc6bebf77e8e5870f6c8c61e5107ae2",
+      "lists": [
+        "long"
+      ]
+    },
+    "git-multibranch": {
+      "role": "reported",
+      "checksum": "abe8a7f8f9dcb0e2170740e4735559b368cecd925ddee09c9ed81a7c67dce90a",
+      "pilotChecksum": "dbdd26d023de4c414e7d1b62135d62b62ec42f3c0f3409375b7afa197377220c",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "install-windows-3-11": {
+      "role": "probe-only",
+      "checksum": "c0f9008bdfc3e81c3067b36a5e5e09f0ac5868d25d7ac322e04e256c86a3fadb"
+    },
+    "kv-store-grpc": {
+      "role": "reported",
+      "checksum": "901a4dd5c3078d5155043875a0d07f3583f462c73f919b52855c025e680b1edd",
+      "pilotChecksum": "2081412abc906b638c4e8fd9633deb1cfe12b3047c65917e529a007b41589650",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "make-mips-interpreter": {
+      "role": "reported",
+      "checksum": "929f50bc438e551fb6c09fdc9f91ab528e266bc57a79e52c90d398738a553a72",
+      "lists": [
+        "long"
+      ]
+    },
+    "openssl-selfsigned-cert": {
+      "role": "reported",
+      "checksum": "2b70d5535b5873f644fad37b76dbef86a1e42162e018c7bc06316e5e2521929a",
+      "pilotChecksum": "113310ddc7bf5aae3477f5ff21227379d7c44a55705f71a7d326c83d1cc8ea76",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "path-tracing": {
+      "role": "reported",
+      "checksum": "549aa348dde50ec3824205f402d9686da5d1dedf65ae2bd2ae8806513839fe93",
+      "lists": [
+        "long"
+      ]
+    },
+    "polyglot-c-py": {
+      "role": "reported",
+      "checksum": "d1e52e6139c57528762bbb163dc3f89edb967511d897ac5e7859398d3f44eb3c",
+      "pilotChecksum": "a8f31608c78e9fdb853cb9978fa458c59100863343bc477a45c64c6acd9db7a7",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "protein-assembly": {
+      "role": "reported",
+      "checksum": "c160f31b399d5663784ac3e054e79995ca7cd28d52d60935083e9b8dafb04304",
+      "pilotChecksum": "48ec5102d0579c625f7a5f650403f74810a84fddd887df75f2901aa059ff9946",
+      "lists": [
+        "rr_pilot"
+      ]
+    },
+    "pypi-server": {
+      "role": "reported",
+      "checksum": "9eb21236249d5b42ee64c7229bb1e5a3b3c0be7ed5ee9801bdd0d16ca575941a",
+      "pilotChecksum": "e6e049f25a1061203f6e20280c696d0f42051ad35684fc13d9a8901106c69d4b",
+      "lists": [
+        "rr_pilot",
+        "short10"
+      ]
+    },
+    "qemu-alpine-ssh": {
+      "role": "probe-only",
+      "checksum": "3713dda5c7622dae613ceaaee7de369896295d94e3d8e129f0f25581a3462151"
+    },
+    "qemu-startup": {
+      "role": "probe-only",
+      "checksum": "a0ad5ae76248295fb7174c716a1bfb07567ecba4af534614197c2199f855cf4f"
+    },
+    "raman-fitting": {
+      "role": "reported",
+      "checksum": "73157911d2f6196d30097f9b7e3388771a0a843500ad23ea31b66ca9ae5b5118",
+      "pilotChecksum": "cdeb5ca1b72303c5b12bcf92f038351aea479661258b714a9648bed80e05666d",
+      "lists": [
+        "rr_pilot"
+      ]
+    },
+    "regex-chess": {
+      "role": "reported",
+      "checksum": "64993ab339d437cea9397a033e825663a77d5527a42ef3c2fb2ad25133dcbd4e",
+      "lists": [
+        "long"
+      ]
+    },
+    "schemelike-metacircular-eval": {
+      "role": "reported",
+      "checksum": "e4525988ae20585b6b90a2f1af2fcc9d18d6363d3cfcdd7be5305199428883d2",
+      "lists": [
+        "long"
+      ]
+    },
+    "winning-avg-corewars": {
+      "role": "reported",
+      "checksum": "ef26211fb0bfc03ae2fddb937acce4df425861a40090d627a267edb3fb15e356",
+      "lists": [
+        "long"
+      ]
+    }
+  }
+}
