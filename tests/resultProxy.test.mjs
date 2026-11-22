@@ -137,6 +137,9 @@ async function stallingGateway() {
 
 const within = (p, ms, what) => Promise.race([p.then(() => true), new Promise((r) => setTimeout(() => r(false), ms))]).then((ok) => assert.ok(ok, what));
 
+/** The proxy learns of the dropped upstream a few ticks after the gateway does; give a stray 502 time to land before asserting there is none. */
+const settle = () => new Promise((r) => setTimeout(r, 50));
+
 /** An in-flight inference request through the proxy (a raw request, so the test can drop it like a killed client). */
 function sendInFlight(proxy) {
   const req = httpRequest(`${proxy.url}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' } });
@@ -153,6 +156,7 @@ test('a client that disconnects mid-request takes the upstream request down with
   await within(gw.gotRequest, 2000, 'the request reached the gateway');
   req.destroy(); // the session was killed
   await within(gw.upstreamClosed, 2000, 'the upstream request is still open after its client went away');
+  await settle();
   assert.deepEqual(proxy.results, [], 'a client abort is not an upstream 502');
 });
 
@@ -164,5 +168,6 @@ test('close() aborts every request still in flight, so nothing keeps the process
   await within(gw.gotRequest, 2000, 'the request reached the gateway');
   await within(proxy.close(), 2000, 'close() did not resolve');
   await within(gw.upstreamClosed, 2000, 'an upstream request outlived close()');
+  await settle();
   assert.deepEqual(proxy.results, [], 'closing the harness is not an upstream 502');
 });
