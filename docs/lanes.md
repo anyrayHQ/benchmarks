@@ -59,6 +59,9 @@ both arms call the same model. Arm A also gets the same small model arm B uses, 
 calls (such as WebFetch summaries) are not priced at Sonnet rates on A only. Rounds go to
 their own file (label `bedrock`).
 
+Terminal-Bench 2 runs the same two Bedrock arms through Harbor on 26 pinned tasks; see
+[`terminal-bench/`](../terminal-bench/README.md).
+
 ## Per-token agents: `sdk-docs` and `framework-docs`
 
 Both scenarios run their own agent in-process, without Claude Code or a subscription seat,

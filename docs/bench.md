@@ -255,6 +255,9 @@ Name every kind the gateway may hold out in `--kinds`.
 | `vite-docs` | vitejs/vite (pinned) | Developer docs: dev server startup, module transform, HMR (TypeScript) | Path:line citations resolve |
 | `commander-fix` | tj/commander.js (pinned) | Fix a planted bug in list options (JavaScript, runs without `npm install`) | `node --test bench-check/list-options.test.js` passes |
 
+Terminal-Bench 2 tasks are not scenarios here: Harbor runs and grades them. They are pinned in
+[`terminal-bench/`](../terminal-bench/README.md).
+
 Each scenario is `scenarios/<name>/scenario.yaml`, plus a patch for bug-fix tasks. A
 session is capped at `timeoutMin` (6 minutes by default) and `maxTurns`. It ends once it
 has answered and has been idle for 30 seconds; wall time runs to the final answer.
