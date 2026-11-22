@@ -89,3 +89,29 @@ Every E session made 1 to 5 batch reads; 40 of 41 were served (one `invalid_argu
 E made 238 Reads to B's 423, and 390 requests to B's 424. Every session completed in 7
 main-agent turns. B found 8 of 9 facts in every round; E found 8 of 9 in 15 rounds and 7
 in round 10. Both arms always missed `_SESSION_AUDIT_FORMAT`.
+
+## Agent SDK app: repeat_factor on the long scanner (2026-10-13)
+
+ANY-1154. Smoke: one K/R round on `sdk-app-scanner-long`, Sonnet 5.5, dev gateway.
+
+| | K | R |
+| --- | --- | --- |
+| repeat_factor decided on | 0 of 165 requests | 4 of 94 requests |
+| Fresh folds | 0 | 2 (2 blocks, 1,616 tokens) |
+| Replays | 0 | 2 (1,616 tokens) |
+| Declined | - | `no_candidate_span` on 90 requests |
+| Session-gate holdout | no | no |
+| Main turns | 63 | 42 |
+| Recall | 14/19 | 13/19 |
+| Billed | $4.84 | $2.90 |
+
+The gate passed. The effect is too small to measure here. R's input was 4,850,797 tokens.
+The fresh folds are 0.033% of that, or 0.067% with the replays. Even if every saved token
+were priced at Opus 4.6's dearest input rate ($6.25/M, a 5-minute cache write), that is
+at most $0.02 per session, about 0.3% of R's input cost at Opus 4.6 rates. The one paired
+round read 0.600 billed and 0.743 harness-priced. That gap comes from the session: K ran
+63 main turns and R ran 42, which repeat_factor cannot cause. The planned 8-round Opus 4.6
+verdict was not run. On this lane's r5 run (5 rounds, Sonnet 5.5), the paired ratios
+swing by tens of percent from one round to the next: B/C runs up to 2.0 with Q3 1.82, and
+A/C has median 1.51. Eight rounds cannot resolve a 0.3% effect, so about $140 would have
+bought a null result.

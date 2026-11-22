@@ -102,14 +102,15 @@ export const trafficVulnerabilities = () => VULNERABILITIES.filter((v) => v.wher
 export const httpVulnerabilities = () => VULNERABILITIES.filter((v) => v.where === 'http');
 
 /**
- * Findings recall: how many of the ten markers the agent surfaced, which they were, and
+ * Findings recall: how many of the markers the agent surfaced, which they were, and
  * which it missed. `text` is the agent's whole graded answer (result + ReportFindings),
- * so a marker quoted in either place counts. Pure; no content is stored, only the ids.
+ * so a marker quoted in either place counts. `vulns` defaults to this lane's ten; the
+ * long lane passes its own list. Pure; no content is stored, only the ids.
  */
-export const gradeRecall = (text) => {
+export const gradeRecall = (text, vulns = VULNERABILITIES) => {
   const haystack = String(text ?? '');
   const found = [];
   const missed = [];
-  for (const v of VULNERABILITIES) (haystack.includes(v.marker) ? found : missed).push(v.id);
-  return { total: VULNERABILITIES.length, found, missed, recall: found.length };
+  for (const v of vulns) (haystack.includes(v.marker) ? found : missed).push(v.id);
+  return { total: vulns.length, found, missed, recall: found.length };
 };

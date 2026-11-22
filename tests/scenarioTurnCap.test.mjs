@@ -47,3 +47,8 @@ test('the Agent SDK app lanes are refused here: run_sdk_app.mjs drives them', ()
   assert.throws(() => parseArgs(['--scenario', 'sdk-app-scanner']), /run_sdk_app\.mjs/);
   assert.throws(() => parseArgs(['--scenario', 'sdk-app-code-scan']), /run_sdk_app\.mjs/);
 });
+
+test('the long Agent SDK app lane is refused here too', () => {
+  assert.ok(APP_SCENARIOS.includes('sdk-app-scanner-long'));
+  assert.throws(() => parseArgs(['--scenario', 'sdk-app-scanner-long']), /run_sdk_app\.mjs/);
+});

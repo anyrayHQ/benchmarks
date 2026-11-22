@@ -18,7 +18,7 @@ export const MAX_ROW_BYTES = 60 * 1024;
 export const DEFAULT_ROW_COUNT = 24;
 
 /** mulberry32: a tiny deterministic PRNG, so a seed fixes every byte. */
-const rng = (seed) => {
+export const rng = (seed) => {
   let a = seed >>> 0;
   return () => {
     a |= 0;
@@ -31,10 +31,10 @@ const rng = (seed) => {
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE'];
 const PATHS = ['/api/orders', '/api/users', '/auth/login', '/api/search', '/metrics', '/api/cart', '/webhook/stripe', '/api/reports'];
-const WORDS = ['order', 'user', 'latency', 'region', 'status', 'payload', 'retry', 'cache', 'shard', 'tenant', 'cursor', 'quota', 'batch', 'token', 'queue'];
+export const WORDS = ['order', 'user', 'latency', 'region', 'status', 'payload', 'retry', 'cache', 'shard', 'tenant', 'cursor', 'quota', 'batch', 'token', 'queue'];
 
 /** A synthetic JSON log blob padded with deterministic filler to at least `minBytes`. */
-const fillerBody = (next, minBytes, inject = '') => {
+export const fillerBody = (next, minBytes, inject = '') => {
   const events = [];
   let size = inject.length;
   let i = 0;

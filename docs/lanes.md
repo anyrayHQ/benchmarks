@@ -9,6 +9,7 @@ the model, and what it measures. The round rules and the verdict are in
 - [Per-token agents: `sdk-docs` and `framework-docs`](#per-token-agents-sdk-docs-and-framework-docs)
 - [Codex (`--client codex`)](#codex---client-codex)
 - [Agent SDK app: code scan](#agent-sdk-app-code-scan)
+- [Agent SDK app: long scanner](#agent-sdk-app-long-scanner)
 
 ## On an Anthropic API key
 
@@ -149,3 +150,50 @@ node tools/compare-sdk-app.mjs results/agent/sdk-app-code-scan--code-scan.json
 
 The comparison prints D/A, plus D/B when B ran (that pair isolates the batch read). It
 first checks that D's agents really used the batch read in at least half the D sessions.
+
+## Agent SDK app: long scanner
+
+`sdk-app-scanner-long` is the scanner app at Novee's session length. One 14 kB system
+prompt lists 22 vulnerability classes. The main agent writes its own task list, starts
+`scanner` subagents, and reflects and repeats until a reflection finds nothing new or the
+150-turn cap ends it. The target holds 48 recorded-traffic rows behind a list/get API,
+live paths, and 5 customer files, all built from one seed. Grading is recall over 19
+SYNTHETIC markers.
+
+Arms A, B and C run as on the short scanner. K and R pin the strategy set per request
+with `x-anyray-optimization-kinds`, so a pair measures one strategy:
+
+| Arm | Headers |
+| --- | --- |
+| K | harness retrieval on, kinds `observation_mask,relevance_filter,code_graph,columnar_fold,command_digest` |
+| R | K plus `repeat_factor` |
+
+Nothing else differs between the two arms. An arm with a kinds list goes through the local
+pass-through, which reads each response's `x-anyray-optimization-result`. If you pass
+`--admin-token-file` (a 0600 file holding an admin credential with `traces:read`), each
+session also records what the added kind did. That comes from trace metadata only: the
+requests it decided on, its fresh folds, blocks and tokens, its replays, its declines,
+and whether the session gate held it out. Bodies are never read. Each session also records
+which model served each request and any model switch the CLI made.
+
+```bash
+node run_sdk_app.mjs --scenario sdk-app-scanner-long --arms K,R --keys-dir <dir with K.key R.key> \
+  --admin-token-file <0600 file> --gateway <url> --model claude-sonnet-5-5 --rounds 1 --budget 20 --label <label>
+node tools/compare-sdk-app.mjs results/agent/sdk-app-scanner-long--<label>.json
+```
+
+The compare report states the kind gate first: R folded in at least one session, and K
+never decided the kind. Then it gives R/K on two cost bases. The first is the harness's
+own price. The second is billed: the SDK's `total_cost_usd`, which matched the gateway's
+spend to the cent. A round where the session gate held a kind out of either arm is left
+out of the ratios and listed. `--budget` counts the larger of the two figures.
+
+**The CLI can switch models on this lane.** With `claude-sonnet-5-5`, the Agent SDK's
+bundled CLI (0.3.296) emitted `system` `model_refusal_fallback` (`claude-sonnet-5-5` to
+`claude-sonnet-5`) after a refused turn, about 11 to 16 main requests in. It kept the rest
+of the session on `claude-sonnet-5`, subagents included. The gateway did not cause it:
+routing is one Bedrock target with no model override, and every request was a single
+200. It happened on both arms. Before any run on another model, check the result file's
+`modelFallbacks` and `totals.models`.
+
+The first K/R smoke is in [results.md](results.md#agent-sdk-app-repeat_factor-on-the-long-scanner-2026-10-13).

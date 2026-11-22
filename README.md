@@ -231,7 +231,7 @@ marked as required survive. Its results stay with you.
 
 ```
 run_agent.mjs         paired agent rounds → results/agent/*.json
-run_sdk_app.mjs       Agent SDK app lanes (sdk-app-scanner, sdk-app-code-scan) → results/agent/*.json
+run_sdk_app.mjs       Agent SDK app lanes (sdk-app-scanner, sdk-app-scanner-long, sdk-app-code-scan) → results/agent/*.json
 tools/compare-sdk-app.mjs  per-pair ratios for an Agent SDK app result file
 tools/probe-sdk-code-scan.mjs  offline check of arm D's Connect MCP mount
 report_agent.mjs      → results/agent/report.html

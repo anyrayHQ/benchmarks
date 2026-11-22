@@ -8,16 +8,24 @@
 // sdk-agent requests by evidence class, fresh handles minted). Compare with
 // tools/compare-sdk-app.mjs.
 //
-// Two lanes (--scenario):
-//   sdk-app-scanner    (default; arms A,B,C) a security scanner over synthetic recorded
-//                      traffic and a local fixture server (ANY-1093).
-//   sdk-app-code-scan  (arms A,B,C,D; default A,D) the same app shape auditing a pinned
-//                      checkout of a large Python codebase with nine seeded vulnerabilities,
-//                      each arm in its own fresh checkout. Arm D enrolls anyray-connect once
-//                      per run in a private HOME (the agent-host flow, D's service key in its
-//                      env) and mounts only connect's MCP server into the app; the run first
-//                      probes that server and refuses D unless it advertises
-//                      anyray_read_batch.
+// Three lanes (--scenario):
+//   sdk-app-scanner       (default; arms A,B,C) a security scanner over synthetic recorded
+//                         traffic and a local fixture server (ANY-1093).
+//   sdk-app-scanner-long  (arms A,B,C) the same scanner at Novee's session length: its own
+//                         task list, a reflect-and-repeat loop, a 150-turn cap (ANY-1105).
+//   sdk-app-code-scan     (arms A,B,C,D,E,P,S,S2; default A,D) the same app shape auditing a
+//                         pinned checkout of a large Python codebase with nine seeded
+//                         vulnerabilities, each arm in its own fresh checkout. Arm D enrolls
+//                         anyray-connect once per run in a private HOME (the agent-host flow,
+//                         D's service key in its env) and mounts only connect's MCP server into
+//                         the app; the run first probes that server and refuses D unless it
+//                         advertises anyray_read_batch.
+//
+// On both scanner lanes, K and R pin the strategy set per request (x-anyray-optimization-kinds; R = K plus
+// repeat_factor, ANY-1154). For the kinds some selected arm runs and another does not, each
+// session also records what that kind did, from the gateway's trace METADATA (decisions,
+// folds, tokens, declines, a session-gate holdout); that read needs --admin-token-file, a
+// 0600 file holding an admin credential with traces:read, and never touches bodies.
 //
 // Keys come from 0600 files named <arm>.key in --keys-dir; a key is never on argv and never
 // printed. Arm D's key must be a service (agent) key: connect's non-interactive enrollment
@@ -27,6 +35,8 @@
 //
 //   node run_sdk_app.mjs --gateway <url> --keys-dir <dir with A.key B.key C.key> \
 //     --model claude-sonnet-5-5 --rounds 20 --budget 120 --label <label>
+//   node run_sdk_app.mjs --scenario sdk-app-scanner-long --arms K,R --keys-dir <dir with K.key R.key> \
+//     --admin-token-file <0600 file> --model claude-opus-4-6 --rounds 8 --budget 140 --label <label>
 //   node run_sdk_app.mjs --scenario sdk-app-code-scan --arms A,D --gateway <url> \
 //     --keys-dir <dir with A.key D.key> --model claude-sonnet-5-5 --rounds 8 --budget 40 --label <label>
 
@@ -37,13 +47,18 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { load as parseYaml } from 'js-yaml';
 import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { loadConfig } from './lib/loadConfig.mjs';
-import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision } from './lib/agentSdkApp.mjs';
+import { ARMS, runSdkAppAgent, readSelfCheckRetrieval, evidenceDelta, budgetDecision, shortProfile, watchedKinds } from './lib/agentSdkApp.mjs';
+import { readSessionKindEvidence } from './lib/kindEvidence.mjs';
+import { longProfile } from './lib/scannerLong.mjs';
 import { runCodeScanAgent } from './lib/sdkAppCodeScan.mjs';
 import { prepareRepo, repoCacheDir, binDigest } from './lib/agentRun.mjs';
 import { CONNECT_MCP_SERVER, connectSourceOf, instructionsExpectedFor, connectMcpServerConfig, connectArmTools, probeMcpTools, prepareConnectHome, preflightReadBatchCall, checkPreflightRead } from './lib/connectMcp.mjs';
 import { buildTrafficDb } from './tools/traffic-fixture/generate.mjs';
 import { startFixtureServer } from './tools/traffic-fixture/fixtureServer.mjs';
 import { VULNERABILITIES, httpVulnerabilities } from './tools/traffic-fixture/vulnerabilities.mjs';
+import { buildScannerTarget, customerFiles, DEFAULT_ROWS, DEFAULT_SEED } from './tools/scanner-target/target.mjs';
+import { startScannerTargetServer } from './tools/scanner-target/server.mjs';
+import { SCANNER_VULNERABILITIES } from './tools/scanner-target/vulnerabilities.mjs';
 
 const ROOT = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 export const DEFAULT_BUDGET_USD = 120;
@@ -52,15 +67,53 @@ export const DEFAULT_BUDGET_USD = 120;
 const SELF_CHECK_SETTLE_MS = 20_000;
 const SELF_CHECK_MAX_READS = 4;
 
-/** The lanes this runner drives: which arms each can run, and which it runs by default.
- *  D needs a lane whose agents read files; the scanner's read a database and a server. */
+/**
+ * The app lanes this runner drives, by scenario directory. `prepare` builds the scenario's
+ * synthetic data under `dir`, starts its live service, and returns the profile every arm
+ * runs, the fixture facts the result file records, and the service's `close`.
+ */
+export const SCENARIO_PROFILES = {
+  'sdk-app-scanner': {
+    prepare: async ({ scenarioFile, dir }) => {
+      const rows = scenarioFile.fixture?.rows ?? 24;
+      const seed = scenarioFile.fixture?.seed ?? 1337;
+      const dbPath = join(dir, 'traffic.sqlite');
+      const planted = buildTrafficDb(dbPath, { seed, rows });
+      const fixture = await startFixtureServer();
+      const endpoints = [...new Set(httpVulnerabilities().map((v) => v.path)), '/', '/health'];
+      return {
+        fixture: { rows, seed, markers: VULNERABILITIES.length, planted: planted.planted },
+        profile: shortProfile({ dbPath, fixtureUrl: fixture.url, rows, endpoints }),
+        close: fixture.close,
+      };
+    },
+  },
+  'sdk-app-scanner-long': {
+    prepare: async ({ scenarioFile, dir }) => {
+      const rows = scenarioFile.fixture?.rows ?? DEFAULT_ROWS;
+      const seed = scenarioFile.fixture?.seed ?? DEFAULT_SEED;
+      const target = buildScannerTarget(dir, { seed, rows });
+      const server = await startScannerTargetServer({ seed });
+      return {
+        fixture: { rows, seed, markers: SCANNER_VULNERABILITIES.length, planted: target.planted, files: [...customerFiles({ seed }).keys()] },
+        profile: longProfile({ dbPath: target.dbPath, filesDir: target.filesDir, fixtureUrl: server.url, rows, files: [...customerFiles({ seed }).keys()] }),
+        close: server.close,
+      };
+    },
+  },
+};
+
+/** Which arms each lane can run, and which it runs by default. D, E, P, S and S2 need a
+ *  lane whose agents read files; the scanners' read a database and a server. K and R pin
+ *  their kinds through the result proxy, which only the scanner app runs behind. */
 export const SCENARIOS = {
-  'sdk-app-scanner': { arms: ['A', 'B', 'C'], defaultArms: ['A', 'B', 'C'] },
+  'sdk-app-scanner': { arms: ['A', 'B', 'C', 'K', 'R'], defaultArms: ['A', 'B', 'C'] },
+  'sdk-app-scanner-long': { arms: ['A', 'B', 'C', 'K', 'R'], defaultArms: ['A', 'B', 'C'] },
   'sdk-app-code-scan': { arms: ['A', 'B', 'C', 'D', 'E', 'P', 'S', 'S2'], defaultArms: ['A', 'D'] },
 };
 
 export function parseArgs(argv, env = process.env) {
-  const a = { scenario: 'sdk-app-scanner', arms: null, rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null };
+  const a = { scenario: 'sdk-app-scanner', arms: null, rounds: 1, model: env.ANYRAY_LIVE_MODEL || 'claude-haiku-4-5', label: null, budget: DEFAULT_BUDGET_USD, gateway: null, keysDir: null, adminTokenFile: null };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     if (v === '--scenario') a.scenario = argv[++i];
@@ -71,6 +124,7 @@ export function parseArgs(argv, env = process.env) {
     else if (v === '--budget') a.budget = Number(argv[++i]);
     else if (v === '--gateway') a.gateway = argv[++i];
     else if (v === '--keys-dir') a.keysDir = argv[++i];
+    else if (v === '--admin-token-file') a.adminTokenFile = argv[++i];
     else throw new Error(`unknown flag ${v}`);
   }
   const lane = Object.hasOwn(SCENARIOS, a.scenario) ? SCENARIOS[a.scenario] : null;
@@ -86,18 +140,21 @@ export function parseArgs(argv, env = process.env) {
   return a;
 }
 
-/** One key per arm from `<dir>/<arm>.key`. Refuses a file group or others can read, an
- *  empty one, and two arms sharing a key (the per-session evidence is read per key). */
+/** A credential from a file only its owner can read. Refuses a file group or others can
+ *  read, and an empty one. The value is never printed. */
+export function readSecretFile(file) {
+  const mode = statSync(file).mode & 0o777;
+  if (mode & 0o077) throw new Error(`${file} is mode ${mode.toString(8)}; chmod 600 it`);
+  const secret = readFileSync(file, 'utf8').trim();
+  if (!secret) throw new Error(`${file} is empty`);
+  return secret;
+}
+
+/** One key per arm from `<dir>/<arm>.key` (each a readSecretFile), refusing two arms
+ *  sharing a key (the per-session evidence is read per key). */
 export function readArmKeys(dir, arms) {
   const keys = {};
-  for (const arm of arms) {
-    const file = join(dir, `${arm}.key`);
-    const mode = statSync(file).mode & 0o777;
-    if (mode & 0o077) throw new Error(`${file} is mode ${mode.toString(8)}; chmod 600 it`);
-    const key = readFileSync(file, 'utf8').trim();
-    if (!key) throw new Error(`${file} is empty`);
-    keys[arm] = key;
-  }
+  for (const arm of arms) keys[arm] = readSecretFile(join(dir, `${arm}.key`));
   if (new Set(Object.values(keys)).size !== arms.length) throw new Error('each arm needs its own key');
   return keys;
 }
@@ -122,8 +179,13 @@ const settledReads = async (gatewayUrl, keys, arms) => {
   return cur;
 };
 
-/** A session's dollars for the budget: the priced usage, else the SDK's own figure. */
-const sessionCost = (s) => (Number.isFinite(s?.totals?.costUsd) ? s.totals.costUsd : Number.isFinite(s?.totals?.sdkCostUsd) ? s.totals.sdkCostUsd : 0);
+/** A session's dollars for the budget: the larger of the priced usage and the SDK's own
+ *  figure (which matches the gateway's bill; the priced usage can miss subagent output),
+ *  so the hard cap never undercounts. */
+export const sessionCost = (s) => {
+  const xs = [s?.totals?.costUsd, s?.totals?.sdkCostUsd].filter(Number.isFinite);
+  return xs.length ? Math.max(...xs) : 0;
+};
 
 const evidenceLine = (ev) => {
   if (!ev) return 'evidence unread';
@@ -131,47 +193,54 @@ const evidenceLine = (ev) => {
   return `evidence ${ev.requests} req (${classes}), fresh handles ${ev.freshEmitted ?? 'unknown'}`;
 };
 
+/** One watched kind's session evidence as a line: counts and reasons only. */
+export const kindLine = (e) => {
+  const n = (x) => (x == null ? 'unknown' : String(x));
+  const reasons = (o) => Object.entries(o ?? {}).map(([k, x]) => `${k} ${x}`).join(', ') || 'none';
+  return `decided on ${e.requestsWithKind}/${e.requests} requests · fresh folds ${n(e.freshFolds)} (${n(e.blocksFactored)} blocks, ${n(e.freshTokens)} tokens) · replays ${n(e.replays)} (${n(e.replayTokens)} tokens) · declines ${reasons(e.declines)} · suppressed ${reasons(e.suppressed)}${e.holdout ? ' · HOLDOUT' : ''}`;
+};
+
 /** How many times the agents called the batch read, and how many of those calls errored. */
 const readBatchLine = (t) => (t?.readBatch ? ` · read_batch ${t.readBatch.calls} call(s)${t.readBatch.errors ? ` (${t.readBatch.errors} errored)` : ''}` : '');
 
-/** The scanner lane: a synthetic traffic db and a local fixture server, shared by every arm. */
-async function scannerLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing }) {
-  const rows = scenarioFile.fixture?.rows ?? 24;
-  const seed = scenarioFile.fixture?.seed ?? 1337;
+/** A scanner lane: its SCENARIO_PROFILES entry builds the data and starts the service once;
+ *  every arm runs that profile in one shared work dir. */
+const profileLane = (name) => async ({ scenarioFile, args, gatewayUrl, keys, pricing }) => {
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sdk-app-fixture-'));
-  const dbPath = join(fixtureDir, 'traffic.sqlite');
-  const planted = buildTrafficDb(dbPath, { seed, rows });
-  const fixture = await startFixtureServer();
   const workDir = mkdtempSync(join(tmpdir(), 'sdk-app-work-'));
-  const endpoints = [...new Set(httpVulnerabilities().map((v) => v.path)), '/', '/health'];
+  let prepared;
+  try {
+    prepared = await SCENARIO_PROFILES[name].prepare({ scenarioFile, dir: fixtureDir });
+  } catch (e) {
+    rmSync(fixtureDir, { recursive: true, force: true });
+    rmSync(workDir, { recursive: true, force: true });
+    throw e;
+  }
   return {
-    total: VULNERABILITIES.length,
-    record: { fixture: { rows, seed, markers: VULNERABILITIES.length, planted: planted.planted } },
+    total: prepared.fixture.markers,
+    record: { fixture: prepared.fixture, maxTurns: scenarioFile.maxTurns ?? null },
     prepare: () => null,
     release: () => {},
-    runArm: (arm, round, stamp) =>
+    runArm: (arm, sessionId) =>
       runSdkAppAgent({
         arm,
         scenario: { ...scenarioFile, cwd: workDir },
         model: args.model,
         gatewayUrl,
         clientKey: keys[arm],
-        sessionId: `${args.scenario}-${arm}-r${round}-${stamp}`,
-        dbPath,
-        fixtureUrl: fixture.url,
-        endpoints,
-        rows,
+        sessionId,
+        profile: prepared.profile,
         pricing,
         timeoutMs: (scenarioFile.timeoutMin ?? 10) * 60000,
         deps: { query, createSdkMcpServer, tool },
       }),
     close: async () => {
-      await fixture.close();
+      await prepared.close();
       rmSync(fixtureDir, { recursive: true, force: true });
       rmSync(workDir, { recursive: true, force: true });
     },
   };
-}
+};
 
 /**
  * A connect arm's mount (D, E), once per run: enroll connect in a private HOME with the
@@ -250,7 +319,7 @@ async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing
     // Every checkout of a round is made before any session starts, so the arms start together.
     prepare: () => prepareRepo(scenarioFile, dir, { cacheDir: repoCacheDir() }),
     release: (work) => rmSync(work, { recursive: true, force: true }),
-    runArm: (arm, round, stamp, work) =>
+    runArm: (arm, sessionId, work) =>
       runCodeScanAgent({
         arm,
         scenario: scenarioFile,
@@ -258,7 +327,7 @@ async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing
         model: args.model,
         gatewayUrl,
         clientKey: keys[arm],
-        sessionId: `${args.scenario}-${arm}-r${round}-${stamp}`,
+        sessionId,
         pricing,
         connect: mounts[arm]?.mount ?? null,
         timeoutMs: (scenarioFile.timeoutMin ?? 15) * 60000,
@@ -270,7 +339,7 @@ async function codeScanLane({ dir, scenarioFile, args, gatewayUrl, keys, pricing
   };
 }
 
-const LANES = { 'sdk-app-scanner': scannerLane, 'sdk-app-code-scan': codeScanLane };
+const LANES = { 'sdk-app-scanner': profileLane('sdk-app-scanner'), 'sdk-app-scanner-long': profileLane('sdk-app-scanner-long'), 'sdk-app-code-scan': codeScanLane };
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -279,6 +348,9 @@ async function main() {
   const gatewayUrl = cfg.run.gatewayUrl;
   if (!gatewayUrl) throw new Error('every arm runs through the gateway: pass --gateway or set ANYRAY_GATEWAY_URL');
   const keys = readArmKeys(args.keysDir, args.arms);
+  const watched = watchedKinds(args.arms);
+  const adminToken = args.adminTokenFile ? readSecretFile(args.adminTokenFile) : null;
+  if (watched.length && !adminToken) console.log(`  note: no --admin-token-file, so what ${watched.join(', ')} did per session is not read`);
 
   const dir = join(ROOT, 'scenarios', args.scenario);
   const scenarioFile = parseYaml(readFileSync(join(dir, 'scenario.yaml'), 'utf8'));
@@ -296,6 +368,7 @@ async function main() {
     gateway: gatewayUrl,
     ...lane.record,
     budgetUsd: args.budget,
+    watchedKinds: watched,
   });
   const save = () => writeFileSync(file, JSON.stringify(record, null, 2));
   save();
@@ -319,16 +392,21 @@ async function main() {
       }
       const startedAt = new Date().toISOString();
       const works = {};
+      const sessionIds = Object.fromEntries(args.arms.map((arm) => [arm, `${args.scenario}-${arm}-r${round}-${stamp}`]));
       let settled;
       let before;
       try {
         for (const arm of args.arms) works[arm] = lane.prepare(arm);
         before = await readAll(gatewayUrl, keys, args.arms);
-        settled = await Promise.allSettled(args.arms.map((arm) => lane.runArm(arm, round, stamp, works[arm])));
+        settled = await Promise.allSettled(args.arms.map((arm) => lane.runArm(arm, sessionIds[arm], works[arm])));
       } finally {
         for (const arm of args.arms) if (works[arm]) lane.release(works[arm]);
       }
       const after = await settledReads(gatewayUrl, keys, args.arms);
+      // What each watched kind did per session, from trace metadata (after the settle, so
+      // the last rows have landed). Read for every arm, so the control shows it never ran.
+      const kindEvidence = {};
+      if (watched.length) for (const arm of args.arms) kindEvidence[arm] = await readSessionKindEvidence(gatewayUrl, adminToken, sessionIds[arm], watched);
       const sessions = {};
       const quality = {};
       const recall = {};
@@ -337,13 +415,13 @@ async function main() {
         const retrieval = evidenceDelta(before[arm], after[arm]);
         const reads = { before: before[arm]?.state ?? 'unavailable', after: after[arm]?.state ?? 'unavailable' };
         if (s.status === 'rejected') {
-          sessions[arm] = { arm, error: String(s.reason?.name ?? 'error').slice(0, 80), retrieval, selfCheck: reads };
+          sessions[arm] = { arm, error: String(s.reason?.name ?? 'error').slice(0, 80), retrieval, selfCheck: reads, ...(watched.length && { kindEvidence: kindEvidence[arm] }) };
           quality[arm] = false;
           recall[arm] = 0;
           continue;
         }
         const v = s.value;
-        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, wallMs: v.wallMs, ...(v.error && { error: v.error }), ...(v.init && { init: v.init }), sessionId: v.sessionId, retrieval, selfCheck: reads };
+        sessions[arm] = { arm, ...ARMS[arm], totals: v.totals, recall: v.recall, recallTotal: v.recallTotal, found: v.found, missed: v.missed, solved: v.solved, completed: v.completed, endedBy: v.endedBy, toolsSeen: v.toolsSeen, modelFallbacks: v.modelFallbacks ?? [], wallMs: v.wallMs, ...(v.error && { error: v.error }), ...(v.init && { init: v.init }), sessionId: v.sessionId, retrieval, selfCheck: reads, ...(v.optimization && { optimization: v.optimization }), ...(watched.length && { kindEvidence: kindEvidence[arm] }) };
         quality[arm] = v.completed;
         recall[arm] = v.recall;
       }
@@ -355,8 +433,12 @@ async function main() {
         const s = sessions[arm];
         if (!s.totals) { console.log(`  round ${round} ${arm}: error ${s.error} · ${evidenceLine(s.retrieval)}`); continue; }
         const t = s.totals;
-        const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}${ARMS[arm].localReadBatch ? ' + connect' : ''}`;
-        console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} · ${t.turns} turns · ${t.requests} req · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, parallel ${t.spawnedInParallel})${readBatchLine(t)} · recall ${s.recall}/${lane.total} · ${s.completed ? 'completed' : 'NOT completed'}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
+        const label = ARMS[arm].optimize ? `optimize ${ARMS[arm].optimize}` : `harness ${ARMS[arm].harnessRetrieval}${ARMS[arm].localReadBatch ? ' + connect' : ''}${ARMS[arm].kinds ? `, ${ARMS[arm].kinds.length} kinds` : ''}`;
+        console.log(`  round ${round} ${arm} (${label}): $${t.costUsd?.toFixed(4) ?? 'n/a'} (sdk $${t.sdkCostUsd?.toFixed(4) ?? 'n/a'}) · ${t.turns} turns · ${t.requests} req (main ${t.mainTurns}, subagents ${JSON.stringify(t.subagentTurns)}) · ${t.subagentSpawns} spawns (${t.subagentsObserved} observed, ${t.parallelSpawnMessages} parallel launches, max ${t.maxParallelSpawn})${readBatchLine(t)} · recall ${s.recall}/${lane.total} · ${s.completed ? 'completed' : 'NOT completed'}${s.endedBy ? ` (${s.endedBy})` : ''}${s.error ? ` [${s.error}]` : ''} · ${evidenceLine(s.retrieval)}`);
+        for (const f of s.modelFallbacks ?? []) console.log(`    ${arm}: the CLI switched model (${f.subtype}) ${f.from} -> ${f.to} after request ${f.afterRequest}`);
+        if (s.optimization?.heldOut?.length) console.log(`    ${arm}: held out by the session gate: ${s.optimization.heldOut.join(', ')}`);
+        for (const [kind, e] of Object.entries(s.kindEvidence?.kinds ?? {})) console.log(`    ${arm} ${kind}: ${kindLine(e)}`);
+        if (s.kindEvidence?.unavailable) console.log(`    ${arm}: kind evidence unavailable (${s.kindEvidence.unavailable})`);
       }
       console.log(`  round ${round} $${roundCost.toFixed(3)}; spent so far $${roundCosts.reduce((a, b) => a + b, 0).toFixed(3)}`);
     }
@@ -372,3 +454,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
+

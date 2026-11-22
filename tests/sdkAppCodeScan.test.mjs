@@ -421,7 +421,7 @@ test('run_sdk_app: the code-scan lane runs A,D by default and accepts D; the sca
   assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 'd,b,a', '--keys-dir', '/k']).arms, ['A', 'B', 'D']);
   assert.deepEqual(parseAppArgs(['--keys-dir', '/k']).arms, ['A', 'B', 'C'], 'the scanner default is unchanged');
   assert.equal(parseAppArgs(['--keys-dir', '/k']).scenario, 'sdk-app-scanner');
-  assert.throws(() => parseAppArgs(['--arms', 'A,D', '--keys-dir', '/k']), /runs arms A, B, C, not D/);
+  assert.throws(() => parseAppArgs(['--arms', 'A,D', '--keys-dir', '/k']), /runs arms A, B, C, K, R, not D/);
   assert.throws(() => parseAppArgs(['--scenario', 'nope', '--keys-dir', '/k']), /--scenario takes one of/);
   for (const [name, lane] of Object.entries(SCENARIOS)) {
     assert.ok(existsSync(join(ROOT, 'scenarios', name, 'scenario.yaml')), `${name} has a scenario file`);
@@ -560,7 +560,7 @@ test('connectArmTools for E requires the server to send instructions: a stock bu
 
 test('run_sdk_app runs E on the code-scan lane only; compare pairs E with B and checks E used the batch read', () => {
   assert.deepEqual(parseAppArgs(['--scenario', 'sdk-app-code-scan', '--arms', 'B,E', '--keys-dir', '/k']).arms, ['B', 'E']);
-  assert.throws(() => parseAppArgs(['--arms', 'A,E', '--keys-dir', '/k']), /runs arms A, B, C, not E/);
+  assert.throws(() => parseAppArgs(['--arms', 'A,E', '--keys-dir', '/k']), /runs arms A, B, C, K, R, not E/);
   assert.deepEqual(pairsFor(['B', 'E']), [['E', 'B']]);
   assert.deepEqual(pairsFor(['A', 'B', 'D', 'E']).filter(([t]) => t === 'E'), [['E', 'B'], ['E', 'D']]);
   const rounds = [{ round: 1, sessions: { B: { totals: { costUsd: 1 } }, E: { totals: { costUsd: 0.9, readBatch: { calls: 3, errors: 0 } } } }, quality: { B: true, E: true }, recall: { B: 9, E: 9 } }];
