@@ -1,0 +1,90 @@
+title: "Claude Agent SDK code scanner over a large Python codebase (nine seeded vulnerabilities behind call chains)"
+# The sdk-app-scanner application shape (a Claude Agent SDK app, settingSources [], an
+# `agents` map, permissionMode bypassPermissions), pointed at SOURCE CODE instead of
+# recorded traffic: the main agent dispatches three `auditor` subagents in parallel, one
+# per slice of the codebase, and each reads code with the SDK's built-in Read, Grep and
+# Glob (plus the arm's Anyray read tools). That is the read-heavy shape of a scanner that
+# audits a customer's repository, the work `anyray_read_batch` is built to cut.
+#
+# Each slice names FUNCTIONS to audit, not files to read. seeded-vulns.patch plants nine
+# vulnerabilities, three per slice, each split along a call chain: the audited function
+# gains an ordinary-looking call to a policy helper, and the helper, with the constant
+# that decides it, sits at the END of another module (eight of the nine past line 1,000,
+# so past one Read page). No audited file shows any of them. An auditor finds one only by
+# locating the function, reading it, following the call into the other module's deep
+# range, and tracing who reaches the function: grep, then several located ranges across
+# files, across turns. The patch is re-imported as a single commit (hidePatch).
+#
+# Grading is the harness's keyFacts contract over answerText (final report plus every
+# accepted ReportFindings call, from any agent): each fact is the name of the constant
+# that decides one vulnerability, which appears only in the helper's deep range.
+#
+# Arms (set by the runner, each on its own gateway key): A = harness-retrieval off,
+# B = on, C = optimize-off baseline bypass, D = B plus anyray-connect's local stdio MCP
+# server (anyray_read_batch). See run_sdk_app.mjs.
+repo:
+  git: https://github.com/saltstack/salt.git
+  ref: f37cdcd1c93f778a84f83b3cc9933cac92d0456b
+patch: seeded-vulns.patch
+hidePatch: true
+task: >-
+  Audit the security-critical functions of three areas of this Python codebase, following
+  every call that decides a security outcome into the module that defines it, and report
+  each vulnerability with its call chain, the vulnerable line and the definition of every
+  constant that decides it, quoted verbatim.
+# One auditor per slice: the functions it must audit, by file.
+slices:
+  - name: authentication and minion keys
+    audit:
+      - file: salt/auth/__init__.py
+        functions: [LoadAuth.authenticate_eauth, LoadAuth.authenticate_token]
+      - file: salt/auth/pam.py
+        functions: [authenticate]
+      - file: salt/key.py
+        functions: [Key.gen_keys]
+  - name: file serving and fetching
+    audit:
+      - file: salt/fileserver/roots.py
+        functions: [find_file, serve_file]
+      - file: salt/fileclient.py
+        functions: [Client.get_url]
+      - file: salt/utils/url.py
+        functions: [add_http_basic_auth]
+  - name: the REST API
+    audit:
+      - file: salt/netapi/__init__.py
+        functions: [NetapiClient.run]
+      - file: salt/netapi/rest_tornado/saltnado.py
+        functions: [SaltAuthHandler.post]
+      - file: salt/netapi/rest_cherrypy/app.py
+        functions: [salt_auth_tool]
+# The text a correct finding quotes, one per seeded vulnerability (case-sensitive, as
+# run_agent.mjs grades keyFacts). None occurs in the unpatched tree.
+keyFacts:
+  - "_RECOVERY_LOGIN"
+  - "_INTEROP_KEY_BITS"
+  - "_OUT_OF_BAND_ACCOUNTS"
+  - "_LEGACY_LAYOUT_PREFIXES"
+  - "_SELF_SIGNED_MIRRORS"
+  - "_PLAINTEXT_AUTH_DOMAINS"
+  - "_TOKENLESS_CLIENTS"
+  - "_SESSION_AUDIT_FORMAT"
+  - "_SESSIONLESS_PREFIXES"
+# Where each fact is planted (checked against the patch by tests/sdkAppCodeScan.test.mjs):
+# the slice whose audit reaches it, the audited file that calls the helper, and the
+# module the helper and its constant are appended to.
+seeded:
+  - { fact: _RECOVERY_LOGIN, slice: 0, sink: salt/auth/__init__.py, helper: eauth_override, definedIn: salt/utils/minions.py }
+  - { fact: _INTEROP_KEY_BITS, slice: 0, sink: salt/key.py, helper: interop_keysize, definedIn: salt/crypt.py }
+  - { fact: _OUT_OF_BAND_ACCOUNTS, slice: 0, sink: salt/auth/pam.py, helper: is_service_identity, definedIn: salt/utils/user.py }
+  - { fact: _LEGACY_LAYOUT_PREFIXES, slice: 1, sink: salt/fileserver/roots.py, helper: contained_in_root, definedIn: salt/utils/files.py }
+  - { fact: _SELF_SIGNED_MIRRORS, slice: 1, sink: salt/fileclient.py, helper: mirror_tls_policy, definedIn: salt/utils/http.py }
+  - { fact: _PLAINTEXT_AUTH_DOMAINS, slice: 1, sink: salt/utils/url.py, helper: is_internal_host, definedIn: salt/utils/network.py }
+  - { fact: _TOKENLESS_CLIENTS, slice: 2, sink: salt/netapi/__init__.py, helper: is_scheduler_client, definedIn: salt/daemons/masterapi.py }
+  - { fact: _SESSION_AUDIT_FORMAT, slice: 2, sink: salt/netapi/rest_tornado/saltnado.py, helper: audit_session, definedIn: salt/utils/event.py }
+  - { fact: _SESSIONLESS_PREFIXES, slice: 2, sink: salt/netapi/rest_cherrypy/app.py, helper: _session_exempt, definedIn: salt/netapi/rest_cherrypy/app.py }
+# Main-agent turns (dispatch, wait, report) and each subagent's own cap; the subagent cap
+# bounds a runaway reader without cutting a normal audit of its slice short.
+maxTurns: 16
+subagentMaxTurns: 60
+timeoutMin: 15

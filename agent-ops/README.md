@@ -5,7 +5,7 @@ history every turn — is the **#1** waste pattern in the cost research; agents 
 **4–15×** the tokens of a chat, and a 50-turn coding session bills around **25:1**
 input:output. The session only grows, so the bill compounds.
 
-Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see the [README](../README.md#the-replay-suite-secondary).
+Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see [the replay suite](../docs/bench.md#the-replay-suite-secondary).
 
 | Workload | Payload |
 |---|---|

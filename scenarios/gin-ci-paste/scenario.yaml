@@ -1,0 +1,51 @@
+title: "CI log pasted into four turns in gin-gonic/gin — triage, two fixes, re-test, recap"
+# The user pastes the same CI test log (ci-log.txt, `go test ./...` on this checkout,
+# ~17 KB, eight failing tests from two planted bugs) into four of the five turns, the way
+# a person carries the log into each follow-up, or a client re-sends the same attached
+# context with every message. Copies after the first are what repeat_factor folds: each
+# later copy becomes a pointer to the first, which stays in the request. Without it, every
+# copy is written to the prompt cache and read on every later request.
+repo:
+  git: https://github.com/gin-gonic/gin.git
+  ref: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68
+# bugs.patch plants the regressions (the same two as gin-test-triage and gin-long-session).
+# fixed-ports-lock.patch adds a TestMain that makes concurrent test runs of the gin
+# package take turns: several of its tests bind fixed ports, and both arms of a round
+# run `go test` on one machine at the same time.
+patch: [bugs.patch, fixed-ports-lock.patch]
+hidePatch: true
+pastes:
+  ciLog: ci-log.txt
+task: |-
+  CI is red on this branch. This is the output of the test step from the CI run:
+
+  ```
+  {{ciLog}}
+  ```
+
+  Which tests fail, and what causes each failure? Don't fix anything yet.
+followups:
+  - |-
+    Fix the cause of the first failure in this log, in the library code (not the tests). The CI log again:
+
+    ```
+    {{ciLog}}
+    ```
+  - |-
+    Now fix the causes of the remaining failures in this log, also in the library code:
+
+    ```
+    {{ciLog}}
+    ```
+  - |-
+    Run `go test ./...` and confirm that every test that failed in this CI log now passes:
+
+    ```
+    {{ciLog}}
+    ```
+  - "Finally: list every file you changed and summarize each change in one line."
+check: "go test ./..."
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 20

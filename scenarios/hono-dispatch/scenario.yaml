@@ -1,0 +1,21 @@
+title: "Codebase question in honojs/hono — how a request reaches its route handler"
+repo:
+  git: https://github.com/honojs/hono.git
+  ref: 08a023cbfde55b434fb0fb30fae35d42e4bf20aa
+task: >-
+  I'm new to this codebase. Explain how a request passed to a Hono app's fetch method
+  gets to the matched route handler and its middleware: which functions and classes are
+  involved, in which files, how the router is chosen and used to match the path, and how
+  middleware and the handler are composed and run, including what `await next()` does.
+  Cite file names and function names.
+# Graded by the answer containing each of these.
+keyFacts:
+  - "hono-base.ts"
+  - "compose.ts"
+  - "SmartRouter"
+  - "RegExpRouter"
+  - "dispatch"
+# 80, not lower: anyray-connect turns its read hint and Explore decline off under a lower cap
+# (CONNECT_WORK_MODE_MIN_TURNS in run_agent.mjs), and production sessions have no cap.
+maxTurns: 80
+timeoutMin: 6

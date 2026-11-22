@@ -4,7 +4,7 @@
 into the window when the question only needs signatures and call sites — research
 pegs roughly **70% of a coding agent's tokens as irrelevant file reads**.
 
-Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see the [README](../README.md#the-replay-suite-secondary).
+Each workload is sent twice — straight to the provider and through the Anyray gateway — and compared on billed tokens, cost and answer quality. This is the replay suite, a secondary check; see [the replay suite](../docs/bench.md#the-replay-suite-secondary).
 
 | Workload | Payload |
 |---|---|

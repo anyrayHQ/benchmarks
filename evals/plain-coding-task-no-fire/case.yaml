@@ -1,0 +1,29 @@
+# Should NOT fire. The exact words of a client's test, asked for as ordinary coding work with no
+# intent to evaluate Anyray, must not start the test flow: no skill call, no anyray-test/ dir.
+schema_version: "1.0"
+name: plain-coding-task-no-fire
+description: >-
+  An ordinary coding request that happens to match a client's test text does not trigger the
+  anyray-test skill or create its scenarios dir.
+tags: [should-not-fire]
+execution:
+  model: sonnet
+  max_turns: 10
+  timeout_seconds: 300
+  allowed_tools: [Skill, Read, Glob, Grep, Write, Edit]
+  prompt: |
+    fix lint errors in our Go service
+runs: 3
+graders:
+  - type: tool_used
+    name: skill-not-invoked
+    tool: Skill
+    input_match: 'anyray-test'
+    min: 0
+    max: 0
+    arm: both
+  - type: regex
+    name: no-test-scaffolding
+    target: files
+    pattern: 'anyray-test/'
+    match: not_contains

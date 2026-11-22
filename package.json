@@ -7,6 +7,18 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "agent": "node run_agent.mjs",
+    "plan": "node tools/kit.mjs plan",
+    "doctor": "node tools/kit.mjs doctor",
+    "calibrate": "node tools/kit.mjs calibrate",
+    "freeze": "node tools/kit.mjs freeze",
+    "verify": "node tools/kit.mjs verify",
+    "noise": "node tools/kit.mjs noise",
+    "run": "node tools/kit.mjs run",
+    "verdict": "node tools/kit.mjs verdict",
+    "report": "node tools/kit.mjs report",
+    "release-check": "node tools/kit.mjs release-check",
+    "twins": "node tools/kit.mjs twins",
+    "publish-result": "node tools/kit.mjs publish-result",
     "agent:report": "node report_agent.mjs",
     "bench-rule": "node tools/bench-rule.mjs",
     "bench-level": "node tools/bench-level.mjs",
@@ -25,6 +37,6 @@
     "@langchain/core": "^1.2.14",
     "@langchain/langgraph": "^1.4.19",
     "js-yaml": "^4.3.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }

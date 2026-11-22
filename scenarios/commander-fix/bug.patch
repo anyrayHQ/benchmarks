@@ -1,0 +1,13 @@
+diff --git a/lib/option.js b/lib/option.js
+index 4a0bd7f..e4bedf3 100644
+--- a/lib/option.js
++++ b/lib/option.js
+@@ -163,7 +163,7 @@ class Option {
+    */
+ 
+   _collectValue(value, previous) {
+-    if (previous === this.defaultValue || !Array.isArray(previous)) {
++    if (!Array.isArray(previous)) {
+       return [value];
+     }
+ 

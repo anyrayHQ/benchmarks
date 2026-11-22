@@ -197,7 +197,7 @@ test('armEnvFor wires A and B to the gateway with the harness switch, C as the o
   assert.doesNotMatch(envC.ANTHROPIC_CUSTOM_HEADERS, /x-anyray-harness-retrieval/);
   assert.match(envC.ANTHROPIC_CUSTOM_HEADERS, /"tool":"sdk-agent"/);
   for (const env of [envA, envB, envC]) assert.ok(!('CLAUDE_CODE_USE_BEDROCK' in env));
-  assert.throws(() => armEnvFor({ ...base, arm: 'D', clientKey: 'k' }), /arm/);
+  assert.throws(() => armEnvFor({ ...base, arm: 'Z', clientKey: 'k' }), /arm/);
 });
 
 test('armMcpServers adds the gateway read path on A and B only', () => {

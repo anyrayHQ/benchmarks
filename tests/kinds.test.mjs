@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   KINDS_HEADER,
   RESULT_HEADER,
+  SHADOW_HEADER,
   parseKinds,
   withKindsHeader,
   parseOptimizationResult,
@@ -14,6 +15,35 @@ import {
 test('header names match the gateway contract', () => {
   assert.equal(KINDS_HEADER, 'x-anyray-optimization-kinds');
   assert.equal(RESULT_HEADER, 'x-anyray-optimization-result');
+  assert.equal(SHADOW_HEADER, 'x-anyray-optimization-shadow-kinds');
+});
+
+test('parseOptimizationResult reads the shadow outcome, catalogue ids only', () => {
+  const r = parseOptimizationResult(JSON.stringify({
+    status: 'applied',
+    applied: [],
+    skipped: [],
+    preserved: [],
+    shadow: { requested: ['repeat_factor', 'observation_mask'], wouldApply: ['repeat_factor', 'Not A Kind'], unsupported: ['observation_mask'] },
+  }));
+  assert.deepEqual(r.shadow, { requested: ['repeat_factor', 'observation_mask'], wouldApply: ['repeat_factor'], unsupported: ['observation_mask'] });
+  const none = parseOptimizationResult(JSON.stringify({ status: 'applied', applied: [], skipped: [], preserved: [] }));
+  assert.equal('shadow' in none, false);
+});
+
+test('tallyKinds counts each shadow kind: would apply, would not, unsupported, unanswered', () => {
+  const shadow = (wouldApply, unsupported = []) => ({ requested: ['repeat_factor'], wouldApply, unsupported });
+  const results = [
+    { status: 'applied', applied: [], skipped: [], preserved: [], shadow: shadow(['repeat_factor']) },
+    { status: 'applied', applied: [], skipped: [], preserved: [], shadow: shadow(['repeat_factor']) },
+    { status: 'applied', applied: [], skipped: [], preserved: [], shadow: shadow([]) },
+    { status: 'applied', applied: [], skipped: [], preserved: [], shadow: shadow([], ['repeat_factor']) },
+    { status: 'applied', applied: [], skipped: [], preserved: [] },
+    { status: 'unconfirmed', why: 'missing' },
+  ];
+  const t = tallyKinds(results, ['command_digest'], ['repeat_factor']);
+  assert.deepEqual(t.shadow, { repeat_factor: { wouldApply: 2, wouldNot: 1, unsupported: 1, unanswered: 2 } });
+  assert.equal('shadow' in tallyKinds(results, ['command_digest']), false, 'no shadow kinds asked, no shadow tally');
 });
 
 test('parseKinds: comma list, trimmed, deduped, order kept', () => {
@@ -95,6 +125,13 @@ test('tallyKinds counts per requested kind: applied, skipped by reason, unconfir
 test('tallyKinds: a requested kind the response neither applied nor skipped counts as unconfirmed', () => {
   const t = tallyKinds([{ status: 'applied', applied: [], skipped: [], preserved: [] }], ['observation_mask']);
   assert.deepEqual(t.byKind.observation_mask, { applied: 0, skipped: {}, unconfirmed: 1 });
+});
+
+test('tallyKinds treats transport-only results with no feedback arrays as unconfirmed', () => {
+  const tally = tallyKinds([{ httpStatus: 502 }], ['observation_mask']);
+  assert.equal(tally.requests, 1);
+  assert.equal(tally.unconfirmed, 1);
+  assert.equal(tally.byKind.observation_mask.unconfirmed, 1);
 });
 
 test('tallyKinds also counts kinds applied outside the request (support kinds, preserved rewrites)', () => {

@@ -13,9 +13,9 @@ run:
   # Judges direct-vs-gateway answer equivalence; always called direct, so Anyray is
   # never in the scoring path. Override with $ANYRAY_JUDGE_MODEL.
   judge_model: "claude-opus-4-8"
-  # Gateways the harness refuses to call, whatever the env says.
-  blocked_gateways:
-    - "https://gateway.anyray.ai"
+  # Gateways the harness refuses to call, whatever the env says. The kit refuses them at
+  # plan and freeze too (plan_gateway_blocked).
+  blocked_gateways: []
   # The provider for the direct side. Override with $ANYRAY_DIRECT_URL.
   direct_url: "https://api.anthropic.com"
   # There is deliberately NO default gateway URL: set $ANYRAY_GATEWAY_URL (or
@@ -51,6 +51,16 @@ pricing:
     claude-sonnet-5:   { input: 2,  output: 10 }
     claude-sonnet-4-6: { input: 3,  output: 15 }
     claude-haiku-4-5:  { input: 1,  output: 5 }
+    # Codex on the ChatGPT seat (--client codex). The gateway's list prices for these ids
+    # (monorepo packages/anyray-observability/src/pricing/data.ts, 2026-10-11): GPT-5.6 and
+    # later report and bill cache writes at 1.25x input, the `cache_write` above.
+    gpt-6.1-sol:       { input: 2,   output: 10,  cache_read: 0.05 }
+    gpt-6-astra:       { input: 10,  output: 50 }
+    gpt-6-sol:         { input: 2,   output: 10 }
+    gpt-6-luna:        { input: 0.1, output: 0.5 }
+    gpt-5.6-sol:       { input: 4,   output: 20 }
+    gpt-5.6-terra:     { input: 2,   output: 12 }
+    gpt-5.6-luna:      { input: 0.2, output: 1.2 }
 
 # Workloads, grouped by suite directory. Each id is a payload at
 # <suite>/payloads/<id>.json and a key-facts rubric in keyfacts.json. `endpoint`
@@ -147,21 +157,8 @@ benchmarks:
     workloads:
       - id: "9-repeat-request"
         title: "Repeated identical request — 2nd call served from cache"
-      - id: "14-runaway-max-tokens"
-        title: "Runaway max_tokens — 100k output ceiling on a one-line task"
       - id: "25-claude-cache-prefix"
         title: "Claude prompt-cache prefix — stabilize the system+tools prefix for reuse"
-      - id: "26-context-quality"
-        title: "Context health score — flag a bloated, over-fetched context"
-      - id: "38-anthropic-context-trim"
-        title: "Provider context trim — Anthropic clear_tool_uses annotation, content untouched"
-        endpoint: "/v1/messages"
-      - id: "39-reasoning-downshift"
-        title: "Reasoning downshift — routine tool-resume turn on a reasoning model"
-        endpoint: "/v1/messages"
-        metadata: {"sessionId":"bench-39-reasoning-downshift"}
-      - id: "40-output-shaping"
-        title: "Output shaping — concise-output advisory appended on a resume turn"
       - id: "41-mixed-content-census"
         title: "Content census — nine shape classes through a read-only pass"
       - id: "44-prefix-churn"

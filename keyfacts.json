@@ -98,7 +98,6 @@
   },
   "24-agent-toolcalls": {
     "question": "Summarize the root cause of the double-charge and the one-line fix.",
-    "_note": "Facts live in the final assistant turn, which window_budget pins; the cropped middle is the early investigation.",
     "keyFacts": [
       "re-invokes capture() without forwarding the idempotency key",
       "second authorized capture",
@@ -137,7 +136,6 @@
   },
   "8-long-session": {
     "question": "Given everything across all subsystems, where should the shared retry logic live, and which subsystems should be migrated first?",
-    "_note": "The agent consolidates its findings into a short recommendation in the final turns; window_budget pins those recent turns, so the answer (canonical location + migration order) survives the crop. Key facts are that recommendation's content.",
     "keyFacts": [
       "lib/http/retryPolicy",
       "orders first, then billing, then inventory"
@@ -184,7 +182,6 @@
   },
   "29-orders-json": {
     "question": "Which orders failed, and what failure_code does each failed order show? Ignore the paid ones.",
-    "_note": "context_compression minifies the JSON (drops the space after the colon), so keyfacts are bare values, not \"key\": \"value\" pairs.",
     "keyFacts": [
       "ord_100003",
       "ord_100037",
@@ -194,7 +191,6 @@
   },
   "30-metrics-json": {
     "question": "Which timestamp has p99 over 4000, and how many errors at that point?",
-    "_note": "context_compression minifies; keyfacts are the spike values (unique in this series).",
     "keyFacts": [
       "4200",
       "512"
@@ -202,7 +198,6 @@
   },
   "31-long-toolsession": {
     "question": "Summarize the root cause of the dropped transactions and the one-line fix.",
-    "_note": "window_budget pins the final turn where the answer lives; the early file-read turns are cropped.",
     "keyFacts": [
       "recon/cursor.ts advances the page cursor before the batch is acknowledged",
       "advance the cursor only after ack"
@@ -230,7 +225,6 @@
   },
   "34-repeat-reads": {
     "question": "What is the exact root cause of the burst starvation in the checkout rate limiter, and which invariant should a regression test pin down?",
-    "_note": "The limiter file and git status each appear twice byte-identically; facts anchor on the FIRST copies, which context_dedupe must keep verbatim while collapsing the repeats.",
     "keyFacts": [
       "Math.floor(1000 / cfg.refillRatePerSec)",
       "refillRatePerSec: 10",
@@ -242,7 +236,6 @@
   },
   "35-flaky-test-rerun": {
     "question": "Which payments test is actually flaky vs genuinely failing, what changed between the two runs, and which fixture likely causes the instability?",
-    "_note": "Run 2 is a near-duplicate of run 1; the flipped 'refund_idempotency PASSED' line is a CHANGED line and must survive inside the unified delta context_dedupe keeps.",
     "keyFacts": [
       "ConnectionResetError: [Errno 104] Connection reset by peer",
       "refund_idempotency PASSED",
@@ -273,37 +266,6 @@
       "geo-tiles 0.8.2",
       "AGPL triggers on network use alone",
       "312 packages"
-    ]
-  },
-  "38-anthropic-context-trim": {
-    "question": "Lay out the landscape refactor plan for the invoice PDF generator: what changes in usableHeight and the block builders, and which tests cover the rotated grid?",
-    "_note": "provider_context_trim is annotation-only. One fact per tool round, including the earliest — anything below 100% survival is a do-no-harm violation, not a quality trade.",
-    "keyFacts": [
-      "PAGE = { width: 595, height: 842, margin: 48 }",
-      "orientation === 'landscape' ? PAGE.width : PAGE.height",
-      "breaks pages between blocks, never inside a row",
-      "0 problems (0 errors, 0 warnings)",
-      "render.ts         94.1     88.2"
-    ]
-  },
-  "39-reasoning-downshift": {
-    "question": "Where does the orders-api canary rollout stand and what protections are active?",
-    "_note": "reasoning_budget only caps the thinking budget knob; message content is untouched, so 100% survival is the do-no-harm assertion. The saving is output-side (thinking tokens), measured live in guardrails/results/live-basis.json.",
-    "keyFacts": [
-      "orders-api 5% -> 25%",
-      "ro_8842",
-      "auto-rollback on p99>350ms or 5xx>0.8%",
-      "next checkpoint in 30m"
-    ]
-  },
-  "40-output-shaping": {
-    "question": "What changed in the checkout service config, and was anything else touched?",
-    "_note": "The '[anyray:output-guidance]' fact is ABSENT from the raw payload by design — it asserts the advisory actually fired; the other facts assert nothing else moved. The payload deliberately tempts the model to re-print the 114-line config; the win is output-side, measured live in guardrails/results/live-basis.json.",
-    "keyFacts": [
-      "[anyray:output-guidance]",
-      "services/checkout/config.yaml",
-      "max_retries: 3 -> 5",
-      "1 line changed"
     ]
   },
   "42-semantic-rerank-rag": {

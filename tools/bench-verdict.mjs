@@ -3,21 +3,27 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { benchVerdict, exclusionReasons, formatVerdictBlock } from '../lib/benchVerdict.mjs';
+import { loadLibraryFiles, tailForRecord } from '../lib/noiseLibrary.mjs';
+import { formatTailBlock } from '../lib/tailReport.mjs';
 
 export function parseArgs(argv) {
-  const args = { files: [], allowMixed: false, json: false, minRounds: 8 };
+  const args = { files: [], allowMixed: false, json: false, minRounds: 8, noiseLibrary: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--allow-mixed') args.allowMixed = true;
     else if (arg === '--json') args.json = true;
-    else if (arg === '--min-rounds') {
+    else if (arg === '--noise-library') {
+      const value = argv[++i];
+      if (!value || value.startsWith('-')) throw new Error('--noise-library needs a file: a pass-through (P/P) result file, repeatable');
+      args.noiseLibrary.push(value);
+    } else if (arg === '--min-rounds') {
       const value = argv[++i];
       if (!/^[1-9]\d*$/.test(value ?? '') || !Number.isSafeInteger(Number(value))) throw new Error('--min-rounds requires a positive integer');
       args.minRounds = Number(value);
     } else if (arg.startsWith('-')) throw new Error(`unknown option ${arg}`);
     else args.files.push(arg);
   }
-  if (!args.files.length) throw new Error('usage: node tools/bench-verdict.mjs [--json] [--min-rounds N] [--allow-mixed] result.json [result.json ...]');
+  if (!args.files.length) throw new Error('usage: node tools/bench-verdict.mjs [--json] [--min-rounds N] [--allow-mixed] [--noise-library pp.json ...] result.json [result.json ...]');
   return args;
 }
 
@@ -70,8 +76,26 @@ export function run(argv, { out = process.stdout, err = process.stderr } = {}) {
     const pooled = poolFiles(args.files, args);
     const verdict = benchVerdict(pooled.rounds.map((x) => x.round), { minRounds: args.minRounds });
     const result = { ...verdict, files: args.files, mixed: pooled.differences };
-    out.write(args.json ? `${JSON.stringify(result, null, 2)}\n` : `${formatTable(pooled, verdict)}\n`);
-    return verdict.verdict === 'pass' ? 0 : verdict.verdict === 'fail' ? 1 : 2;
+    let code = verdict.verdict === 'pass' ? 0 : verdict.verdict === 'fail' ? 1 : 2;
+    let tailText = '';
+    if (args.noiseLibrary.length) {
+      // The pooled rounds are judged against P/P pairs with the same pins. An excess fails the run; a
+      // library too small to calibrate never passes it.
+      const first = pooled.sources[0].record;
+      const tail = tailForRecord({ ...first, rounds: pooled.rounds.map((x) => x.round) }, loadLibraryFiles(args.noiseLibrary), { treatment: first.treatment ?? 'b' });
+      if (tail === null) {
+        result.tailCheck = { state: 'no_matching_noise' };
+        tailText = '\nTail check: not defined for this pair: no recorded run is it without its treatment (direct vs Anyray reads control pairs, pass-through vs B reads P/P pairs).';
+        if (code === 0) code = 2;
+      } else {
+        result.tailCheck = { ...tail.check, anchors: tail.anchors, skipped: tail.skipped };
+        tailText = `\n${formatTailBlock(tail.check, { anchors: tail.anchors, sd: tail.sd })}`;
+        if (tail.check.state === 'excess') code = 1;
+        else if (tail.check.state !== 'within_noise' && code === 0) code = 2;
+      }
+    }
+    out.write(args.json ? `${JSON.stringify(result, null, 2)}\n` : `${formatTable(pooled, verdict)}${tailText}\n`);
+    return code;
   } catch (error) {
     err.write(`${error.message}\n`);
     return 2;

@@ -24,8 +24,8 @@ test('catalogTools: n tools, unique names, deterministic, each about the request
 
 test('catalogTools: the catalog size scales with n and toolChars', () => {
   const total = (n, toolChars) => catalogTools(n, { toolChars }).reduce((s, t) => s + JSON.stringify(t).length, 0);
-  const sett = total(200, 2085);
-  assert.ok(sett > 380_000 && sett < 460_000, `Sett-shaped catalog is ${sett} chars`);
+  const heavySeat = total(200, 2085);
+  assert.ok(heavySeat > 380_000 && heavySeat < 460_000, `many-connector catalog is ${heavySeat} chars`);
   assert.ok(total(100, 1180) < 140_000, 'the #3120 shape (+100 MCP, ~118k chars) stays reachable');
 });
 

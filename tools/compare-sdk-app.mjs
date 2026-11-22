@@ -1,5 +1,6 @@
-// Pairwise cost comparison for an sdk-app-scanner result file. The lane has three arms on
-// one gateway — A (harness-retrieval off), B (on), C (optimize-off baseline bypass) — so
+// Pairwise cost comparison for an sdk-app lane result file (sdk-app-scanner,
+// sdk-app-code-scan). The arms share one gateway — A (harness-retrieval off), B (on),
+// C (optimize-off baseline bypass), D (B plus connect's anyray_read_batch) — so
 // the Rule 0 read is per PAIR: B/A and B/C are the flip's win conditions (D5), A/C is what
 // the gateway's other strategies do on this shape. R/K is one strategy's paired verdict:
 // both arms pin their kinds by header and R adds one (repeat_factor, ANY-1154); its report
@@ -157,6 +158,17 @@ export const pairsFor = (arms) => {
   if (has('B') && has('A')) out.push(['B', 'A']);
   if (has('B') && has('C')) out.push(['B', 'C']);
   if (has('A') && has('C')) out.push(['A', 'C']);
+  // D is B plus connect's batch read: D/B isolates the batch read, D/A is D against the
+  // retrieval-off SDK app.
+  if (has('D') && has('B')) out.push(['D', 'B']);
+  if (has('D') && has('A')) out.push(['D', 'A']);
+  // E is D with connect's sdk source (initialize instructions): E/B is the batch read with
+  // its guidance, E/D isolates the guidance.
+  if (has('E') && has('B')) out.push(['E', 'B']);
+  if (has('E') && has('D')) out.push(['E', 'D']);
+  // P is B plus connect's profile surface, S the same with the sdk instructions: S/P is
+  // the hint alone.
+  if (has('S') && has('P')) out.push(['S', 'P']);
   if (has('R') && has('K')) out.push(['R', 'K']);
   return out;
 };
@@ -236,6 +248,24 @@ export const kindEvidenceFor = (record, treatment, control) => {
   return { treatment, control, kinds, byKind };
 };
 
+/**
+ * D's precondition, read before any D ratio: did the batch read run? A D session counts
+ * when its agents called anyray_read_batch at least once with at least one call not
+ * errored. At least half the D sessions must have, and a file with no D session never
+ * passes. A D that never batch-read measured B plus the tool's prefix bytes, not the tool.
+ */
+export const readBatchPrecondition = (rounds, arm = 'D') => {
+  const withD = rounds.filter((r) => r.sessions?.[arm]);
+  const usedRounds = withD
+    .filter((r) => {
+      const rb = r.sessions[arm].totals?.readBatch;
+      return Number.isFinite(rb?.calls) && rb.calls > 0 && rb.calls > (rb.errors ?? 0);
+    })
+    .map((r) => r.round);
+  const required = Math.ceil(withD.length / 2);
+  return { sessions: withD.length, used: usedRounds.length, usedRounds, required, pass: withD.length > 0 && usedRounds.length >= required };
+};
+
 /** The whole file's comparison: every applicable pair, plus the recorded retrieval
  *  evidence so the D4 precondition can be read beside the D5 ratios. */
 export const compareFile = (record, { spendMints = null } = {}) => {
@@ -247,6 +277,8 @@ export const compareFile = (record, { spendMints = null } = {}) => {
     arms,
     rounds: rounds.length,
     d4: d4Precondition(rounds, { spendMints }),
+    readBatch: readBatchPrecondition(rounds),
+    readBatchByArm: Object.fromEntries(['D', 'E', 'P', 'S', 'S2'].filter((a) => arms.includes(a)).map((a) => [a, readBatchPrecondition(rounds, a)])),
     pairs: pairsFor(arms).map(([t, c]) => comparePair(rounds, t, c)),
     kindEvidence: pairsFor(arms).map(([t, c]) => kindEvidenceFor(record, t, c)).filter((e) => e.kinds.length),
     retrievalEvidence: record.retrievalEvidence ?? null,
@@ -292,6 +324,13 @@ export const formatReport = (out) => {
         );
       }
     }
+  }
+  for (const [arm, rb] of Object.entries(out.readBatchByArm ?? { D: out.readBatch })) {
+    if (!rb || rb.sessions === 0) continue;
+    lines.push(
+      `read_batch precondition ${arm} (${arm} sessions that called anyray_read_batch with a call not errored): ${rb.used}/${rb.sessions}, need ${rb.required} -> ${rb.pass ? 'PASS' : `FAIL: the batch read did not run, so no ${arm} ratio below is a verdict`}` +
+        (rb.usedRounds.length ? ` (rounds ${rb.usedRounds.join(', ')})` : '')
+    );
   }
   for (const p of out.pairs) {
     lines.push(
